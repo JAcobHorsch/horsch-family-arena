@@ -30,6 +30,7 @@ canvas#game { position:fixed; inset:0; display:block; }
 .title-wrap { display:flex; flex-direction:column; align-items:center; gap:22px; }
 .tagline { color:#b9b09a; letter-spacing:5px; font-size:14px; text-transform:uppercase; }
 .kbd-hint { color:#5e594c; font-size:11px; }
+.build-tag { position:absolute; bottom:max(8px, env(safe-area-inset-bottom)); right:12px; font-size:10px; color:#5e594c; letter-spacing:1.5px; }
 
 .bigbtn {
   font:inherit; font-weight:800; font-size:18px; letter-spacing:3px; cursor:pointer;
