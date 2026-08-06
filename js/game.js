@@ -78,6 +78,7 @@ const Game = (() => {
     camX = clamp(player.x - viewW / 2, 0, Math.max(0, STAGE_W - viewW));
     earned = 0; mode = 'playing'; paused = false; timeScale = 1; hitstop = 0;
     ambient = [];
+    Input.consume(); // discard anything buffered on menu screens
     setBanner('LEVEL ' + plan.level, plan.boss ? 'THE WARLORD AWAITS' : plan.waves.length + ' WAVES', 2.0);
   }
 
@@ -189,7 +190,7 @@ const Game = (() => {
               type: 'fire', hostile: false, x: p.x + dir * 30, y: p.y - (def.arc ? 78 : 55) - i * 16,
               vx: dir * spd, vy: def.arc ? 250 : (def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0),
               dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: def.life || 1.5,
-              pierce: def.pierce !== false, shape: def.shape, bounty: def.bounty, bounce: def.bounce, color: col,
+              pierce: def.pierce !== false, shape: def.shape, bounty: def.bounty, bounce: def.bounce, flap: def.flap, color: col,
             });
           }
         }
@@ -283,15 +284,18 @@ const Game = (() => {
     const busy = p.hurtT > 0 || mode !== 'playing';
     const attacking = !!p.attack;
 
-    // presses
-    for (const code of Input.consume()) {
-      if (busy) continue;
-      if (code === 'JUMP' && p.onGround && !p.crouch) { p.vy = -760; p.onGround = false; Sfx.jump(); }
-      else if (code === 'A' && !attacking) fireSpecial();
-      else if ((code === 'X' || code === 'Y' || code === 'B') && !attacking) {
-        const def = ATTACKS[code];
-        const sp = p.cdef.atkSpeed;
-        p.attack = { key: code, def, su: def.startup * sp, ac: def.active * sp, rec: def.recovery * sp, t: 0, hits: new Set() };
+    // presses — buffered during hit-stagger rather than dropped
+    if (mode !== 'playing') {
+      Input.consume();
+    } else if (p.hurtT <= 0) {
+      for (const code of Input.consume()) {
+        if (code === 'JUMP' && p.onGround && !p.crouch) { p.vy = -760; p.onGround = false; Sfx.jump(); }
+        else if (code === 'A' && !attacking) fireSpecial();
+        else if ((code === 'X' || code === 'Y' || code === 'B') && !attacking) {
+          const def = ATTACKS[code];
+          const sp = p.cdef.atkSpeed;
+          p.attack = { key: code, def, su: def.startup * sp, ac: def.active * sp, rec: def.recovery * sp, t: 0, hits: new Set() };
+        }
       }
     }
 
@@ -468,12 +472,18 @@ const Game = (() => {
   function updateProjectiles(dt) {
     for (const pr of [...projectiles]) {
       if (pr.bounce) pr.vy += 1500 * dt;
+      if (pr.flap) {
+        pr.vy += 1100 * dt;
+        pr.flapT = (pr.flapT || 0) - dt;
+        if (pr.flapT <= 0) { pr.flapT = 0.35; pr.vy = -195; }
+        if (pr.y < GROUND_Y - 115) pr.vy = Math.max(pr.vy, -40); // stay at kicking height
+      }
       pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.life -= dt;
       if (pr.life <= 0 || pr.x < -60 || pr.x > STAGE_W + 60) { projectiles.splice(projectiles.indexOf(pr), 1); continue; }
       if (!pr.hostile && pr.vy > 0 && pr.y >= GROUND_Y) {
-        if (pr.bounce) {
+        if (pr.bounce || pr.flap) {
           pr.y = GROUND_Y;
-          pr.vy = -Math.max(Math.abs(pr.vy) * 0.8, 320);
+          pr.vy = pr.flap ? -280 : -Math.max(Math.abs(pr.vy) * 0.8, 320);
           burst(pr.x, GROUND_Y - 4, pr.color, 4, 160, false);
         } else {
           burst(pr.x, GROUND_Y - 6, pr.color, 10, 220);
@@ -726,7 +736,11 @@ const Game = (() => {
       const pExt = o.attackExt || 0;
       if (o.attackKey === 'X' || o.attackKey === 'A') frontHand = [22 + 24 * pExt, -48];
       else if (o.attackKey === 'B') { frontHand = [16, -60 - 26 * pExt]; backHand = [-16, -60 - 26 * pExt]; }
+    } else if (look.chicken) {
+      hip = [0, -24]; // drumstick legs under the body
     }
+    const legCol = look.chicken ? '#e8a020' : o.color;
+    const legCol2 = look.chicken ? '#b87a10' : o.color2;
 
     g.lineCap = 'round'; g.lineJoin = 'round';
     const limb = (from, to, width, color) => {
@@ -742,8 +756,8 @@ const Game = (() => {
     const frontArmCol = look.shirtless ? o.skin : o.color;
 
     // back limbs
-    limb([hip[0] + lean * 0.3, hip[1]], backFoot, 7.5, o.color2);
-    limb([sh[0] + lean * 0.5, sh[1]], backHand, armW, backArmCol);
+    limb([hip[0] + lean * 0.3, hip[1]], backFoot, 7.5, legCol2);
+    if (!look.chicken) limb([sh[0] + lean * 0.5, sh[1]], backHand, armW, backArmCol);
     if (look.printer) {
       // he IS the machine: gantry frame body
       g.strokeStyle = '#3a3f4a'; g.lineWidth = 5; g.lineJoin = 'miter';
@@ -790,6 +804,27 @@ const Game = (() => {
       g.fillStyle = '#1a1408';
       g.beginPath(); g.arc(6, -81.5, 1.8, 0, 7); g.fill();
       g.beginPath(); g.arc(12, -81.5, 1.8, 0, 7); g.fill();
+    } else if (look.chicken) {
+      // GIANT CHICKEN: massive body, tail feathers, wing, neck, comb, beak, wattle
+      g.fillStyle = '#f6f2e8';
+      g.beginPath(); g.ellipse(0, -40, 22, 17, 0, 0, 7); g.fill();
+      g.fillStyle = '#e3ddcc';
+      for (let tf = 0; tf < 3; tf++) {
+        g.beginPath(); g.moveTo(-16, -44); g.quadraticCurveTo(-32, -58 - tf * 7, -20 - tf * 3, -38); g.fill();
+      }
+      const wflap = Math.sin((o.animT || 0) * 4) * 2;
+      g.beginPath(); g.ellipse(-1, -40 + wflap * 0.4, 12, 8, -0.3, 0, 7); g.fill();
+      g.fillStyle = '#f6f2e8';
+      g.fillRect(10, -70, 9, 24);
+      g.beginPath(); g.arc(14.5, -72, 8, 0, 7); g.fill();
+      g.fillStyle = '#d43b2f';
+      g.beginPath(); g.arc(11, -80, 3, 0, 7); g.arc(15, -82, 3, 0, 7); g.arc(19, -80, 3, 0, 7); g.fill();
+      g.fillStyle = '#e8a020';
+      g.beginPath(); g.moveTo(22, -73); g.lineTo(30, -71); g.lineTo(22, -68); g.fill();
+      g.fillStyle = '#d43b2f';
+      g.beginPath(); g.arc(21, -65, 2.5, 0, 7); g.fill();
+      g.fillStyle = '#1a1408';
+      g.beginPath(); g.arc(17, -74, 1.8, 0, 7); g.fill();
     } else {
     // torso
     limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 13 * muscleW, torsoCol);
@@ -806,8 +841,8 @@ const Game = (() => {
     g.fillRect(-7 + lean * 0.3, hip[1] - 3, 14, 4);
     }
     // front leg
-    limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, o.color);
-    if (!look.printer && !look.wrench) {
+    limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, legCol);
+    if (!look.printer && !look.wrench && !look.chicken) {
     // head
     g.fillStyle = o.hood ? o.color2 : o.skin;
     g.beginPath(); g.arc(3 + lean * 0.6, headY - 7, 9, 0, 7); g.fill();
@@ -838,8 +873,8 @@ const Game = (() => {
       g.beginPath(); g.moveTo(9, headY - 14); g.lineTo(14, headY - 26); g.lineTo(6, headY - 16); g.fill();
     }
     // front arm + weapon
-    limb([sh[0] + lean * 0.5, sh[1]], frontHand, armW, frontArmCol);
-    if (o.weaponTier > 0) {
+    if (!look.chicken) limb([sh[0] + lean * 0.5, sh[1]], frontHand, armW, frontArmCol);
+    if (o.weaponTier > 0 && !look.chicken) {
       const wl = 10 + o.weaponTier * 4.5;
       const wc = (o.weaponColors && o.weaponColors[o.weaponTier - 1]) || WEAPON_COLORS[o.weaponTier - 1];
       g.strokeStyle = wc; g.lineWidth = 3.4;
@@ -873,9 +908,11 @@ const Game = (() => {
       g.shadowBlur = 0;
     }
     // fists
-    g.fillStyle = o.hood ? o.color2 : o.skin;
-    g.beginPath(); g.arc(frontHand[0], frontHand[1], 3.6, 0, 7); g.fill();
-    g.beginPath(); g.arc(backHand[0], backHand[1], 3.4, 0, 7); g.fill();
+    if (!look.chicken) {
+      g.fillStyle = o.hood ? o.color2 : o.skin;
+      g.beginPath(); g.arc(frontHand[0], frontHand[1], 3.6, 0, 7); g.fill();
+      g.beginPath(); g.arc(backHand[0], backHand[1], 3.4, 0, 7); g.fill();
+    }
 
     g.restore();
 
@@ -967,6 +1004,24 @@ const Game = (() => {
       g.fillStyle = pr.color;
       if (pr.type === 'wave' || pr.type === 'pwave') {
         g.beginPath(); g.moveTo(pr.x - 16, GROUND_Y); g.lineTo(pr.x, GROUND_Y - 34); g.lineTo(pr.x + 16, GROUND_Y); g.fill();
+      } else if (pr.shape === 'chicken') {
+        g.save();
+        g.translate(pr.x, pr.y);
+        g.scale(Math.sign(pr.vx) || 1, 1);
+        const wf = Math.sin(pr.life * 30) * 4;
+        g.fillStyle = '#f6f2e8';
+        g.beginPath(); g.ellipse(0, 0, 11, 8, 0, 0, 7); g.fill();
+        g.fillStyle = '#e3ddcc';
+        g.beginPath(); g.ellipse(-2, -2 + wf * 0.4, 6, 3.5, -0.4, 0, 7); g.fill(); // wing
+        g.beginPath(); g.moveTo(-9, -2); g.lineTo(-16, -8 + wf); g.lineTo(-8, 2); g.fill(); // tail
+        g.fillStyle = '#f6f2e8';
+        g.beginPath(); g.arc(9, -8, 4.5, 0, 7); g.fill(); // head
+        g.fillStyle = '#d43b2f'; g.fillRect(7.5, -14.5, 3, 3); // comb
+        g.fillStyle = '#e8a020';
+        g.beginPath(); g.moveTo(13, -8); g.lineTo(18, -7); g.lineTo(13, -5.5); g.fill(); // beak
+        g.fillStyle = '#1a1408';
+        g.beginPath(); g.arc(10.5, -8.5, 1, 0, 7); g.fill(); // eye
+        g.restore();
       } else if (pr.shape === 'ball') {
         g.save();
         g.translate(pr.x, pr.y);

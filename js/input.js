@@ -33,7 +33,7 @@ const Input = {
     const el = document.getElementById(id);
     bind(el, () => {
       Sfx.unlock();
-      Input.presses.push(code);
+      if (Input.presses.length < 4) Input.presses.push(code);
       if (code === 'JUMP') Input.jumpHeld = true;
     }, () => { if (code === 'JUMP') Input.jumpHeld = false; });
   }
@@ -49,7 +49,7 @@ const Input = {
     if (keyHold[e.code]) { Input[keyHold[e.code]] = true; e.preventDefault(); }
     if (keyPress[e.code]) {
       Sfx.unlock();
-      Input.presses.push(keyPress[e.code]);
+      if (Input.presses.length < 4) Input.presses.push(keyPress[e.code]);
       if (keyPress[e.code] === 'JUMP') Input.jumpHeld = true;
       e.preventDefault();
     }

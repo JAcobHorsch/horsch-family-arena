@@ -224,7 +224,40 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'samantha',  name: 'SAMANTHA',   color: '#4ae8b2' },
+  {
+    id: 'samantha', name: 'SAMANTHA', color: '#4ae8b2',
+    title: 'The Toy Box Titan',
+    // Powerhouse: every hit lands like a dropped Tonka truck.
+    hp: 120, speed: 270, dmg: 1.32, atkSpeed: 1.12,
+    weaponStyle: 'club',
+    weaponColors: ['#ffd24a', '#4ab2e8', '#e8524a', '#37b34a', '#ff4a92'],
+    special: {
+      type: 'projectile', name: 'Chicken Throw',
+      desc: 'Throws a live chicken. It flaps, it panics, it hurts everyone it meets.',
+      dmg: 26, speed: 320, r: 12, pierce: true, shape: 'chicken', flap: true, life: 2.6,
+    },
+    tracks: {
+      weapon: {
+        icon: '🧸', label: 'Kids Toys',
+        tiers: ['Rubber Duck', 'Foam Sword', 'Nerf Blaster', 'Metal Tonka Truck', 'The Forbidden LEGO (Stepped On)'],
+        blurb: '+35% attack damage per tier — toys are weapons, ask any barefoot parent.',
+      },
+      armor: { tiers: ['Mom Bun & Leggings', 'Diaper Bag Bandolier', 'Minivan Door Shield', 'Snack-Pouch Kevlar', 'Titanium Toy Chest Plate'] },
+      ability: {
+        icon: '🐔', label: 'Chicken Coop',
+        tiers: ['One Free-Range Hen', 'Grumpy Rooster', 'Organic Feed', 'Prize Bird', 'The Apex Chicken'],
+        blurb: '+40% chicken damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'GIANT CHICKEN',
+      desc: 'She becomes a massive chicken. No explanation. No mercy. Just poultry.',
+      look: { chicken: true },
+      boost: { maxHp: 1.6, dmg: 2.1 },
+      sizeMult: 1.5,
+    },
+    designed: true,
+  },
   { id: 'cassandra', name: 'CASSANDRA',  color: '#4adbe8' },
   { id: 'erika',     name: 'ERIKA',      color: '#4a86e8' },
   { id: 'levi',      name: 'LEVI',       color: '#8a4ae8' },
