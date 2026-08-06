@@ -578,7 +578,38 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'brooks',    name: 'BROOKS',     color: '#37b34a' },
+  {
+    id: 'brooks', name: 'BROOKS', color: '#37b34a',
+    title: 'The Tasmanian Toddler',
+    // Speedster: too fast to catch, too bitey to hold.
+    hp: 95, speed: 375, dmg: 0.92, atkSpeed: 0.8,
+    weaponStyle: 'teeth',
+    special: {
+      type: 'tornado', name: 'Tornado Brooks',
+      desc: 'Spins like a Tasmanian devil — everything nearby gets chewed up and blown away.',
+      dmg: 18, radius: 150, kb: 650,
+    },
+    tracks: {
+      weapon: {
+        icon: '🦷', label: 'Teeth',
+        tiers: ['Baby Teeth', 'Full Set', 'Extra Sharp', 'Shark Week', 'The Unhinged Jaw'],
+        blurb: '+35% attack damage per tier. He just bites people.',
+      },
+      armor: { tiers: ['Sticky Shirt', 'Overalls', 'Bike Helmet', 'Bubble Wrap Suit', 'Toddler-Proof Titanium'] },
+      ability: {
+        icon: '🌪', label: 'Spin Cycle',
+        tiers: ['Dizzy Spin', 'Full Rotation', 'Double Spin', 'Cyclone', 'The Tasmanian Devil'],
+        blurb: '+40% tornado damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'BOOMERANG BROOKS',
+      desc: 'His mother trained him well. He throws HIMSELF — out and back, hitting everything twice. WHEEE!',
+      special: { type: 'selfrang', name: 'Self Toss', dmg: 20, dist: 420 },
+      boost: { speed: 1.4, dmg: 1.85, maxHp: 1.55 },
+    },
+    designed: true,
+  },
   { id: 'dayne',     name: 'DAYNE',      color: '#b0b6c4' },
 ].map(makeChar);
 

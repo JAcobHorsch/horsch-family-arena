@@ -59,7 +59,7 @@ const Game = (() => {
       cdef, upg, stats,
       x: 260, y: GROUND_Y, vx: 0, vy: 0, w: 36, h: 96, facing: 1,
       hp: stats.maxHp, energy: 100, onGround: true, crouch: false,
-      buffT: 0, buffDmg: 1, buffSpeed: 1,
+      buffT: 0, buffDmg: 1, buffSpeed: 1, returnT: 0,
       attack: null, hurtT: 0, invulnT: 0, walkCyc: 0, animT: 0, flash: 0,
       ascended: upg.ascended, size: upg.ascended ? (cdef.finalForm.sizeMult || 1.12) : (cdef.baseSize || 1),
     };
@@ -271,6 +271,39 @@ const Game = (() => {
         burst(p.x, p.y - 50, '#7fd98a', 20, 240, false);
         break;
       }
+      case 'tornado': {
+        const R = (def.radius || 150) * size;
+        for (let i = 0; i < 22; i++) {
+          const a = (i / 22) * Math.PI * 2;
+          particles.push({ x: p.x + Math.cos(a) * rand(10, R * 0.8), y: p.y - rand(5, 85), vx: Math.cos(a + 1.5) * 260, vy: rand(-90, -20), life: rand(0.3, 0.6), max: 0.6, r: rand(2, 5), color: '#cfd8ba', grav: false });
+        }
+        for (const e of [...enemies]) {
+          if (Math.abs(e.x - p.x) < R + e.w / 2) {
+            hitEnemy(e, (def.dmg || 18) * S, (e.x >= p.x ? 1 : -1) * (def.kb || 650), -320, true);
+          }
+        }
+        p.invulnT = Math.max(p.invulnT, 0.5);
+        shakeT = 0.25; shakeMag = 6;
+        break;
+      }
+      case 'selfrang': {
+        // Boomerang Brooks throws himself. His mother would be proud.
+        const dist2 = def.dist || 420;
+        const dx2 = dist2 * p.facing;
+        const sx0 = Math.min(p.x, p.x + dx2), sx1 = Math.max(p.x, p.x + dx2);
+        for (const e of [...enemies]) {
+          if (e.x + e.w / 2 > sx0 - 20 && e.x - e.w / 2 < sx1 + 20) hitEnemy(e, (def.dmg || 20) * S, p.facing * 300, -200, true);
+        }
+        p.returnX = p.x;
+        p.x = clamp(p.x + dx2, 40, STAGE_W - 40);
+        p.returnT = 0.4;
+        p.selfrangDmg = (def.dmg || 20) * S;
+        p.invulnT = Math.max(p.invulnT, 1.0);
+        addFloat(p.x, p.y - p.h - 30, 'WHEEE!', p.cdef.accent, true);
+        for (let i = 0; i < 14; i++) particles.push({ x: sx0 + (sx1 - sx0) * (i / 13), y: p.y - rand(20, 80), vx: 0, vy: rand(-50, 50), life: 0.3, max: 0.3, r: rand(2, 4), color: p.cdef.accent, grav: false });
+        shakeT = 0.2; shakeMag = 5;
+        break;
+      }
       case 'laser': {
         const ly = p.y - 62 * p.size;
         beams.push({ x0: p.x + p.facing * 14, y0: ly, x1: p.x + p.facing * 900, y1: ly, t: 0.28, max: 0.28, color: def.color || '#ff3a3a' });
@@ -348,6 +381,22 @@ const Game = (() => {
     if (p.invulnT > 0) p.invulnT -= dt;
     if (p.hurtT > 0) { p.hurtT -= dt; }
     if (p.buffT > 0) p.buffT -= dt;
+    // Boomerang Brooks: the return leg of the self-toss
+    if (p.returnT > 0) {
+      p.returnT -= dt;
+      if (p.returnT <= 0 && p.returnX !== undefined) {
+        const rx0 = Math.min(p.x, p.returnX), rx1 = Math.max(p.x, p.returnX);
+        for (const e of [...enemies]) {
+          if (e.x + e.w / 2 > rx0 - 20 && e.x - e.w / 2 < rx1 + 20) {
+            hitEnemy(e, p.selfrangDmg || 20, (p.returnX >= p.x ? 1 : -1) * 300, -200, true);
+          }
+        }
+        for (let i = 0; i < 14; i++) particles.push({ x: rx0 + (rx1 - rx0) * (i / 13), y: p.y - rand(20, 80), vx: 0, vy: rand(-50, 50), life: 0.3, max: 0.3, r: rand(2, 4), color: p.cdef.accent, grav: false });
+        p.x = p.returnX;
+        p.returnX = undefined;
+        Sfx.special();
+      }
+    }
     p.energy = Math.min(100, p.energy + 11 * dt);
     // 8-hours-of-sleep chatter: the impossible things keep happening
     if (p.ascended && p.cdef.finalForm.chatter && mode === 'playing' && Math.random() < dt * 0.45) {
@@ -1157,6 +1206,22 @@ const Game = (() => {
         g.beginPath(); g.arc(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5, 4.5, 0, 7); g.fill();
       } else if (o.weaponStyle === 'staff') {
         g.beginPath(); g.moveTo(frontHand[0] - wl * 0.8, frontHand[1] + wl * 0.5); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.6); g.stroke();
+      } else if (o.weaponStyle === 'teeth') {
+        // the chomp: jaws snap shut at the strike point
+        if (o.attackKey && (o.attackExt || 0) > 0.25) {
+          const jx = frontHand[0] + 5, jy = frontHand[1];
+          const open = (1 - (o.attackExt || 0)) * 7 + 2;
+          const nTeeth = 3 + Math.min(o.weaponTier, 4);
+          g.fillStyle = '#ffffff';
+          for (let ti = 0; ti < nTeeth; ti++) {
+            g.beginPath();
+            g.moveTo(jx + ti * 4, jy - open - 4); g.lineTo(jx + ti * 4 + 2, jy - open + 1); g.lineTo(jx + ti * 4 + 4, jy - open - 4);
+            g.fill();
+            g.beginPath();
+            g.moveTo(jx + ti * 4, jy + open + 4); g.lineTo(jx + ti * 4 + 2, jy + open - 1); g.lineTo(jx + ti * 4 + 4, jy + open + 4);
+            g.fill();
+          }
+        }
       } else if (o.weaponStyle === 'muscles') {
         // bicep definition bumps from tier 2 up
         if (o.weaponTier >= 2) {
