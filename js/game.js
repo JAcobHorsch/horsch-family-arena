@@ -27,7 +27,7 @@ const Game = (() => {
   let mode = 'idle';        // idle | playing | victory | defeat
   let paused = false;
   let plan = null, theme = themeFor(1);
-  let player = null, enemies = [], projectiles = [], coins = [], particles = [], floats = [], minions = [];
+  let player = null, enemies = [], projectiles = [], coins = [], particles = [], floats = [], minions = [], beams = [];
   let waveIdx = 0, spawnDelay = 0, endTimer = 0, endFired = false;
   let camX = 0, shakeT = 0, shakeMag = 0, hitstop = 0, timeScale = 1, flashFxT = 0;
   let banner = null; // {text, sub, t}
@@ -63,7 +63,7 @@ const Game = (() => {
       attack: null, hurtT: 0, invulnT: 0, walkCyc: 0, animT: 0, flash: 0,
       ascended: upg.ascended, size: upg.ascended ? (cdef.finalForm.sizeMult || 1.12) : (cdef.baseSize || 1),
     };
-    enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = [];
+    enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = []; beams = [];
     if (upg.ascended && cdef.finalForm.minions) {
       cdef.finalForm.minions.forEach((mid, i) => {
         const mdef = CHARACTERS.find(c => c.id === mid);
@@ -271,6 +271,18 @@ const Game = (() => {
         burst(p.x, p.y - 50, '#7fd98a', 20, 240, false);
         break;
       }
+      case 'laser': {
+        const ly = p.y - 62 * p.size;
+        beams.push({ x0: p.x + p.facing * 14, y0: ly, x1: p.x + p.facing * 900, y1: ly, t: 0.28, max: 0.28, color: def.color || '#ff3a3a' });
+        for (const e of [...enemies]) {
+          const inX = p.facing > 0 ? e.x > p.x : e.x < p.x;
+          if (inX && e.y >= ly && e.y - e.h <= ly) {
+            hitEnemy(e, (def.dmg || 22) * S, p.facing * 220, -80, true);
+          }
+        }
+        shakeT = 0.2; shakeMag = 5;
+        break;
+      }
       case 'shout': {
         const R = (def.radius || 320) * (asc ? 1.4 : 1);
         if (def.shoutLines) def.shoutLines.forEach((ln, i) => addFloat(p.x, p.y - p.h - 34 + i * 26, ln, p.cdef.accent, true));
@@ -375,10 +387,17 @@ const Game = (() => {
     p.vx += (targetVx - p.vx) * Math.min(1, dt * 12);
     if (mx !== 0 && p.onGround) p.walkCyc += dt * st.speed * 0.045;
 
-    // physics
+    // physics (Mecha Hayes: hold JUMP to fly on jet thrusters)
     p.vy += GRAV * dt;
+    if (p.ascended && p.cdef.finalForm.fly && Input.jumpHeld && !p.onGround) {
+      p.vy = Math.max(p.vy - 3600 * dt, -300);
+      if (Math.random() < 0.5) {
+        particles.push({ x: p.x + rand(-8, 8), y: p.y - 4, vx: rand(-20, 20), vy: rand(120, 220), life: 0.3, max: 0.3, r: rand(2, 4), color: '#ffb04a', grav: false });
+      }
+    }
     p.x = clamp(p.x + p.vx * dt, 40, STAGE_W - 40);
     p.y += p.vy * dt;
+    if (p.y < 150) { p.y = 150; if (p.vy < 0) p.vy = 0; } // flight ceiling
     if (p.y >= GROUND_Y) { p.y = GROUND_Y; p.vy = 0; p.onGround = true; } else p.onGround = false;
 
     // attack progression + hit detection
@@ -401,6 +420,8 @@ const Game = (() => {
             a.hits.add(e);
             const dir = d.radius ? (e.x >= p.x ? 1 : -1) : p.facing;
             hitEnemy(e, d.dmg * st.dmg * (p.buffT > 0 ? p.buffDmg : 1), dir * d.kb, d.kbY, a.key !== 'X');
+            const wb = p.cdef.weaponBurn;
+            if (wb && p.upg.weapon >= wb.tier && enemies.includes(e)) e.burnT = wb.dur;
           }
         }
       }
@@ -413,6 +434,14 @@ const Game = (() => {
     e.animT += dt;
     if (e.flash > 0) e.flash -= dt * 5;
     if (e.dousedT > 0) e.dousedT -= dt;
+    if (e.burnT > 0) {
+      e.burnT -= dt;
+      e.hp -= 8 * dt;
+      if (Math.random() < 0.3) {
+        particles.push({ x: e.x + rand(-8, 8), y: e.y - e.h * rand(0.4, 0.9), vx: rand(-15, 15), vy: -rand(50, 100), life: rand(0.25, 0.5), max: 0.5, r: rand(2, 3.5), color: '#ff7a2c', grav: false });
+      }
+      if (e.hp <= 0) { killEnemy(e); return; }
+    }
     // Tim's world: everything he fights is on fire until he hoses it down
     if (player && player.cdef.enemiesOnFire && !(e.dousedT > 0) && Math.random() < 0.2) {
       particles.push({
@@ -659,6 +688,10 @@ const Game = (() => {
     for (const f of [...floats]) {
       f.t -= dt; f.y -= 46 * dt;
       if (f.t <= 0) floats.splice(floats.indexOf(f), 1);
+    }
+    for (const b of [...beams]) {
+      b.t -= dt;
+      if (b.t <= 0) beams.splice(beams.indexOf(b), 1);
     }
     // ambient embers
     if (ambient.length < 40 && Math.random() < 0.3) {
@@ -993,6 +1026,18 @@ const Game = (() => {
     } else {
     // torso
     limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 13 * muscleW, torsoCol);
+    if (look.mecha) {
+      // armored chest plate + shoulder pads + core light
+      g.fillStyle = '#8a92a8';
+      g.beginPath();
+      g.moveTo(-11, -64); g.lineTo(13, -64); g.lineTo(9, -38); g.lineTo(-7, -38);
+      g.closePath(); g.fill();
+      g.fillStyle = '#6a7288';
+      g.beginPath(); g.roundRect(-17, -68, 10, 8, 2); g.fill();
+      g.beginPath(); g.roundRect(9, -68, 10, 8, 2); g.fill();
+      g.fillStyle = '#4adbe8';
+      g.fillRect(-2, -58, 7, 5); // arc core
+    }
     if (look.fat) {
       g.fillStyle = o.color;
       g.beginPath(); g.ellipse(2 + lean * 0.3, -36 * cf, 13, 11, 0, 0, 7); g.fill();
@@ -1022,7 +1067,12 @@ const Game = (() => {
     const hy = look.crawl ? -26 : headY - 7;
     g.fillStyle = o.hood ? o.color2 : o.skin;
     g.beginPath(); g.arc(hx, hy, 9, 0, 7); g.fill();
-    if (look.baby) {
+    if (look.mecha) {
+      g.fillStyle = '#8a92a8';
+      g.beginPath(); g.roundRect(hx - 8.5, hy - 8, 17, 15, 3); g.fill();
+      g.fillStyle = '#4adbe8';
+      g.fillRect(hx - 5, hy - 2.5, 11, 3.5); // visor
+    } else if (look.baby) {
       // single proud curl + pacifier
       g.strokeStyle = '#b87a3a'; g.lineWidth = 1.6;
       g.beginPath(); g.arc(hx - 1, hy - 10, 2.5, Math.PI * 0.2, Math.PI * 1.4); g.stroke();
@@ -1139,9 +1189,19 @@ const Game = (() => {
         g.beginPath(); g.arc(backHand[0], backHand[1], 5, 0, 7); g.fill();
         g.globalAlpha = 1;
       } else {
-        g.beginPath(); g.moveTo(frontHand[0], frontHand[1]); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.35); g.stroke();
+        const bladeCol = look.mecha ? '#4adbe8' : wc;
+        const bl = wl * (look.mecha ? 1.5 : 1);
+        g.strokeStyle = bladeCol;
+        if (look.mecha) { g.shadowColor = bladeCol; g.shadowBlur = 9; }
+        g.beginPath(); g.moveTo(frontHand[0], frontHand[1]); g.lineTo(frontHand[0] + bl, frontHand[1] - bl * 0.35); g.stroke();
       }
       g.shadowBlur = 0;
+    }
+    if (look.mecha && !o.onGround) {
+      // jet thrusters
+      g.fillStyle = 'rgba(255,176,74,0.9)';
+      g.beginPath(); g.moveTo(backFoot[0] - 3, backFoot[1] + 1); g.lineTo(backFoot[0], backFoot[1] + 10 + Math.random() * 4); g.lineTo(backFoot[0] + 3, backFoot[1] + 1); g.fill();
+      g.beginPath(); g.moveTo(frontFoot[0] - 3, frontFoot[1] + 1); g.lineTo(frontFoot[0], frontFoot[1] + 10 + Math.random() * 4); g.lineTo(frontFoot[0] + 3, frontFoot[1] + 1); g.fill();
     }
     // fists
     if (!look.chicken && !look.firetruck) {
@@ -1190,8 +1250,8 @@ const Game = (() => {
         hurt: e.hurtT > 0, flash: e.flash, frozen: e.frozenT > 0,
         weaponTier: 0, crouch: false, ascended: false,
       });
-      // burning overlay for Tim's enemies
-      if (player && player.cdef.enemiesOnFire && !(e.dousedT > 0)) {
+      // burning overlay for Tim's enemies and Fire Sword victims
+      if ((player && player.cdef.enemiesOnFire && !(e.dousedT > 0)) || e.burnT > 0) {
         const fl = Math.sin(e.animT * 20) * 3;
         g.fillStyle = 'rgba(255,122,44,0.8)';
         g.beginPath(); g.moveTo(e.x - 8, e.y - e.h + 2); g.quadraticCurveTo(e.x - 6, e.y - e.h - 13 - fl, e.x, e.y - e.h - 2); g.fill();
@@ -1245,6 +1305,18 @@ const Game = (() => {
         g.globalAlpha = 1;
       }
     }
+
+    // laser beams
+    for (const b of beams) {
+      g.globalAlpha = Math.max(0, b.t / b.max);
+      g.strokeStyle = b.color; g.lineWidth = 5;
+      g.shadowColor = b.color; g.shadowBlur = 14;
+      g.beginPath(); g.moveTo(b.x0, b.y0); g.lineTo(b.x1, b.y1); g.stroke();
+      g.shadowBlur = 0;
+      g.strokeStyle = '#ffffff'; g.lineWidth = 1.8;
+      g.beginPath(); g.moveTo(b.x0, b.y0); g.lineTo(b.x1, b.y1); g.stroke();
+    }
+    g.globalAlpha = 1;
 
     // projectiles
     for (const pr of projectiles) {

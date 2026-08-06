@@ -507,7 +507,43 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'hayes',     name: 'HAYES',      color: '#5c4ae8' },
+  {
+    id: 'hayes', name: 'HAYES', color: '#5c4ae8',
+    title: 'The Laser Knight',
+    // Powerhouse: heavy swings, heavier stares.
+    hp: 122, speed: 265, dmg: 1.34, atkSpeed: 1.13,
+    weaponStyle: 'blade',
+    weaponColors: ['#b8a888', '#c9ccd8', '#dfe3e8', '#8a4ae8', '#ff7a2c'],
+    weaponBurn: { tier: 5, dur: 3 }, // the Fire Sword ignites on hit
+    special: {
+      type: 'laser', name: 'Laser Eyes',
+      desc: 'Twin beams of pure eye-power sweep everything in front of him.',
+      dmg: 22, color: '#ff3a3a',
+    },
+    tracks: {
+      weapon: {
+        icon: '⚔', label: 'Swords',
+        tiers: ['Wooden Sword', 'Steel Sword', "Knight's Blade", 'Dragonfang', 'The Fire Sword'],
+        blurb: '+35% attack damage per tier. The Fire Sword ignites enemies on hit.',
+      },
+      armor: { tiers: ['T-Shirt of Bravery', 'Cardboard Plate', 'Chainmail Hoodie', 'Knight Armor', 'Dragonscale Suit'] },
+      ability: {
+        icon: '👁', label: 'Eye Power',
+        tiers: ['Intense Stare', 'Warm Gaze', 'Hot Look', 'Searing Glare', 'The Death Stare'],
+        blurb: '+40% laser damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'MECHA HAYES',
+      desc: 'A towering mech: laser sword, repulsor wrist blasts, and jet thrusters — hold JUMP to fly.',
+      look: { mecha: true },
+      special: { type: 'projectile', name: 'Repulsor Blasts', count: 3, dmg: 14, speed: 640, r: 7, pierce: true, spreadY: 40, color: '#4adbe8' },
+      fly: true,
+      boost: { maxHp: 1.7, dmg: 2.0, defense: 0.55 },
+      sizeMult: 1.45,
+    },
+    designed: true,
+  },
   { id: 'addi',      name: 'ADDI',       color: '#e8a04a' },
   { id: 'brooks',    name: 'BROOKS',     color: '#37b34a' },
   { id: 'dayne',     name: 'DAYNE',      color: '#b0b6c4' },
