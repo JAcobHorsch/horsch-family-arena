@@ -157,7 +157,39 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'jerod',     name: 'JEROD',      color: '#e8c84a' },
+  {
+    id: 'jerod', name: 'JEROD', color: '#e8c84a',
+    title: 'The Unbreakable',
+    // Tank: an absolute unit; enemies chip at him all day.
+    hp: 165, speed: 250, dmg: 1.05, atkSpeed: 1.05,
+    weaponStyle: 'blade',
+    special: {
+      type: 'wave', name: 'Power Gulp',
+      desc: 'Chugs a gallon of milk — the mighty swallow releases bone-rattling shockwaves in both directions.',
+      dmg: 22, speed: 360, both: true, color: '#f4f0e6',
+    },
+    tracks: {
+      weapon: {
+        icon: '🖨', label: '3D Prints',
+        tiers: ['PLA Shiv', 'ABS Short Sword', 'Carbon-Fiber Katana', 'Titanium-Infill Greatblade', 'The Masterprint (0% Warp)'],
+        blurb: '+35% attack damage per tier — better filament, better carnage.',
+      },
+      armor: { tiers: ['Hoodie of Holding', 'PLA Plate', 'Honeycomb-Infill Vest', 'Carbon Weave Suit', 'Monolithic Print Armor'] },
+      ability: {
+        icon: '🥛', label: 'Milk',
+        tiers: ['2% Milk', 'Whole Milk', 'Chocolate Milk', 'A Full Gallon', 'The Dairy Singularity'],
+        blurb: '+40% gulp damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: '3D PRINTER JEROD',
+      desc: 'He becomes the machine. A giant walking 3D printer, extruder blazing, printing victory layer by layer.',
+      look: { printer: true },
+      boost: { maxHp: 1.65, defense: 0.55 },
+      sizeMult: 1.45,
+    },
+    designed: true,
+  },
   { id: 'jacob',     name: 'JACOB',      color: '#4ae86a' },
   { id: 'samantha',  name: 'SAMANTHA',   color: '#4ae8b2' },
   { id: 'cassandra', name: 'CASSANDRA',  color: '#4adbe8' },

@@ -61,7 +61,7 @@ const Game = (() => {
       hp: stats.maxHp, energy: 100, onGround: true, crouch: false,
       buffT: 0, buffDmg: 1, buffSpeed: 1,
       attack: null, hurtT: 0, invulnT: 0, walkCyc: 0, animT: 0, flash: 0,
-      ascended: upg.ascended, size: upg.ascended ? 1.12 : 1,
+      ascended: upg.ascended, size: upg.ascended ? (cdef.finalForm.sizeMult || 1.12) : 1,
     };
     enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = [];
     if (upg.ascended && cdef.finalForm.minions) {
@@ -177,7 +177,7 @@ const Game = (() => {
     const asc = p.ascended;
     const S = st.specialMult;
     const size = asc ? 1.45 : 1;
-    const col = p.cdef.color;
+    const col = def.color || p.cdef.color;
     switch (def.type) {
       case 'projectile': {
         const n = def.count || 1;
@@ -677,7 +677,8 @@ const Game = (() => {
 
     g.scale(o.facing * o.size, o.size);
 
-    const hip = [0, -40 * cf], sh = [2, -64 * cf], headY = -78 * cf;
+    let hip = [0, -40 * cf], sh = [2, -64 * cf];
+    const headY = -78 * cf;
     let backFoot = [-9, 0], frontFoot = [9, 0];
     let backHand = [-6, -48 * cf], frontHand = [15, -52 * cf]; // guard stance
     let lean = 0;
@@ -710,6 +711,14 @@ const Game = (() => {
       frontHand = [36, -54]; lean = 4;
     }
     if (o.hurt) { lean = -8; frontHand = [18, -40]; backHand = [-16, -52]; }
+    if (look.printer) {
+      // machine proportions: stubby legs under the base, gripper arms out the sides
+      hip = [0, -13]; sh = [0, -56];
+      backHand = [-21, -46]; frontHand = [21, -46];
+      const pExt = o.attackExt || 0;
+      if (o.attackKey === 'X' || o.attackKey === 'A') frontHand = [22 + 24 * pExt, -48];
+      else if (o.attackKey === 'B') { frontHand = [16, -60 - 26 * pExt]; backHand = [-16, -60 - 26 * pExt]; }
+    }
 
     g.lineCap = 'round'; g.lineJoin = 'round';
     const limb = (from, to, width, color) => {
@@ -727,6 +736,32 @@ const Game = (() => {
     // back limbs
     limb([hip[0] + lean * 0.3, hip[1]], backFoot, 7.5, o.color2);
     limb([sh[0] + lean * 0.5, sh[1]], backHand, armW, backArmCol);
+    if (look.printer) {
+      // he IS the machine: gantry frame body
+      g.strokeStyle = '#3a3f4a'; g.lineWidth = 5; g.lineJoin = 'miter';
+      g.beginPath();
+      g.moveTo(-15, -14); g.lineTo(-15, -72); g.lineTo(15, -72); g.lineTo(15, -14);
+      g.stroke();
+      g.lineJoin = 'round';
+      // base + bed
+      g.fillStyle = '#2a2e38'; g.fillRect(-18, -16, 36, 8);
+      g.fillStyle = o.color; g.fillRect(-18, -16, 36, 2);
+      g.fillStyle = '#4a5060'; g.fillRect(-11, -26, 22, 3);
+      // half-printed mini-Jerod on the bed
+      g.strokeStyle = o.color; g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(0, -26); g.lineTo(0, -36); g.stroke();
+      g.beginPath(); g.arc(0, -39, 3, 0, 7); g.stroke();
+      // extruder carriage sweeping the top rail + nozzle beam
+      const ecx = Math.sin((o.animT || 0) * 2.5) * 9;
+      g.fillStyle = o.accent;
+      g.fillRect(ecx - 4, -78, 8, 8);
+      g.globalAlpha = 0.55;
+      g.strokeStyle = o.accent; g.lineWidth = 1.6;
+      g.beginPath(); g.moveTo(ecx, -70); g.lineTo(ecx, -28); g.stroke();
+      g.globalAlpha = 1;
+      g.fillStyle = '#ffffff';
+      g.beginPath(); g.arc(ecx, -29, 1.8, 0, 7); g.fill();
+    } else {
     // torso
     limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 13 * muscleW, torsoCol);
     if (look.shirtless) {
@@ -740,8 +775,10 @@ const Game = (() => {
     // belt
     g.fillStyle = o.accent;
     g.fillRect(-7 + lean * 0.3, hip[1] - 3, 14, 4);
+    }
     // front leg
     limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, o.color);
+    if (!look.printer) {
     // head
     g.fillStyle = o.hood ? o.color2 : o.skin;
     g.beginPath(); g.arc(3 + lean * 0.6, headY - 7, 9, 0, 7); g.fill();
@@ -764,6 +801,7 @@ const Game = (() => {
     if (look.beard) {
       g.fillStyle = look.beardColor || '#6b4423';
       g.beginPath(); g.arc(3 + lean * 0.6, headY - 4, 7.6, -0.04 * Math.PI, 1.04 * Math.PI); g.fill();
+    }
     }
     if (o.boss) { // horns
       g.fillStyle = '#e8d9b0';
