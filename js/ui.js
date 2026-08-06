@@ -60,7 +60,7 @@ const UI = (() => {
           ${statBar('POWER', st.dmg / 4)}
           ${statBar('SPEED', st.speed / 460)}
         </div>
-        <div class="char-upg">⚔ <b>${u.weapon}</b>/5 &nbsp; ⛨ <b>${u.armor}</b>/5 &nbsp; ✦ <b>${u.ability}</b>/5</div>
+        <div class="char-upg">${trackMeta(c, 'weapon').icon} <b>${u.weapon}</b>/5 &nbsp; ${trackMeta(c, 'armor').icon} <b>${u.armor}</b>/5 &nbsp; ${trackMeta(c, 'ability').icon} <b>${u.ability}</b>/5</div>
         <div class="char-special">A: ${c.special.name} — ${u.ascended ? c.finalForm.desc : c.special.desc}</div>`;
       card.addEventListener('click', () => { Sfx.buy(); show(null); Game.startLevel(c.id); });
       grid.appendChild(card);

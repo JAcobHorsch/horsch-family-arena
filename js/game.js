@@ -171,12 +171,16 @@ const Game = (() => {
     switch (def.type) {
       case 'projectile': {
         const n = def.count || 1;
-        for (let i = 0; i < n; i++) {
-          projectiles.push({
-            type: 'fire', hostile: false, x: p.x + p.facing * 30, y: p.y - 55 - i * 16,
-            vx: p.facing * (def.speed || 560), vy: def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0,
-            dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: 1.5, pierce: def.pierce !== false, color: col,
-          });
+        const dirs = def.both ? [-1, 1] : [p.facing];
+        for (const dir of dirs) {
+          for (let i = 0; i < n; i++) {
+            projectiles.push({
+              type: 'fire', hostile: false, x: p.x + dir * 30, y: p.y - 55 - i * 16,
+              vx: dir * (def.speed || 560), vy: def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0,
+              dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: 1.5,
+              pierce: def.pierce !== false, shape: def.shape, color: col,
+            });
+          }
         }
         break;
       }
@@ -631,11 +635,27 @@ const Game = (() => {
       g.beginPath(); g.moveTo(from[0], from[1]); g.lineTo(to[0], to[1]); g.stroke();
     };
 
+    // final-form look overrides (bald / beard / shirtless / muscle)
+    const look = (o.ascended && o.look) || {};
+    const muscleW = look.muscle || 1;
+    const armW = 6 * (1 + (muscleW - 1) * 0.7);
+    const torsoCol = look.shirtless ? o.skin : o.color;
+    const backArmCol = look.shirtless ? hexMix(o.skin, '#000000', 0.3) : o.color2;
+    const frontArmCol = look.shirtless ? o.skin : o.color;
+
     // back limbs
     limb([hip[0] + lean * 0.3, hip[1]], backFoot, 7.5, o.color2);
-    limb([sh[0] + lean * 0.5, sh[1]], backHand, 6, o.color2);
+    limb([sh[0] + lean * 0.5, sh[1]], backHand, armW, backArmCol);
     // torso
-    limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 13, o.color);
+    limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 13 * muscleW, torsoCol);
+    if (look.shirtless) {
+      // ab definition
+      g.strokeStyle = hexMix(o.skin, '#000000', 0.25); g.lineWidth = 1.3;
+      for (let ai = 0; ai < 3; ai++) {
+        const ay = hip[1] - 4 - ai * 6;
+        g.beginPath(); g.moveTo(-4 + lean * 0.4, ay); g.lineTo(5 + lean * 0.4, ay); g.stroke();
+      }
+    }
     // belt
     g.fillStyle = o.accent;
     g.fillRect(-7 + lean * 0.3, hip[1] - 3, 14, 4);
@@ -650,11 +670,19 @@ const Game = (() => {
       // glowing eyes
       g.fillStyle = o.eyeColor || '#ffd34a';
       g.fillRect(5 + lean * 0.6, headY - 9, 4, 2.6);
+    } else if (look.bald) {
+      // bald shine
+      g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 1.6;
+      g.beginPath(); g.arc(1 + lean * 0.6, headY - 9, 6, Math.PI * 1.15, Math.PI * 1.6); g.stroke();
     } else {
       // headband
       g.fillStyle = o.color;
       g.fillRect(-5 + lean * 0.6, headY - 12, 17, 5);
       g.fillRect(-9 + lean * 0.6, headY - 11, 5, 9); // band tail
+    }
+    if (look.beard) {
+      g.fillStyle = look.beardColor || '#6b4423';
+      g.beginPath(); g.arc(3 + lean * 0.6, headY - 4, 7.6, -0.04 * Math.PI, 1.04 * Math.PI); g.fill();
     }
     if (o.boss) { // horns
       g.fillStyle = '#e8d9b0';
@@ -662,7 +690,7 @@ const Game = (() => {
       g.beginPath(); g.moveTo(9, headY - 14); g.lineTo(14, headY - 26); g.lineTo(6, headY - 16); g.fill();
     }
     // front arm + weapon
-    limb([sh[0] + lean * 0.5, sh[1]], frontHand, 6, o.color);
+    limb([sh[0] + lean * 0.5, sh[1]], frontHand, armW, frontArmCol);
     if (o.weaponTier > 0) {
       const wl = 10 + o.weaponTier * 4.5;
       const wc = WEAPON_COLORS[o.weaponTier - 1];
@@ -753,6 +781,7 @@ const Game = (() => {
           attackKey: p.attack ? p.attack.key : null, attackExt: attackExt(p.attack),
           hurt: p.hurtT > 0, flash: p.flash, frozen: false,
           weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, ascended: p.ascended,
+          look: p.cdef.finalForm.look,
         });
       }
       if (p.buffT > 0) {
@@ -769,6 +798,15 @@ const Game = (() => {
       g.fillStyle = pr.color;
       if (pr.type === 'wave' || pr.type === 'pwave') {
         g.beginPath(); g.moveTo(pr.x - 16, GROUND_Y); g.lineTo(pr.x, GROUND_Y - 34); g.lineTo(pr.x + 16, GROUND_Y); g.fill();
+      } else if (pr.shape === 'needle') {
+        const ang = Math.atan2(pr.vy, pr.vx);
+        g.strokeStyle = '#e8f0ff'; g.lineWidth = 2.5;
+        g.shadowColor = pr.color; g.shadowBlur = 6;
+        g.beginPath();
+        g.moveTo(pr.x - Math.cos(ang) * 16, pr.y - Math.sin(ang) * 16);
+        g.lineTo(pr.x, pr.y);
+        g.stroke();
+        g.shadowBlur = 0;
       } else {
         g.shadowColor = pr.color; g.shadowBlur = 12;
         g.beginPath(); g.arc(pr.x, pr.y, pr.r, 0, 7); g.fill();
@@ -915,6 +953,7 @@ const Game = (() => {
       moving: false, walkCyc: 0, animT: 2, onGround: true,
       crouch: false, attackKey: null, attackExt: 0,
       hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: cdef.weaponStyle, ascended,
+      look: cdef.finalForm.look,
     });
   }
 

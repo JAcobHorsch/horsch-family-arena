@@ -67,7 +67,33 @@ function makeChar(def) {
 // The Horsch family roster. Colors are provisional; stats, specials, weapons,
 // tracks and final forms get personalized one character at a time.
 const CHARACTERS = [
-  { id: 'todd',      name: 'SUPER TODD', color: '#e8524a' },
+  {
+    id: 'todd', name: 'SUPER TODD', color: '#e8524a',
+    title: 'The Patriarch',
+    // Powerhouse: every hit is a truck; he just doesn't hurry.
+    hp: 130, speed: 255, dmg: 1.35, atkSpeed: 1.15,
+    weaponStyle: 'none',
+    special: {
+      type: 'projectile', name: 'Diabetes Cry',
+      desc: 'Chugs pure sugar — his supercharged pancreas fires insulin needles out of his body in both directions.',
+      dmg: 8, speed: 640, r: 5, pierce: true, count: 4, spreadY: 46, both: true, shape: 'needle',
+    },
+    tracks: {
+      weapon: { icon: '👊', label: 'Fists', tiers: ['Work Gloves', 'Brass Knuckles', 'Concrete Fists', 'Meteor Mitts', 'Fists of the Toddfather'] },
+      armor: { tiers: ['Flannel Shirt', 'Dad Jeans', 'Steel-Toe Boots', 'Grill Apron of Iron', 'Toddfather Hide'] },
+      ability: {
+        icon: '💉', label: 'Pancreas',
+        tiers: ['Candy Stash', 'Sugar Rush', 'Glucose Overload', 'Pancreas Unleashed', 'Peak Insulin'],
+        blurb: '+40% needle damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'THE TODDFATHER',
+      desc: 'Bald, impossibly ripped, gloriously bearded, and completely shirtless. Respect must be paid.',
+      look: { bald: true, beard: true, shirtless: true, muscle: 1.35 },
+    },
+    designed: true,
+  },
   { id: 'sonya',     name: 'SONYA',      color: '#e84a92' },
   { id: 'jordan',    name: 'JORDAN',     color: '#e8784a' },
   { id: 'jerod',     name: 'JEROD',      color: '#e8c84a' },
