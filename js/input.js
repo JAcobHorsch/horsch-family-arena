@@ -63,4 +63,10 @@ const Input = {
   document.addEventListener('touchmove', (e) => {
     if (!e.target.closest('.screen')) e.preventDefault();
   }, { passive: false });
+
+  // iOS Safari ignores user-scalable=no — block pinch and double-tap zoom
+  // explicitly so the arena can never get stuck zoomed-in
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('gesturechange', (e) => e.preventDefault());
+  document.addEventListener('dblclick', (e) => e.preventDefault());
 })();

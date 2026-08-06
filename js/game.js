@@ -14,19 +14,30 @@ const Game = (() => {
   // world-pixels — scale down instead and anchor the action above the touch
   // controls, letting sky fill the extra height.
   const MIN_VW = 640;
-  let DPR = 1, scale = 1, viewW = 960, viewH = VH, worldOffY = 0;
+  let DPR = 1, scale = 1, viewW = 960, viewH = VH, worldOffY = 0, SW = 1, SH = 1;
+  // Layout-viewport size: stable under iOS pinch-zoom, matches the canvas's
+  // fixed inset:0 CSS box (window.innerWidth tracks the visual viewport and lies).
+  function measure() {
+    const el = document.documentElement;
+    return [
+      Math.max(1, el.clientWidth || window.innerWidth),
+      Math.max(1, el.clientHeight || window.innerHeight),
+    ];
+  }
   function resize() {
     DPR = window.devicePixelRatio || 1;
-    const w = window.innerWidth, h = window.innerHeight;
-    cvs.width = Math.round(w * DPR);
-    cvs.height = Math.round(h * DPR);
-    scale = Math.min(h / VH, w / MIN_VW);
-    viewW = w / scale;
-    viewH = h / scale;
+    const m = measure();
+    SW = m[0]; SH = m[1];
+    cvs.width = Math.round(SW * DPR);
+    cvs.height = Math.round(SH * DPR);
+    scale = Math.min(SH / VH, SW / MIN_VW);
+    viewW = SW / scale;
+    viewH = SH / scale;
     worldOffY = Math.max(0, viewH - GROUND_Y - 380); // keep the fight clear of the touch controls
   }
   window.addEventListener('resize', resize);
-  window.addEventListener('orientationchange', resize);
+  window.addEventListener('orientationchange', () => { resize(); setTimeout(resize, 300); });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
   resize();
 
   // ---------- World state ----------
@@ -1865,10 +1876,10 @@ const Game = (() => {
     const g = ctx;
     g.save();
     // portrait phones get a modest HUD boost so text stays readable
-    const hs = scale * (window.innerHeight > window.innerWidth ? 1.3 : 1);
+    const hs = scale * (SH > SW ? 1.3 : 1);
     g.setTransform(DPR * hs, 0, 0, DPR * hs, 0, 0); // screen space
-    const hw = window.innerWidth / hs;
-    const hh = window.innerHeight / hs;
+    const hw = SW / hs;
+    const hh = SH / hs;
     const p = player;
     if (p) {
       // name + HP + energy
@@ -1949,7 +1960,7 @@ const Game = (() => {
     if (mode !== 'idle') drawEntities();
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     // vignette
-    const w = window.innerWidth, h = window.innerHeight;
+    const w = SW, h = SH;
     const vg = ctx.createRadialGradient(w / 2, h / 2, h * 0.45, w / 2, h / 2, h * 0.95);
     vg.addColorStop(0, 'transparent'); vg.addColorStop(1, 'rgba(0,0,0,0.5)');
     ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
@@ -1969,6 +1980,10 @@ const Game = (() => {
   }
   function tick(now) {
     schedule();
+    // watchdog: iOS fires rotation events before its sizes settle — re-measure
+    // every frame so the canvas can never stay stretched or stale
+    const m = measure();
+    if (m[0] !== SW || m[1] !== SH || (window.devicePixelRatio || 1) !== DPR) resize();
     let dt = Math.min((now - last) / 1000, 0.033);
     last = now;
     if (paused) { render(); return; }
