@@ -10,14 +10,20 @@ const Game = (() => {
   const STAGE_W = 1750;
   const GRAV = 1950;
 
-  let DPR = 1, scale = 1, viewW = 960;
+  // Portrait phones: never let the visible arena get narrower than MIN_VW
+  // world-pixels — scale down instead and anchor the action above the touch
+  // controls, letting sky fill the extra height.
+  const MIN_VW = 640;
+  let DPR = 1, scale = 1, viewW = 960, viewH = VH, worldOffY = 0;
   function resize() {
     DPR = window.devicePixelRatio || 1;
     const w = window.innerWidth, h = window.innerHeight;
     cvs.width = Math.round(w * DPR);
     cvs.height = Math.round(h * DPR);
-    scale = h / VH;
+    scale = Math.min(h / VH, w / MIN_VW);
     viewW = w / scale;
+    viewH = h / scale;
+    worldOffY = Math.max(0, viewH - GROUND_Y - 380); // keep the fight clear of the touch controls
   }
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', resize);
@@ -821,13 +827,13 @@ const Game = (() => {
       b.t -= dt;
       if (b.t <= 0) beams.splice(beams.indexOf(b), 1);
     }
-    // ambient embers
+    // ambient embers (span the full visible height, portrait included)
     if (ambient.length < 40 && Math.random() < 0.3) {
-      ambient.push({ x: camX + Math.random() * viewW, y: VH + 10, vy: -rand(18, 60), drift: rand(-14, 14), r: rand(1, 2.6), a: rand(0.15, 0.5) });
+      ambient.push({ x: camX + Math.random() * viewW, y: viewH - worldOffY + 10, vy: -rand(18, 60), drift: rand(-14, 14), r: rand(1, 2.6), a: rand(0.15, 0.5) });
     }
     for (const a of [...ambient]) {
       a.y += a.vy * dt; a.x += a.drift * dt;
-      if (a.y < -10) ambient.splice(ambient.indexOf(a), 1);
+      if (a.y < -worldOffY - 10) ambient.splice(ambient.indexOf(a), 1);
     }
   }
 
@@ -886,9 +892,9 @@ const Game = (() => {
 
   function drawBackground() {
     const g = ctx;
-    const sky = g.createLinearGradient(0, 0, 0, VH);
+    const sky = g.createLinearGradient(0, -worldOffY, 0, GROUND_Y);
     sky.addColorStop(0, theme.sky1); sky.addColorStop(1, theme.sky2);
-    g.fillStyle = sky; g.fillRect(camX, 0, viewW, VH);
+    g.fillStyle = sky; g.fillRect(camX, -worldOffY, viewW, viewH);
 
     // glow moon
     const mx = camX + viewW * 0.72, my = 120;
@@ -952,8 +958,9 @@ const Game = (() => {
       }
     }
 
-    // ground
-    g.fillStyle = theme.ground; g.fillRect(camX, GROUND_Y, viewW, VH - GROUND_Y);
+    // ground (extends to the bottom of tall portrait screens)
+    g.fillStyle = theme.ground;
+    g.fillRect(camX, GROUND_Y, viewW, Math.max(VH - GROUND_Y, viewH - worldOffY - GROUND_Y));
     g.fillStyle = theme.groundTop; g.fillRect(camX, GROUND_Y, viewW, 5);
     // stage edge glow markers
     g.fillStyle = theme.glow + '55';
@@ -1857,7 +1864,11 @@ const Game = (() => {
   function drawHUD() {
     const g = ctx;
     g.save();
-    g.setTransform(DPR * scale, 0, 0, DPR * scale, 0, 0); // screen space
+    // portrait phones get a modest HUD boost so text stays readable
+    const hs = scale * (window.innerHeight > window.innerWidth ? 1.3 : 1);
+    g.setTransform(DPR * hs, 0, 0, DPR * hs, 0, 0); // screen space
+    const hw = window.innerWidth / hs;
+    const hh = window.innerHeight / hs;
     const p = player;
     if (p) {
       // name + HP + energy
@@ -1875,11 +1886,11 @@ const Game = (() => {
       g.textAlign = 'right';
       g.font = "900 17px 'Segoe UI', sans-serif";
       g.fillStyle = '#ffd977';
-      g.fillText('$' + Save.data.money.toLocaleString(), window.innerWidth / scale - 92, 28);
+      g.fillText('$' + Save.data.money.toLocaleString(), hw - 92, 28);
 
       // level / wave
       g.textAlign = 'center';
-      const cx = window.innerWidth / scale / 2;
+      const cx = hw / 2;
       g.font = "900 13px 'Segoe UI', sans-serif";
       g.fillStyle = '#e8e2d0';
       g.fillText(plan.levelName.toUpperCase(), cx, 18);
@@ -1890,24 +1901,38 @@ const Game = (() => {
       // boss bar
       const boss = enemies.find(e => e.def.boss);
       if (boss) {
-        const bw = Math.min(420, window.innerWidth / scale - 120);
+        const bw = Math.min(420, hw - 120);
         bar(g, cx - bw / 2, 44, bw, 13, boss.hp / boss.maxHp, '#d43b2f');
         g.font = "900 10px 'Segoe UI', sans-serif"; g.fillStyle = '#ffb0a8';
         g.fillText(boss.def.name.toUpperCase(), cx, 54.5);
       }
 
-      // banner
+      // banner (auto-shrinks to fit narrow screens)
       if (banner) {
         const a = Math.min(1, banner.t / 0.4, (banner.max - banner.t) / 0.25 + 0.2);
         g.globalAlpha = clamp(a, 0, 1);
+        const maxW = hw * 0.92;
+        let bf = 44;
         g.font = "900 44px 'Segoe UI', sans-serif";
+        const tw = g.measureText(banner.text).width;
+        if (tw > maxW) {
+          bf = Math.max(18, Math.floor(44 * maxW / tw));
+          g.font = "900 " + bf + "px 'Segoe UI', sans-serif";
+        }
+        const by = hh * 0.3;
         g.fillStyle = '#f3c14b';
         g.shadowColor = 'rgba(0,0,0,0.8)'; g.shadowBlur = 14;
-        g.fillText(banner.text, cx, VH * 0.34 * (window.innerHeight / scale / VH));
+        g.fillText(banner.text, cx, by);
         if (banner.sub) {
+          let sf = 16;
           g.font = "700 16px 'Segoe UI', sans-serif";
+          const sw2 = g.measureText(banner.sub).width;
+          if (sw2 > maxW) {
+            sf = Math.max(10, Math.floor(16 * maxW / sw2));
+          }
+          g.font = "700 " + sf + "px 'Segoe UI', sans-serif";
           g.fillStyle = '#e8e2d0';
-          g.fillText(banner.sub, cx, VH * 0.34 * (window.innerHeight / scale / VH) + 30);
+          g.fillText(banner.sub, cx, by + bf * 0.5 + 14);
         }
         g.shadowBlur = 0; g.globalAlpha = 1;
       }
@@ -1919,7 +1944,7 @@ const Game = (() => {
     ctx.setTransform(DPR * scale, 0, 0, DPR * scale, 0, 0);
     let ox = 0, oy = 0;
     if (shakeT > 0) { ox = rand(-1, 1) * shakeMag * shakeT * 4; oy = rand(-1, 1) * shakeMag * shakeT * 4; }
-    ctx.translate(-camX + ox, oy);
+    ctx.translate(-camX + ox, worldOffY + oy);
     drawBackground();
     if (mode !== 'idle') drawEntities();
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);

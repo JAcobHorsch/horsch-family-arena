@@ -135,3 +135,12 @@ canvas#game { position:fixed; inset:0; display:block; }
   .pad-mid { gap:46px; }
   #facepad .pad-mid { gap:44px; }
 }
+
+/* narrow portrait phones: slightly bigger thumbs, tighter clusters */
+@media (max-width:520px) and (orientation:portrait) {
+  .ctl { width:66px; height:66px; font-size:22px; }
+  .pad-mid { gap:50px; }
+  #facepad .pad-mid { gap:48px; }
+  #dpad { left:max(8px, env(safe-area-inset-left)); }
+  #facepad { right:max(8px, env(safe-area-inset-right)); }
+}
