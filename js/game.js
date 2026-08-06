@@ -549,6 +549,17 @@ const Game = (() => {
 
     if (e.def.boss) {
       e.shockT -= dt;
+      if (e.charging > 0) {
+        e.charging -= dt;
+        e.x = clamp(e.x + e.chargeDir * 640 * dt, 40, STAGE_W - 40);
+        e.walkCyc += dt * 30;
+        if (Math.random() < 0.4) particles.push({ x: e.x - e.chargeDir * 40, y: e.y - rand(4, 20), vx: -e.chargeDir * 80, vy: -rand(20, 60), life: 0.4, max: 0.4, r: rand(2, 5), color: '#8d8574', grav: false });
+        if (!e.chargeHit && Math.abs(e.x - player.x) < 70) {
+          damagePlayer(e.dmg * 1.2, e.x);
+          e.chargeHit = true;
+        }
+        return; // full send
+      }
       if (e.shockT <= 0 && e.state === 'approach') {
         e.shockT = 5.5;
         e.state = 'windup'; e.stateT = e.def.windup * 1.2; e.shockNext = true;
@@ -589,10 +600,39 @@ const Game = (() => {
   function doStrike(e) {
     if (e.shockNext) {
       e.shockNext = false;
-      for (const dir of [-1, 1]) {
-        projectiles.push({ type: 'wave', hostile: true, x: e.x + dir * 40, y: GROUND_Y, vx: dir * 300, vy: 0, dmg: e.dmg * 0.8, r: 16, life: 2.0, color: theme.glow });
+      const kind = e.def.bossKind;
+      if (kind === 'goose') {
+        addFloat(e.x, e.y - e.h - 28, 'HONK!', '#ffffff', true);
+        burst(e.x, e.y - 60, '#e8f0ff', 18, 340, false);
+        if (Math.abs(player.x - e.x) < 280) damagePlayer(e.dmg * 0.9, e.x);
+        if (player) player.vx += Math.sign(player.x - e.x || 1) * -500;
+        shakeT = 0.35; shakeMag = 9; Sfx.heavy();
+      } else if (kind === 'heater') {
+        for (const dir of [-1, 1]) {
+          for (const hy of [46, 84]) {
+            projectiles.push({ type: 'bolt', hostile: true, x: e.x + dir * 26, y: e.y - hy, vx: dir * 330, vy: 0, dmg: e.dmg * 0.7, r: 8, life: 2.2, color: '#d8e4e8' });
+          }
+        }
+        burst(e.x, e.y - e.h, '#d8e4e8', 14, 240, false);
+        shakeT = 0.3; shakeMag = 7; Sfx.heavy();
+      } else if (kind === 'van') {
+        e.charging = 0.8;
+        e.chargeDir = Math.sign(player.x - e.x) || 1;
+        e.chargeHit = false;
+        addFloat(e.x, e.y - e.h - 28, 'VROOOOM', '#ffd24a', true);
+        Sfx.heavy();
+      } else if (kind === 'dragon') {
+        const dir = Math.sign(player.x - e.x) || 1;
+        for (let i = 0; i < 4; i++) {
+          projectiles.push({ type: 'bolt', hostile: true, x: e.x + dir * 30, y: e.y - 90, vx: dir * (300 + i * 60), vy: 40 + i * 26, dmg: e.dmg * 0.6, r: 9, life: 2.2, color: '#c24ae8' });
+        }
+        Sfx.special();
+      } else {
+        for (const dir of [-1, 1]) {
+          projectiles.push({ type: 'wave', hostile: true, x: e.x + dir * 40, y: GROUND_Y, vx: dir * 300, vy: 0, dmg: e.dmg * 0.8, r: 16, life: 2.0, color: theme.glow });
+        }
+        shakeT = 0.3; shakeMag = 8; Sfx.heavy();
       }
-      shakeT = 0.3; shakeMag = 8; Sfx.heavy();
       return;
     }
     if (e.def.ranged) {
@@ -601,7 +641,15 @@ const Game = (() => {
       Sfx.hit();
     } else {
       const dxp = Math.abs(player.x - e.x);
-      if (dxp <= e.def.reach + 24 && player.y > e.y - e.h - 40) damagePlayer(e.dmg, e.x);
+      if (dxp <= e.def.reach + 24 && player.y > e.y - e.h - 40) {
+        damagePlayer(e.dmg, e.x);
+        // the goose also steals
+        if (e.def.bossKind === 'goose' && Save.data.money > 0) {
+          const steal = Math.min(5 + plan.level, Save.data.money);
+          Save.data.money -= steal;
+          addFloat(e.x, e.y - e.h - 46, 'THE GOOSE TOOK $' + steal, '#ffd977', true);
+        }
+      }
     }
   }
 
@@ -1455,6 +1503,109 @@ const Game = (() => {
     }
   }
 
+  function drawBoss(g, e) {
+    g.save();
+    g.translate(e.x, e.y);
+    g.fillStyle = 'rgba(0,0,0,0.4)';
+    g.beginPath(); g.ellipse(0, 2, 30 * e.size, 6, 0, 0, 7); g.fill();
+    g.scale(e.facing * e.size, e.size);
+    const t = e.animT;
+    const kind = e.def.bossKind;
+    if (kind === 'goose') {
+      const wk = Math.sin(e.walkCyc || 0) * 4;
+      g.strokeStyle = '#e8a020'; g.lineWidth = 3.5; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(-6, -18); g.lineTo(-8 + wk, 0); g.stroke();
+      g.beginPath(); g.moveTo(6, -18); g.lineTo(8 - wk, 0); g.stroke();
+      g.fillStyle = '#b8bcc4';
+      g.beginPath(); g.ellipse(-2, -30, 24, 15, 0, 0, 7); g.fill();
+      g.fillStyle = '#8a8e98';
+      g.beginPath(); g.moveTo(-22, -34); g.lineTo(-36, -48); g.lineTo(-20, -26); g.fill();
+      const gf = e.state === 'windup' ? Math.sin(t * 30) * 8 : Math.sin(t * 3) * 2;
+      g.fillStyle = '#9a9ea8';
+      g.beginPath(); g.ellipse(-4, -34 + gf * 0.3, 14, 8, -0.3, 0, 7); g.fill();
+      g.strokeStyle = '#1d1d24'; g.lineWidth = 7;
+      g.beginPath(); g.moveTo(12, -34); g.quadraticCurveTo(16, -60, 15, -74); g.stroke();
+      g.fillStyle = '#1d1d24';
+      g.beginPath(); g.ellipse(16, -76, 8, 6.5, 0.2, 0, 7); g.fill();
+      g.fillStyle = '#f2f4f8';
+      g.beginPath(); g.ellipse(14, -71.5, 3.5, 2.5, 0.3, 0, 7); g.fill();
+      g.fillStyle = '#e8a020';
+      g.beginPath(); g.moveTo(23, -77); g.lineTo(32, -74); g.lineTo(23, -71); g.fill();
+      g.fillStyle = '#ff3a3a';
+      g.beginPath(); g.arc(18, -78, 1.8, 0, 7); g.fill();
+    } else if (kind === 'heater') {
+      g.fillStyle = '#3a3028';
+      g.fillRect(-16, -8, 7, 8); g.fillRect(9, -8, 7, 8);
+      g.fillStyle = e.def.color;
+      g.beginPath(); g.roundRect(-21, -84, 42, 78, 10); g.fill();
+      g.fillStyle = '#8a4a20';
+      g.fillRect(-21, -64, 42, 5); g.fillRect(-21, -34, 42, 5);
+      g.fillStyle = 'rgba(77,42,16,0.7)';
+      g.fillRect(-12, -60, 3, 26); g.fillRect(6, -30, 3, 20);
+      g.fillStyle = '#6a7288';
+      g.fillRect(-4, -94, 8, 10);
+      g.strokeStyle = '#8d9aa8'; g.lineWidth = 3;
+      g.beginPath(); g.arc(0, -97, 6, 0, 7); g.stroke();
+      g.fillStyle = '#ffffff';
+      g.fillRect(-13, -74, 9, 5); g.fillRect(4, -74, 9, 5);
+      g.fillStyle = '#1d1d24';
+      g.fillRect(-10, -73, 4, 3.5); g.fillRect(7, -73, 4, 3.5);
+      g.strokeStyle = '#1d1d24'; g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(-14, -80); g.lineTo(-4, -77); g.stroke();
+      g.beginPath(); g.moveTo(14, -80); g.lineTo(4, -77); g.stroke();
+    } else if (kind === 'van') {
+      g.fillStyle = '#101014';
+      g.beginPath(); g.arc(-20, -6, 9, 0, 7); g.fill();
+      g.beginPath(); g.arc(20, -6, 9, 0, 7); g.fill();
+      g.fillStyle = e.def.color;
+      g.beginPath(); g.roundRect(-36, -46, 72, 38, 6); g.fill();
+      g.beginPath(); g.roundRect(-26, -66, 54, 22, 5); g.fill();
+      g.fillStyle = '#9fdcff';
+      g.fillRect(-22, -62, 16, 13); g.fillRect(-2, -62, 14, 13); g.fillRect(16, -62, 9, 13);
+      g.strokeStyle = '#3a3028'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(-2, -44); g.lineTo(-2, -12); g.stroke();
+      g.fillStyle = '#ffd24a';
+      g.beginPath(); g.moveTo(30, -40); g.lineTo(38, -36); g.lineTo(30, -31); g.fill();
+      g.strokeStyle = '#3a3028'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(28, -20); g.lineTo(37, -23); g.stroke();
+    } else if (kind === 'dragon') {
+      g.strokeStyle = e.def.color; g.lineWidth = 9; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(-18, -30); g.quadraticCurveTo(-42, -26, -52, -46); g.stroke();
+      const df = Math.sin(t * 5) * 6;
+      g.fillStyle = '#5c2ba8';
+      g.beginPath(); g.moveTo(-6, -44); g.lineTo(-28, -76 - df); g.lineTo(4, -52); g.fill();
+      g.beginPath(); g.moveTo(0, -44); g.lineTo(-14, -82 + df); g.lineTo(8, -50); g.fill();
+      g.fillStyle = e.def.color;
+      g.beginPath(); g.ellipse(0, -32, 26, 17, 0, 0, 7); g.fill();
+      g.strokeStyle = e.def.color2; g.lineWidth = 6;
+      g.beginPath(); g.moveTo(-10, -20); g.lineTo(-12, 0); g.stroke();
+      g.beginPath(); g.moveTo(10, -20); g.lineTo(12, 0); g.stroke();
+      g.strokeStyle = e.def.color; g.lineWidth = 8;
+      g.beginPath(); g.moveTo(16, -40); g.quadraticCurveTo(24, -62, 28, -72); g.stroke();
+      g.fillStyle = e.def.color;
+      g.beginPath(); g.ellipse(30, -74, 9, 6, 0.3, 0, 7); g.fill();
+      g.beginPath(); g.moveTo(37, -77); g.lineTo(46, -72); g.lineTo(37, -69); g.fill();
+      g.fillStyle = '#e8d9b0';
+      g.beginPath(); g.moveTo(26, -80); g.lineTo(22, -91); g.lineTo(29, -81); g.fill();
+      g.beginPath(); g.moveTo(31, -81); g.lineTo(31, -93); g.lineTo(36, -80); g.fill();
+      g.fillStyle = '#ff4a3a';
+      g.beginPath(); g.arc(31, -76, 1.8, 0, 7); g.fill();
+    }
+    g.restore();
+    if (e.flash > 0) {
+      g.globalAlpha = Math.min(0.7, e.flash);
+      g.fillStyle = '#ffffff';
+      g.beginPath(); g.ellipse(e.x, e.y - 45 * e.size, 26 * e.size, 45 * e.size, 0, 0, 7); g.fill();
+      g.globalAlpha = 1;
+    }
+    if (e.frozenT > 0) {
+      g.globalAlpha = 0.45;
+      g.fillStyle = '#9fdcff';
+      g.beginPath(); g.ellipse(e.x, e.y - 45 * e.size, 28 * e.size, 48 * e.size, 0, 0, 7); g.fill();
+      g.globalAlpha = 1;
+    }
+  }
+
   function attackExt(a) {
     if (!a) return 0;
     if (a.t < a.su) return 0.5 * (a.t / a.su);
@@ -1468,15 +1619,19 @@ const Game = (() => {
       let key = null;
       if (e.state === 'windup') key = 'windup';
       else if (e.state === 'strike') key = 'strike';
-      drawFighter(g, {
-        x: e.x, y: e.y, facing: e.facing, size: e.size,
-        color: e.def.color, color2: e.def.color2, accent: e.def.color2, skin: e.def.color,
-        hood: true, boss: !!e.def.boss, accessory: e.def.accessory, eyeColor: e.def.boss ? '#ff4a3a' : '#ffd34a',
-        moving: e.state === 'approach' && e.frozenT <= 0, walkCyc: e.walkCyc, animT: e.animT,
-        onGround: e.y >= GROUND_Y - 1, attackKey: key,
-        hurt: e.hurtT > 0, flash: e.flash, frozen: e.frozenT > 0,
-        weaponTier: 0, crouch: false, ascended: false,
-      });
+      if (e.def.bossKind) {
+        drawBoss(g, e);
+      } else {
+        drawFighter(g, {
+          x: e.x, y: e.y, facing: e.facing, size: e.size,
+          color: e.def.color, color2: e.def.color2, accent: e.def.color2, skin: e.def.color,
+          hood: true, boss: !!e.def.boss, accessory: e.def.accessory, eyeColor: e.def.boss ? '#ff4a3a' : '#ffd34a',
+          moving: e.state === 'approach' && e.frozenT <= 0, walkCyc: e.walkCyc, animT: e.animT,
+          onGround: e.y >= GROUND_Y - 1, attackKey: key,
+          hurt: e.hurtT > 0, flash: e.flash, frozen: e.frozenT > 0,
+          weaponTier: 0, crouch: false, ascended: false,
+        });
+      }
       // burning overlay for Tim's enemies and Fire Sword victims
       if ((player && player.cdef.enemiesOnFire && !(e.dousedT > 0)) || e.burnT > 0) {
         const fl = Math.sin(e.animT * 20) * 3;

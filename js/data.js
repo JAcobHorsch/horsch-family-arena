@@ -710,7 +710,7 @@ const WORLDS = [
       stinger: { name: 'Murder Wasp',       color: '#e8c84a', color2: '#2a2418', accessory: 'wings' },
       brute:   { name: 'Trash Panda',       color: '#8d8d96', color2: '#3a3a42', accessory: 'mask' },
       shooter: { name: 'Sprinkler Sentry',  color: '#5fae6a', color2: '#24482a', accessory: 'antenna' },
-      boss:    { name: 'Warlord',           color: '#d43b2f', color2: '#4d0e08' },
+      boss:    { name: 'The Goose', color: '#b8bcc4', color2: '#1d1d24', bossKind: 'goose' },
     },
   },
   {
@@ -723,7 +723,7 @@ const WORLDS = [
       stinger: { name: 'Drain Rat',       color: '#8a7a6a', color2: '#3a3028', accessory: 'ears' },
       brute:   { name: 'Rust Golem',      color: '#b06a32', color2: '#4d2a10', accessory: 'bolts' },
       shooter: { name: 'Grease Spitter',  color: '#3a3a2a', color2: '#e8c84a', accessory: 'drip' },
-      boss:    { name: 'Warlord',         color: '#d43b2f', color2: '#4d0e08' },
+      boss:    { name: 'The Water Heater', color: '#b06a32', color2: '#4d2a10', bossKind: 'heater' },
     },
   },
   {
@@ -736,7 +736,7 @@ const WORLDS = [
       stinger: { name: 'Runaway Tire',        color: '#3a3a42', color2: '#18181e', accessory: 'tire' },
       brute:   { name: 'Rest-Stop Sasquatch', color: '#6a4a32', color2: '#2c1e12', accessory: 'ears' },
       shooter: { name: 'Speed Camera',        color: '#6a7288', color2: '#282c3a', accessory: 'antenna' },
-      boss:    { name: 'Warlord',             color: '#d43b2f', color2: '#4d0e08' },
+      boss:    { name: 'Road Rage', color: '#b8a888', color2: '#3a3028', bossKind: 'van' },
     },
   },
   {
@@ -749,7 +749,7 @@ const WORLDS = [
       stinger: { name: 'Imp',       color: '#d4503a', color2: '#4d1408', accessory: 'imphorns' },
       brute:   { name: 'Ogre',      color: '#5f8a3a', color2: '#243a12', accessory: 'imphorns' },
       shooter: { name: 'Dark Mage', color: '#7a4ae8', color2: '#2c1460', accessory: 'wizardhat' },
-      boss:    { name: 'Warlord',   color: '#d43b2f', color2: '#4d0e08' },
+      boss:    { name: 'Shadow Dragon', color: '#8a4ae8', color2: '#2c1460', bossKind: 'dragon' },
     },
   },
 ];
