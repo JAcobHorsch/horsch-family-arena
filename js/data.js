@@ -94,7 +94,38 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'sonya',     name: 'SONYA',      color: '#e84a92' },
+  {
+    id: 'sonya', name: 'SONYA', color: '#e84a92',
+    title: 'The Matriarch',
+    // All-rounder: dependable in every column.
+    hp: 115, speed: 315, dmg: 1.05, atkSpeed: 0.98,
+    weaponStyle: 'book',
+    special: {
+      type: 'projectile', name: 'Book Throw',
+      desc: 'Hurls an overdue library book — every enemy it smacks owes a late fee (bonus money per hit).',
+      dmg: 20, speed: 520, r: 10, pierce: true, shape: 'book', bounty: 6,
+    },
+    tracks: {
+      weapon: {
+        icon: '📖', label: 'Books',
+        tiers: ['Paperback', 'Hardcover Cookbook', 'Encyclopedia Vol. K', 'Unabridged Dictionary', 'The Forbidden Tome (30 Years Overdue)'],
+        blurb: '+35% attack damage per tier — heavier reading hits harder.',
+      },
+      armor: { tiers: ['Cozy Cardigan', 'Denim Jacket', 'Quilted Armor', 'Tote Bag Bulwark', 'Matriarch Mail'] },
+      ability: {
+        icon: '📚', label: 'Library',
+        tiers: ['Library Card', 'Gentle Reminder', 'Late Notice', 'Collections Agency', 'Interlibrary Loan of Doom'],
+        blurb: '+40% book damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'XANAX SONYA',
+      desc: 'She takes one (1) Xanax. Instantly serene, completely unbothered, gently levitating — every stat boosted to the max.',
+      look: { float: true, auraColor: '#e0b8ff' },
+      boost: { maxHp: 1.7, dmg: 2.0, speed: 1.35, defense: 0.55, special: 2.2 },
+    },
+    designed: true,
+  },
   { id: 'jordan',    name: 'JORDAN',     color: '#e8784a' },
   { id: 'jerod',     name: 'JEROD',      color: '#e8c84a' },
   { id: 'jacob',     name: 'JACOB',      color: '#4ae86a' },
@@ -136,11 +167,12 @@ function computeStats(cdef, upg) {
     energyCost: Math.max(22, 40 - 3 * ab),
   };
   if (upg.ascended) {
-    s.maxHp = Math.round(s.maxHp * 1.5);
-    s.dmg *= 1.75;
-    s.specialMult *= 2;
-    s.speed *= 1.15;
-    s.defense *= 0.7;
+    const b = (cdef.finalForm && cdef.finalForm.boost) || {};
+    s.maxHp = Math.round(s.maxHp * (b.maxHp || 1.5));
+    s.dmg *= b.dmg || 1.75;
+    s.specialMult *= b.special || 2;
+    s.speed *= b.speed || 1.15;
+    s.defense *= b.defense || 0.7;
   }
   return s;
 }

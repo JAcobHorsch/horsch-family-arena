@@ -178,7 +178,7 @@ const Game = (() => {
               type: 'fire', hostile: false, x: p.x + dir * 30, y: p.y - 55 - i * 16,
               vx: dir * (def.speed || 560), vy: def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0,
               dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: 1.5,
-              pierce: def.pierce !== false, shape: def.shape, color: col,
+              pierce: def.pierce !== false, shape: def.shape, bounty: def.bounty, color: col,
             });
           }
         }
@@ -421,6 +421,12 @@ const Game = (() => {
           if (overlap(pr.x - pr.r, pr.y - pr.r, pr.r * 2, pr.r * 2, ex, ey, ew, eh)) {
             (pr.hits = pr.hits || new Set()).add(e);
             hitEnemy(e, pr.dmg, Math.sign(pr.vx) * 200, -120, true);
+            if (pr.bounty) {
+              const b = Math.max(1, Math.round(pr.bounty * plan.valueMult));
+              Save.data.money += b; earned += b;
+              addFloat(e.x, e.y - e.h - 30, '+$' + b + ' LATE FEE', '#ffd977');
+              Sfx.coin();
+            }
             if (!pr.pierce) { projectiles.splice(projectiles.indexOf(pr), 1); break; }
           }
         }
@@ -578,17 +584,24 @@ const Game = (() => {
   function drawFighter(g, o) {
     // o: x,y feet in world coords; palette + pose fields
     const cf = o.crouch ? 0.6 : 1;
+    const look = (o.ascended && o.look) || {};
+    const lift = look.float ? 7 + 2 * Math.sin((o.animT || 0) * 3) : 0;
     g.save();
     g.translate(o.x, o.y);
 
-    // shadow
+    // shadow (stays on the ground even when floating)
     g.fillStyle = 'rgba(0,0,0,0.4)';
-    g.beginPath(); g.ellipse(0, 2, 22 * o.size, 5, 0, 0, 7); g.fill();
+    g.beginPath(); g.ellipse(0, 2, (22 - lift * 0.4) * o.size, 5, 0, 0, 7); g.fill();
+
+    g.translate(0, -lift * o.size);
 
     if (o.ascended) {
       const t = o.animT || 0;
+      const ac = look.auraColor;
       const ag = g.createRadialGradient(0, -48 * o.size, 8, 0, -48 * o.size, 66 * o.size);
-      ag.addColorStop(0, 'rgba(255,214,199,0.5)'); ag.addColorStop(0.6, 'rgba(243,163,75,0.22)'); ag.addColorStop(1, 'transparent');
+      ag.addColorStop(0, ac ? ac + '80' : 'rgba(255,214,199,0.5)');
+      ag.addColorStop(0.6, ac ? ac + '38' : 'rgba(243,163,75,0.22)');
+      ag.addColorStop(1, 'transparent');
       g.fillStyle = ag;
       g.beginPath(); g.arc(0, -48 * o.size, 66 * o.size * (1 + 0.05 * Math.sin(t * 6)), 0, 7); g.fill();
     }
@@ -636,7 +649,6 @@ const Game = (() => {
     };
 
     // final-form look overrides (bald / beard / shirtless / muscle)
-    const look = (o.ascended && o.look) || {};
     const muscleW = look.muscle || 1;
     const armW = 6 * (1 + (muscleW - 1) * 0.7);
     const torsoCol = look.shirtless ? o.skin : o.color;
@@ -703,6 +715,12 @@ const Game = (() => {
         g.beginPath(); g.arc(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5, 4.5, 0, 7); g.fill();
       } else if (o.weaponStyle === 'staff') {
         g.beginPath(); g.moveTo(frontHand[0] - wl * 0.8, frontHand[1] + wl * 0.5); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.6); g.stroke();
+      } else if (o.weaponStyle === 'book') {
+        const bw = 9 + o.weaponTier * 1.6, bh = 7 + o.weaponTier * 0.8;
+        g.fillStyle = wc;
+        g.fillRect(frontHand[0] - 2, frontHand[1] - bh + 2, bw, bh);
+        g.fillStyle = 'rgba(255,252,235,0.8)';
+        g.fillRect(frontHand[0] - 2, frontHand[1] - bh + 2, 2.4, bh); // spine
       } else if (o.weaponStyle === 'none') {
         g.fillStyle = wc; g.globalAlpha = 0.85;
         g.beginPath(); g.arc(frontHand[0], frontHand[1], 5.5, 0, 7); g.fill();
@@ -798,6 +816,13 @@ const Game = (() => {
       g.fillStyle = pr.color;
       if (pr.type === 'wave' || pr.type === 'pwave') {
         g.beginPath(); g.moveTo(pr.x - 16, GROUND_Y); g.lineTo(pr.x, GROUND_Y - 34); g.lineTo(pr.x + 16, GROUND_Y); g.fill();
+      } else if (pr.shape === 'book') {
+        g.save();
+        g.translate(pr.x, pr.y);
+        g.rotate(pr.life * 14 * Math.sign(pr.vx));
+        g.fillStyle = pr.color; g.fillRect(-7, -5, 14, 10);
+        g.fillStyle = '#fff8e8'; g.fillRect(-7, -5, 3, 10);
+        g.restore();
       } else if (pr.shape === 'needle') {
         const ang = Math.atan2(pr.vy, pr.vx);
         g.strokeStyle = '#e8f0ff'; g.lineWidth = 2.5;
