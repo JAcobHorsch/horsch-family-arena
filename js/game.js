@@ -193,7 +193,7 @@ const Game = (() => {
               vx: dir * spd, vy: def.arc ? 250 : (def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0),
               dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: def.life || 1.5,
               pierce: def.pierce !== false, shape: def.shape, bounty: def.bounty, bounce: def.bounce, flap: def.flap,
-              boomerang: def.boomerang, dir, color: col,
+              boomerang: def.boomerang, dir, douse: def.douse, color: col,
             });
           }
         }
@@ -405,6 +405,16 @@ const Game = (() => {
   function updateEnemy(e, dt) {
     e.animT += dt;
     if (e.flash > 0) e.flash -= dt * 5;
+    if (e.dousedT > 0) e.dousedT -= dt;
+    // Tim's world: everything he fights is on fire until he hoses it down
+    if (player && player.cdef.enemiesOnFire && !(e.dousedT > 0) && Math.random() < 0.2) {
+      particles.push({
+        x: e.x + rand(-10, 10), y: e.y - e.h * rand(0.4, 0.95),
+        vx: rand(-15, 15), vy: -rand(50, 110),
+        life: rand(0.3, 0.55), max: 0.55, r: rand(2, 4),
+        color: Math.random() < 0.5 ? '#ff7a2c' : '#ffd24a', grav: false,
+      });
+    }
 
     // knockback physics always applies
     e.vy += GRAV * dt;
@@ -578,6 +588,10 @@ const Game = (() => {
           if (overlap(pr.x - pr.r, pr.y - pr.r, pr.r * 2, pr.r * 2, ex, ey, ew, eh)) {
             (pr.hits = pr.hits || new Set()).add(e);
             hitEnemy(e, pr.dmg, Math.sign(pr.vx) * 200, -120, true);
+            if (pr.douse && enemies.includes(e)) {
+              e.dousedT = 5;
+              burst(e.x, e.y - e.h * 0.6, '#e8f4ff', 8, 180, false); // steam
+            }
             if (pr.bounty) {
               const b = Math.max(1, Math.round(pr.bounty * plan.valueMult));
               Save.data.money += b; earned += b;
@@ -743,7 +757,7 @@ const Game = (() => {
   function drawFighter(g, o) {
     // o: x,y feet in world coords; palette + pose fields
     const cf = o.crouch ? 0.6 : 1;
-    const look = (o.ascended && o.look) || {};
+    const look = o.look || {}; // callers pass finalForm.look when ascended, baseLook otherwise
     const lift = look.float ? 7 + 2 * Math.sin((o.animT || 0) * 3) : 0;
     g.save();
     g.translate(o.x, o.y);
@@ -828,8 +842,8 @@ const Game = (() => {
     const frontArmCol = look.shirtless ? o.skin : o.color;
 
     // back limbs
-    limb([hip[0] + lean * 0.3, hip[1]], backFoot, 7.5, legCol2);
-    if (!look.chicken) limb([sh[0] + lean * 0.5, sh[1]], backHand, armW, backArmCol);
+    if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], backFoot, 7.5, legCol2);
+    if (!look.chicken && !look.firetruck) limb([sh[0] + lean * 0.5, sh[1]], backHand, armW, backArmCol);
     if (look.printer) {
       // he IS the machine: gantry frame body
       g.strokeStyle = '#3a3f4a'; g.lineWidth = 5; g.lineJoin = 'miter';
@@ -915,6 +929,34 @@ const Game = (() => {
       g.fillStyle = '#1a1408';                                     // eyes on the bread
       g.beginPath(); g.arc(4, -60, 1.8, 0, 7); g.fill();
       g.beginPath(); g.arc(11, -60, 1.8, 0, 7); g.fill();
+    } else if (look.firetruck) {
+      // GIANT FIRETRUCK
+      const flash2 = Math.floor((o.animT || 0) * 5) % 2 === 0;
+      g.fillStyle = '#c9342a';
+      g.beginPath(); g.roundRect(-27, -42, 54, 28, 4); g.fill();
+      g.fillStyle = '#f2ee4a'; g.fillRect(-27, -30, 54, 4);        // hi-vis stripe
+      g.fillStyle = '#d43b2f';
+      g.beginPath(); g.roundRect(10, -54, 17, 13, 3); g.fill();    // cab
+      g.fillStyle = '#9fdcff'; g.fillRect(13, -52, 11, 7);         // windshield
+      g.fillStyle = flash2 ? '#ff4a3a' : '#4a86e8'; g.fillRect(14, -58, 5, 4);
+      g.fillStyle = flash2 ? '#4a86e8' : '#ff4a3a'; g.fillRect(20, -58, 5, 4);
+      // ladder — extends when he attacks
+      const lext = (o.attackKey ? (o.attackExt || 0) : 0) * 22;
+      g.strokeStyle = '#d8dce8'; g.lineWidth = 2.2;
+      const lx0 = -14, ly0 = -46, lx1 = 18 + lext, ly1 = -64 - lext * 0.4;
+      g.beginPath(); g.moveTo(lx0, ly0 - 3); g.lineTo(lx1, ly1 - 3); g.stroke();
+      g.beginPath(); g.moveTo(lx0, ly0 + 3); g.lineTo(lx1, ly1 + 3); g.stroke();
+      for (let li = 0.12; li < 1; li += 0.18) {
+        const rx = lx0 + (lx1 - lx0) * li, ry = ly0 + (ly1 - ly0) * li;
+        g.beginPath(); g.moveTo(rx, ry - 3); g.lineTo(rx, ry + 3); g.stroke();
+      }
+      // wheels
+      g.fillStyle = '#101014';
+      g.beginPath(); g.arc(-16, -12, 8, 0, 7); g.fill();
+      g.beginPath(); g.arc(16, -12, 8, 0, 7); g.fill();
+      g.fillStyle = '#55555f';
+      g.beginPath(); g.arc(-16, -12, 3.5, 0, 7); g.fill();
+      g.beginPath(); g.arc(16, -12, 3.5, 0, 7); g.fill();
     } else {
     // torso
     limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 13 * muscleW, torsoCol);
@@ -935,8 +977,8 @@ const Game = (() => {
     g.fillRect(-7 + lean * 0.3, hip[1] - 3, 14, 4);
     }
     // front leg
-    limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, legCol);
-    if (!look.printer && !look.wrench && !look.chicken && !look.sandwich) {
+    if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, legCol);
+    if (!look.printer && !look.wrench && !look.chicken && !look.sandwich && !look.firetruck) {
     // head
     g.fillStyle = o.hood ? o.color2 : o.skin;
     g.beginPath(); g.arc(3 + lean * 0.6, headY - 7, 9, 0, 7); g.fill();
@@ -946,6 +988,10 @@ const Game = (() => {
       // glowing eyes
       g.fillStyle = o.eyeColor || '#ffd34a';
       g.fillRect(5 + lean * 0.6, headY - 9, 4, 2.6);
+    } else if (look.helmet) {
+      g.fillStyle = look.helmetColor || '#d43b2f';
+      g.beginPath(); g.arc(3 + lean * 0.6, headY - 9, 9.5, Math.PI, 0); g.fill();
+      g.fillRect(-9 + lean * 0.6, headY - 10, 24, 3.5);
     } else if (look.bald) {
       // bald shine
       g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 1.6;
@@ -981,8 +1027,8 @@ const Game = (() => {
       g.beginPath(); g.moveTo(9, headY - 14); g.lineTo(14, headY - 26); g.lineTo(6, headY - 16); g.fill();
     }
     // front arm + weapon
-    if (!look.chicken) limb([sh[0] + lean * 0.5, sh[1]], frontHand, armW, frontArmCol);
-    if (o.weaponTier > 0 && !look.chicken) {
+    if (!look.chicken && !look.firetruck) limb([sh[0] + lean * 0.5, sh[1]], frontHand, armW, frontArmCol);
+    if (o.weaponTier > 0 && !look.chicken && !look.firetruck) {
       const wl = 10 + o.weaponTier * 4.5;
       const wc = (o.weaponColors && o.weaponColors[o.weaponTier - 1]) || WEAPON_COLORS[o.weaponTier - 1];
       g.strokeStyle = wc; g.lineWidth = 3.4;
@@ -1041,7 +1087,7 @@ const Game = (() => {
       g.shadowBlur = 0;
     }
     // fists
-    if (!look.chicken) {
+    if (!look.chicken && !look.firetruck) {
       const fr = look.bigFists ? 8 : 3.6;
       g.fillStyle = o.hood ? o.color2 : o.skin;
       g.beginPath(); g.arc(frontHand[0], frontHand[1], fr, 0, 7); g.fill();
@@ -1087,6 +1133,14 @@ const Game = (() => {
         hurt: e.hurtT > 0, flash: e.flash, frozen: e.frozenT > 0,
         weaponTier: 0, crouch: false, ascended: false,
       });
+      // burning overlay for Tim's enemies
+      if (player && player.cdef.enemiesOnFire && !(e.dousedT > 0)) {
+        const fl = Math.sin(e.animT * 20) * 3;
+        g.fillStyle = 'rgba(255,122,44,0.8)';
+        g.beginPath(); g.moveTo(e.x - 8, e.y - e.h + 2); g.quadraticCurveTo(e.x - 6, e.y - e.h - 13 - fl, e.x, e.y - e.h - 2); g.fill();
+        g.fillStyle = 'rgba(255,210,74,0.7)';
+        g.beginPath(); g.moveTo(e.x + 1, e.y - e.h + 3); g.quadraticCurveTo(e.x + 7, e.y - e.h - 9 + fl, e.x + 10, e.y - e.h + 4); g.fill();
+      }
       // enemy hp pip
       if (e.hp < e.maxHp && !e.def.boss) {
         g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(e.x - 20, e.y - e.h - 12, 40, 5);
@@ -1123,7 +1177,7 @@ const Game = (() => {
           weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, weaponColors: p.cdef.weaponColors,
           weaponWord: p.upg.weapon > 0 ? trackMeta(p.cdef, 'weapon').tiers[p.upg.weapon - 1].split(' ')[0] : '',
           ascended: p.ascended,
-          look: p.cdef.finalForm.look,
+          look: p.ascended ? p.cdef.finalForm.look : p.cdef.baseLook,
         });
       }
       if (p.buffT > 0) {
@@ -1376,7 +1430,7 @@ const Game = (() => {
       moving: false, walkCyc: 0, animT: 2, onGround: true,
       crouch: false, attackKey: null, attackExt: 0,
       hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: cdef.weaponStyle, weaponColors: cdef.weaponColors, ascended,
-      look: cdef.finalForm.look,
+      look: ascended ? cdef.finalForm.look : cdef.baseLook,
     });
   }
 

@@ -396,7 +396,42 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'tim',       name: 'TIM',        color: '#cfe84a' },
+  {
+    id: 'tim', name: 'TIM', color: '#c9a86a', accent: '#f2ee4a',
+    title: 'The Firefighter',
+    // Firefighter archetype: tank stats, turnout gear, red helmet.
+    hp: 162, speed: 248, dmg: 1.1, atkSpeed: 1.05,
+    weaponStyle: 'blade',
+    enemiesOnFire: true, // every enemy Tim faces is already ablaze
+    baseLook: { helmet: true, helmetColor: '#d43b2f' },
+    special: {
+      type: 'projectile', name: 'Fire Hose',
+      desc: 'Blasts a stream of water. Every enemy Tim faces is, naturally, already on fire — someone has to put them out.',
+      dmg: 7, speed: 620, r: 6, count: 5, spreadY: 26, pierce: false, douse: true, color: '#4ab2e8',
+    },
+    tracks: {
+      weapon: {
+        icon: '🪓', label: 'Fire Axes',
+        tiers: ['Hatchet', 'Pickhead Axe', 'Flathead Axe', 'Halligan Bar', 'The Jaws of Life'],
+        blurb: '+35% attack damage per tier — forcible entry, forcible exit.',
+      },
+      armor: { tiers: ['Station Tee', 'Turnout Pants', 'Turnout Coat', 'SCBA Rig', 'Full Structure Gear'] },
+      ability: {
+        icon: '🚒', label: 'Water Pressure',
+        tiers: ['Garden Hose', 'Booster Line', 'Attack Line', 'Deck Gun', 'The Master Stream'],
+        blurb: '+40% water damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'FIRETRUCK',
+      desc: 'He becomes a giant firetruck — swinging ladder, blasting hose, lights running hot.',
+      look: { firetruck: true },
+      special: { type: 'projectile', name: 'Deluge Cannon', dmg: 9, speed: 680, r: 8, count: 8, spreadY: 22, pierce: false, douse: true, color: '#4ab2e8' },
+      boost: { maxHp: 1.8, dmg: 1.8, defense: 0.5 },
+      sizeMult: 1.55,
+    },
+    designed: true,
+  },
   { id: 'myah',      name: 'MYAH',       color: '#e84ad0' },
   { id: 'isla',      name: 'ISLA',       color: '#f2a3c2' },
   { id: 'hayes',     name: 'HAYES',      color: '#5c4ae8' },
