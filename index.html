@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0a12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<title>Horsch Family Arena</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<button id="pauseBtn" class="hidden" aria-label="Pause">II</button>
+
+<!-- Touch controls -->
+<div id="controls" class="hidden">
+  <div id="dpad">
+    <button class="ctl dir" id="btnJump">&#9650;</button>
+    <div class="pad-mid">
+      <button class="ctl dir" id="btnLeft">&#9664;</button>
+      <button class="ctl dir" id="btnRight">&#9654;</button>
+    </div>
+    <button class="ctl dir" id="btnCrouch">&#9660;</button>
+  </div>
+  <div id="facepad">
+    <button class="ctl face fy" id="btnY">Y</button>
+    <div class="pad-mid">
+      <button class="ctl face fx" id="btnX">X</button>
+      <button class="ctl face fb" id="btnB">B</button>
+    </div>
+    <button class="ctl face fa" id="btnA">A</button>
+  </div>
+</div>
+
+<!-- Title -->
+<div id="screen-title" class="screen">
+  <div class="title-wrap">
+    <div class="game-logo">HORSCH FAMILY<span>ARENA</span></div>
+    <p class="tagline">Fight. Earn. Ascend.</p>
+    <button class="bigbtn" id="titleStart">ENTER THE ARENA</button>
+    <button class="smallbtn danger hidden" id="titleReset">Reset Save</button>
+    <p class="kbd-hint">Keyboard: A/D move &middot; W jump &middot; S crouch &middot; J=X &middot; K=Y &middot; L=B &middot; I=A</p>
+  </div>
+</div>
+
+<!-- Character select -->
+<div id="screen-select" class="screen hidden">
+  <h2 class="scr-head">CHOOSE YOUR FIGHTER</h2>
+  <p class="scr-sub" id="selectLevelLabel"></p>
+  <div id="charGrid"></div>
+  <div class="scr-foot">
+    <span id="selectMoney" class="moneytag"></span>
+    <button class="smallbtn" id="selectShopBtn">Marketplace</button>
+  </div>
+</div>
+
+<!-- Marketplace -->
+<div id="screen-shop" class="screen hidden">
+  <h2 class="scr-head">MARKETPLACE</h2>
+  <p class="scr-sub" id="shopEarned"></p>
+  <div class="shop-top">
+    <span id="shopMoney" class="moneytag"></span>
+    <div id="shopCharTabs"></div>
+  </div>
+  <div id="shopCards"></div>
+  <div class="scr-foot">
+    <button class="bigbtn" id="shopContinue">CONTINUE</button>
+  </div>
+</div>
+
+<!-- Defeat -->
+<div id="screen-defeat" class="screen hidden">
+  <h2 class="scr-head red">DEFEATED</h2>
+  <p class="scr-sub" id="defeatText"></p>
+  <div class="btn-col">
+    <button class="bigbtn" id="defeatShop">MARKETPLACE</button>
+    <button class="smallbtn" id="defeatRetry">Back to Fighter Select</button>
+  </div>
+</div>
+
+<!-- Pause -->
+<div id="screen-pause" class="screen hidden">
+  <h2 class="scr-head">PAUSED</h2>
+  <div class="btn-col">
+    <button class="bigbtn" id="pauseResume">RESUME</button>
+    <button class="smallbtn" id="pauseQuit">Abandon Level</button>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/input.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

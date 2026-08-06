@@ -1,0 +1,10 @@
+{
+  "name": "Horsch Family Arena",
+  "short_name": "HF Arena",
+  "description": "Fight. Earn. Ascend. A side-scrolling arena brawler.",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b0a12",
+  "theme_color": "#0b0a12"
+}
