@@ -432,7 +432,45 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'myah',      name: 'MYAH',       color: '#e84ad0' },
+  {
+    id: 'myah', name: 'MYAH', color: '#e84ad0',
+    title: 'The Chore Champion',
+    // All-rounder: graceful, efficient, always finishing something.
+    hp: 114, speed: 322, dmg: 1.05, atkSpeed: 0.96,
+    weaponStyle: 'staff',
+    special: {
+      type: 'projectile', name: 'Volleyball Set',
+      desc: 'A flawless, graceful set... straight up. When the ball lands, it detonates like a grenade.',
+      dmg: 30, speed: 210, r: 10, shape: 'ball', lob: true, grenade: true, noContact: true, blast: 140, life: 4,
+    },
+    tracks: {
+      weapon: {
+        icon: '🧹', label: 'Chore Gear',
+        tiers: ['Feather Duster', 'Broom', 'Laundry Basket', 'Cordless Vacuum', 'The Sentient Robot Mop'],
+        blurb: '+35% attack damage per tier — cleanliness is next to deadliness.',
+      },
+      armor: { tiers: ['Messy Bun', 'Comfy Hoodie', 'Rubber Gloves', 'Apron of Deflection', 'Sunday Reset Plate'] },
+      ability: {
+        icon: '🏐', label: 'Setting',
+        tiers: ['Bump', 'Clean Set', 'Back Set', 'Quick Set', 'The Perfect Set'],
+        blurb: '+40% blast damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: '8 HOURS OF SLEEP MYAH',
+      desc: 'Fully rested. Radiant. Unstoppable. The impossible things keep happening.',
+      look: { radiant: true, auraColor: '#fff2b8' },
+      chatter: [
+        "Wow, I'm finally all caught up on the laundry",
+        "My head doesn't hurt",
+        'The kitchen is clean',
+        'I did the bed laundry',
+        'I got all of the clothes hung up',
+      ],
+      boost: { maxHp: 1.65, dmg: 1.9, speed: 1.25, defense: 0.65 },
+    },
+    designed: true,
+  },
   { id: 'isla',      name: 'ISLA',       color: '#f2a3c2' },
   { id: 'hayes',     name: 'HAYES',      color: '#5c4ae8' },
   { id: 'addi',      name: 'ADDI',       color: '#e8a04a' },

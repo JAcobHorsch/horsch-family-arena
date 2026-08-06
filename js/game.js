@@ -190,10 +190,11 @@ const Game = (() => {
           for (let i = 0; i < n; i++) {
             projectiles.push({
               type: 'fire', hostile: false, x: p.x + dir * 30, y: p.y - (def.arc ? 78 : 55) - i * 16,
-              vx: dir * spd, vy: def.arc ? 250 : (def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0),
+              vx: dir * spd, vy: def.lob ? -560 : (def.arc ? 250 : (def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0)),
               dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: def.life || 1.5,
               pierce: def.pierce !== false, shape: def.shape, bounty: def.bounty, bounce: def.bounce, flap: def.flap,
-              boomerang: def.boomerang, dir, douse: def.douse, color: col,
+              boomerang: def.boomerang, dir, douse: def.douse,
+              grenade: def.grenade, noContact: def.noContact, blast: def.blast, color: col,
             });
           }
         }
@@ -336,6 +337,12 @@ const Game = (() => {
     if (p.hurtT > 0) { p.hurtT -= dt; }
     if (p.buffT > 0) p.buffT -= dt;
     p.energy = Math.min(100, p.energy + 11 * dt);
+    // 8-hours-of-sleep chatter: the impossible things keep happening
+    if (p.ascended && p.cdef.finalForm.chatter && mode === 'playing' && Math.random() < dt * 0.45) {
+      const lines = p.cdef.finalForm.chatter;
+      p.chatterIdx = ((p.chatterIdx || 0) + 1) % lines.length;
+      addFloat(p.x + rand(-26, 26), p.y - rand(50, 95), lines[p.chatterIdx], p.cdef.accent);
+    }
 
     const busy = p.hurtT > 0 || mode !== 'playing';
     const attacking = !!p.attack;
@@ -538,6 +545,7 @@ const Game = (() => {
   function updateProjectiles(dt) {
     for (const pr of [...projectiles]) {
       if (pr.bounce) pr.vy += 1500 * dt;
+      if (pr.grenade) pr.vy += 1300 * dt;
       if (pr.flap) {
         pr.vy += 1100 * dt;
         pr.flapT = (pr.flapT || 0) - dt;
@@ -563,6 +571,18 @@ const Game = (() => {
       pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.life -= dt;
       if (pr.life <= 0 || pr.x < -60 || pr.x > STAGE_W + 60) { projectiles.splice(projectiles.indexOf(pr), 1); continue; }
       if (!pr.hostile && pr.vy > 0 && pr.y >= GROUND_Y) {
+        if (pr.grenade) {
+          burst(pr.x, GROUND_Y - 10, pr.color, 26, 380);
+          burst(pr.x, GROUND_Y - 10, '#ffd24a', 14, 300);
+          for (const e of [...enemies]) {
+            if (Math.abs(e.x - pr.x) < (pr.blast || 130) + e.w / 2) {
+              hitEnemy(e, pr.dmg, Math.sign(e.x - pr.x || 1) * 300, -260, true);
+            }
+          }
+          shakeT = 0.3; shakeMag = 8;
+          Sfx.heavy();
+          projectiles.splice(projectiles.indexOf(pr), 1); continue;
+        }
         if (pr.bounce || pr.flap) {
           pr.y = GROUND_Y;
           pr.vy = pr.flap ? -280 : -Math.max(Math.abs(pr.vy) * 0.8, 320);
@@ -582,6 +602,7 @@ const Game = (() => {
           projectiles.splice(projectiles.indexOf(pr), 1);
         }
       } else {
+        if (pr.noContact) continue; // grenades only hurt when they land
         for (const e of [...enemies]) {
           if (pr.hits && pr.hits.has(e)) continue;
           const [ex, ey, ew, eh] = entRect(e);
