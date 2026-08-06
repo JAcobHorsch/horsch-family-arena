@@ -544,7 +544,40 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'addi',      name: 'ADDI',       color: '#e8a04a' },
+  {
+    id: 'addi', name: 'ADDI', color: '#9fdcff',
+    title: 'The Ice Princess in Training',
+    // All-rounder with a cold streak.
+    hp: 116, speed: 320, dmg: 1.05, atkSpeed: 0.95,
+    weaponStyle: 'blade',
+    weaponColors: ['#bfe6f5', '#9fdcff', '#6cc4f0', '#4adbe8', '#e8fbff'],
+    special: {
+      type: 'projectile', name: 'Ice Balls',
+      desc: 'Fires twin orbs of biting frost that freeze enemies solid.',
+      dmg: 16, count: 2, spreadY: 34, speed: 540, r: 9, pierce: true, freeze: 1.8, shape: 'iceball',
+    },
+    tracks: {
+      weapon: {
+        icon: '❄', label: 'Ice Swords',
+        tiers: ['Icicle', 'Frost Blade', 'Glacier Edge', 'Aurora Saber', 'The Eternal Winter'],
+        blurb: '+35% attack damage per tier — increasingly cooler. Literally.',
+      },
+      armor: { tiers: ['Snow Mittens', 'Puffer Coat', 'Frost Guard', 'Glacial Plate', 'The Frozen Fortress'] },
+      ability: {
+        icon: '🧊', label: 'Frost Magic',
+        tiers: ['Cold Snap', 'Deep Chill', 'Flash Freeze', 'Absolute Zero', 'The Long Winter'],
+        blurb: '+40% ice damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'PRINCESS ADDI',
+      desc: 'The coronation. Crown, gown, glacial aura — winter does what she says now.',
+      look: { crown: true, gown: true, auraColor: '#bfeaff' },
+      special: { type: 'projectile', name: 'Blizzard Volley', count: 5, spreadY: 38, dmg: 14, speed: 560, r: 9, pierce: true, freeze: 2.2, shape: 'iceball' },
+      boost: { maxHp: 1.65, dmg: 1.9, speed: 1.2, defense: 0.65 },
+    },
+    designed: true,
+  },
   { id: 'brooks',    name: 'BROOKS',     color: '#37b34a' },
   { id: 'dayne',     name: 'DAYNE',      color: '#b0b6c4' },
 ].map(makeChar);

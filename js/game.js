@@ -193,7 +193,7 @@ const Game = (() => {
               vx: dir * spd, vy: def.lob ? -560 : (def.arc ? 250 : (def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0)),
               dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: def.life || 1.5,
               pierce: def.pierce !== false, shape: def.shape, bounty: def.bounty, bounce: def.bounce, flap: def.flap,
-              boomerang: def.boomerang, dir, douse: def.douse,
+              boomerang: def.boomerang, dir, douse: def.douse, freeze: def.freeze,
               grenade: def.grenade, noContact: def.noContact, blast: def.blast, color: col,
             });
           }
@@ -642,6 +642,7 @@ const Game = (() => {
               e.dousedT = 5;
               burst(e.x, e.y - e.h * 0.6, '#e8f4ff', 8, 180, false); // steam
             }
+            if (pr.freeze && enemies.includes(e)) e.frozenT = Math.max(e.frozenT, pr.freeze);
             if (pr.bounty) {
               const b = Math.max(1, Math.round(pr.bounty * plan.valueMult));
               Save.data.money += b; earned += b;
@@ -1061,6 +1062,16 @@ const Game = (() => {
     }
     // front leg
     if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, legCol);
+    if (look.gown) {
+      g.fillStyle = o.color2;
+      g.globalAlpha = 0.88;
+      g.beginPath();
+      g.moveTo(-6 + lean * 0.3, hip[1] - 2);
+      g.lineTo(6 + lean * 0.3, hip[1] - 2);
+      g.lineTo(16, -1); g.lineTo(-16, -1);
+      g.closePath(); g.fill();
+      g.globalAlpha = 1;
+    }
     if (!look.printer && !look.wrench && !look.chicken && !look.sandwich && !look.firetruck) {
     // head
     const hx = (look.crawl ? 17 : 3) + lean * 0.6;
@@ -1090,6 +1101,14 @@ const Game = (() => {
       g.fillStyle = look.helmetColor || '#d43b2f';
       g.beginPath(); g.arc(3 + lean * 0.6, headY - 9, 9.5, Math.PI, 0); g.fill();
       g.fillRect(-9 + lean * 0.6, headY - 10, 24, 3.5);
+    } else if (look.crown) {
+      g.fillStyle = look.crownColor || '#ffd24a';
+      g.beginPath();
+      g.moveTo(hx - 7, hy - 7);
+      g.lineTo(hx - 7, hy - 13); g.lineTo(hx - 4, hy - 9.5);
+      g.lineTo(hx - 0.5, hy - 14.5); g.lineTo(hx + 3, hy - 9.5);
+      g.lineTo(hx + 6.5, hy - 13); g.lineTo(hx + 6.5, hy - 7);
+      g.closePath(); g.fill();
     } else if (look.bald) {
       // bald shine
       g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 1.6;
@@ -1323,6 +1342,17 @@ const Game = (() => {
       g.fillStyle = pr.color;
       if (pr.type === 'wave' || pr.type === 'pwave') {
         g.beginPath(); g.moveTo(pr.x - 16, GROUND_Y); g.lineTo(pr.x, GROUND_Y - 34); g.lineTo(pr.x + 16, GROUND_Y); g.fill();
+      } else if (pr.shape === 'iceball') {
+        g.save();
+        g.translate(pr.x, pr.y);
+        g.rotate(pr.life * 6);
+        g.fillStyle = 'rgba(159,220,255,0.9)';
+        g.beginPath(); g.arc(0, 0, pr.r, 0, 7); g.fill();
+        g.strokeStyle = '#e8fbff'; g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(-pr.r * 0.6, 0); g.lineTo(pr.r * 0.6, 0); g.stroke();
+        g.beginPath(); g.moveTo(0, -pr.r * 0.6); g.lineTo(0, pr.r * 0.6); g.stroke();
+        g.beginPath(); g.moveTo(-pr.r * 0.42, -pr.r * 0.42); g.lineTo(pr.r * 0.42, pr.r * 0.42); g.stroke();
+        g.restore();
       } else if (pr.shape === 'pacifier') {
         g.save();
         g.translate(pr.x, pr.y);
