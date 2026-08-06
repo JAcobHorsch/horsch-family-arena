@@ -324,7 +324,40 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'levi',      name: 'LEVI',       color: '#8a4ae8' },
+  {
+    id: 'levi', name: 'LEVI', color: '#8a4ae8',
+    title: 'The Wrecking Crew',
+    // Tank: hard to move, harder to stop.
+    hp: 158, speed: 245, dmg: 1.12, atkSpeed: 1.1,
+    weaponStyle: 'club',
+    weaponColors: ['#8a6a48', '#cfc4a8', '#7a5230', '#8d8574', '#ff4a92'],
+    special: {
+      type: 'car', name: 'Camaro Crash',
+      desc: 'Whistles once — his Camaro comes screaming through and flattens everything in its path.',
+      dmg: 30, speed: 720, color: '#d43b2f',
+    },
+    tracks: {
+      weapon: {
+        icon: '🏏', label: 'Clubs',
+        tiers: ['Driftwood Club', 'Bone Club', 'Spiked Caveman Club', 'Boulder-on-a-Stick', 'The Carnival Clown Hammer'],
+        blurb: '+35% attack damage per tier — oonga per boonga.',
+      },
+      armor: { tiers: ['Hoodie', 'Letterman Jacket', 'Roll Cage', 'Racing Harness', 'Monster Truck Chassis'] },
+      ability: {
+        icon: '🏎', label: 'Garage',
+        tiers: ['Learner Permit', 'Fresh Tires', 'Cold Air Intake', 'Straight Pipes', 'Full Send'],
+        blurb: '+40% crash damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'LEVIATHAN',
+      desc: 'A one-man demolition. Giant fists, messy hair, and a clown hammer that ends conversations.',
+      look: { muscle: 1.6, bigFists: true, hair: true },
+      boost: { maxHp: 1.75, dmg: 1.9, defense: 0.55 },
+      sizeMult: 1.5,
+    },
+    designed: true,
+  },
   { id: 'ronathon',  name: 'RONATHON',   color: '#c24ae8' },
   { id: 'tim',       name: 'TIM',        color: '#cfe84a' },
   { id: 'myah',      name: 'MYAH',       color: '#e84ad0' },

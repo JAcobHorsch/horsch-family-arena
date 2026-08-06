@@ -268,6 +268,16 @@ const Game = (() => {
         burst(p.x, p.y - 50, '#7fd98a', 20, 240, false);
         break;
       }
+      case 'car': {
+        projectiles.push({
+          type: 'car', hostile: false, x: p.x - p.facing * 80, y: GROUND_Y - 16,
+          vx: p.facing * (def.speed || 720), vy: 0,
+          dmg: (def.dmg || 30) * S, r: 26, life: 3, pierce: true, shape: 'car', color: def.color || '#d43b2f',
+        });
+        shakeT = 0.35; shakeMag = 7;
+        Sfx.heavy();
+        break;
+      }
       case 'oops': {
         // Erika's special. It helps no one.
         const selfDmg = Math.round((def.selfDmg || 8) * (1 + 0.5 * p.upg.ability) * (asc ? 1.5 : 1));
@@ -910,6 +920,14 @@ const Game = (() => {
       // bald shine
       g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 1.6;
       g.beginPath(); g.arc(1 + lean * 0.6, headY - 9, 6, Math.PI * 1.15, Math.PI * 1.6); g.stroke();
+    } else if (look.hair) {
+      // messy wrecking-crew mop
+      g.fillStyle = look.hairColor || '#6b4423';
+      g.beginPath();
+      g.arc(-2 + lean * 0.6, headY - 12, 5, 0, 7);
+      g.arc(4 + lean * 0.6, headY - 15, 5.5, 0, 7);
+      g.arc(10 + lean * 0.6, headY - 11, 4.5, 0, 7);
+      g.fill();
     } else {
       // headband
       g.fillStyle = o.color;
@@ -972,9 +990,10 @@ const Game = (() => {
     }
     // fists
     if (!look.chicken) {
+      const fr = look.bigFists ? 8 : 3.6;
       g.fillStyle = o.hood ? o.color2 : o.skin;
-      g.beginPath(); g.arc(frontHand[0], frontHand[1], 3.6, 0, 7); g.fill();
-      g.beginPath(); g.arc(backHand[0], backHand[1], 3.4, 0, 7); g.fill();
+      g.beginPath(); g.arc(frontHand[0], frontHand[1], fr, 0, 7); g.fill();
+      g.beginPath(); g.arc(backHand[0], backHand[1], fr * 0.94, 0, 7); g.fill();
     }
 
     g.restore();
@@ -1067,6 +1086,25 @@ const Game = (() => {
       g.fillStyle = pr.color;
       if (pr.type === 'wave' || pr.type === 'pwave') {
         g.beginPath(); g.moveTo(pr.x - 16, GROUND_Y); g.lineTo(pr.x, GROUND_Y - 34); g.lineTo(pr.x + 16, GROUND_Y); g.fill();
+      } else if (pr.shape === 'car') {
+        g.save();
+        g.translate(pr.x, pr.y);
+        g.scale(Math.sign(pr.vx) || 1, 1);
+        g.fillStyle = pr.color;
+        g.beginPath();
+        g.moveTo(-34, 6); g.lineTo(-30, -6); g.lineTo(-12, -8); g.lineTo(-6, -15);
+        g.lineTo(14, -15); g.lineTo(22, -7); g.lineTo(34, -5); g.lineTo(34, 6);
+        g.closePath(); g.fill();
+        g.fillStyle = '#1a1a20'; g.fillRect(-30, -2, 64, 3); // racing stripe
+        g.fillStyle = '#9fdcff';
+        g.beginPath(); g.moveTo(-4, -13); g.lineTo(12, -13); g.lineTo(18, -7); g.lineTo(-8, -7); g.closePath(); g.fill();
+        g.fillStyle = '#101014';
+        g.beginPath(); g.arc(-20, 8, 7, 0, 7); g.fill();
+        g.beginPath(); g.arc(20, 8, 7, 0, 7); g.fill();
+        g.fillStyle = '#55555f';
+        g.beginPath(); g.arc(-20, 8, 3, 0, 7); g.fill();
+        g.beginPath(); g.arc(20, 8, 3, 0, 7); g.fill();
+        g.restore();
       } else if (pr.shape === 'brooks') {
         g.save();
         g.translate(pr.x, pr.y);
