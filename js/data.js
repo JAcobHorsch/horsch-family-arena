@@ -258,7 +258,39 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'cassandra', name: 'CASSANDRA',  color: '#4adbe8' },
+  {
+    id: 'cassandra', name: 'CASSANDRA', color: '#4adbe8',
+    title: 'The Deli Duelist',
+    // All-rounder: dependable in every column.
+    hp: 112, speed: 320, dmg: 1.08, atkSpeed: 0.95,
+    weaponStyle: 'sandwich',
+    special: {
+      type: 'projectile', name: 'Brooks Toss',
+      desc: 'Throws her son Brooks like a boomerang. He hits everything twice — going out AND coming back. He loves it.',
+      dmg: 18, speed: 520, r: 12, pierce: true, shape: 'brooks', boomerang: true, life: 4.5,
+    },
+    tracks: {
+      weapon: {
+        icon: '🥪', label: 'Sandwiches',
+        tiers: ['PB&J', 'Grilled Cheese', 'Club Sandwich', 'Meatball Marinara', 'The Little Bear Special (Italian Sub)'],
+        blurb: '+35% attack damage per tier — fresher ingredients, deadlier lunch.',
+      },
+      armor: { tiers: ['Apron', 'Oven Mitts', 'Cutting Board Plate', 'Cast Iron Cuirass', 'Deli Counter Fortress'] },
+      ability: {
+        icon: '🪃', label: 'Toss Technique',
+        tiers: ['Gentle Lob', 'Two-Hand Heave', 'Spin Cycle', 'Full Windup', 'Orbital Brooks'],
+        blurb: '+40% toss damage, cheaper energy cost per tier. Brooks remains unharmed and delighted.',
+      },
+    },
+    finalForm: {
+      name: 'LITTLE BEAR SPECIAL',
+      desc: 'She becomes a giant Italian sub. Lettuce, tomato, salami, unstoppable.',
+      look: { sandwich: true },
+      boost: { maxHp: 1.6, dmg: 1.9, defense: 0.6 },
+      sizeMult: 1.45,
+    },
+    designed: true,
+  },
   { id: 'erika',     name: 'ERIKA',      color: '#4a86e8' },
   { id: 'levi',      name: 'LEVI',       color: '#8a4ae8' },
   { id: 'ronathon',  name: 'RONATHON',   color: '#c24ae8' },

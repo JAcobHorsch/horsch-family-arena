@@ -190,10 +190,12 @@ const Game = (() => {
               type: 'fire', hostile: false, x: p.x + dir * 30, y: p.y - (def.arc ? 78 : 55) - i * 16,
               vx: dir * spd, vy: def.arc ? 250 : (def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0),
               dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: def.life || 1.5,
-              pierce: def.pierce !== false, shape: def.shape, bounty: def.bounty, bounce: def.bounce, flap: def.flap, color: col,
+              pierce: def.pierce !== false, shape: def.shape, bounty: def.bounty, bounce: def.bounce, flap: def.flap,
+              boomerang: def.boomerang, dir, color: col,
             });
           }
         }
+        if (def.boomerang) addFloat(p.x, p.y - p.h - 30, 'WHEEE!', p.cdef.accent, true);
         break;
       }
       case 'nova': {
@@ -478,6 +480,22 @@ const Game = (() => {
         if (pr.flapT <= 0) { pr.flapT = 0.35; pr.vy = -195; }
         if (pr.y < GROUND_Y - 115) pr.vy = Math.max(pr.vy, -40); // stay at kicking height
       }
+      if (pr.boomerang && player) {
+        pr.vx -= pr.dir * 320 * dt;
+        if (!pr.returning && Math.sign(pr.vx) === -pr.dir) {
+          pr.returning = true;
+          if (pr.hits) pr.hits.clear(); // second pass hits everyone again
+        }
+        if (pr.returning) {
+          pr.vx = clamp(pr.vx, -640, 640);
+          const dy = (player.y - 55) - pr.y;
+          pr.vy = clamp(dy * 4, -320, 320);
+          if (Math.abs(pr.x - player.x) < 44 && Math.abs(dy) < 60) {
+            burst(pr.x, pr.y, pr.color, 6, 160, false);
+            projectiles.splice(projectiles.indexOf(pr), 1); continue;
+          }
+        }
+      }
       pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.life -= dt;
       if (pr.life <= 0 || pr.x < -60 || pr.x > STAGE_W + 60) { projectiles.splice(projectiles.indexOf(pr), 1); continue; }
       if (!pr.hostile && pr.vy > 0 && pr.y >= GROUND_Y) {
@@ -729,7 +747,7 @@ const Game = (() => {
       frontHand = [36, -54]; lean = 4;
     }
     if (o.hurt) { lean = -8; frontHand = [18, -40]; backHand = [-16, -52]; }
-    if (look.printer || look.wrench) {
+    if (look.printer || look.wrench || look.sandwich) {
       // machine proportions: stubby legs under the base, gripper arms out the sides
       hip = [0, -13]; sh = [0, -56];
       backHand = [-21, -46]; frontHand = [21, -46];
@@ -825,6 +843,24 @@ const Game = (() => {
       g.beginPath(); g.arc(21, -65, 2.5, 0, 7); g.fill();
       g.fillStyle = '#1a1408';
       g.beginPath(); g.arc(17, -74, 1.8, 0, 7); g.fill();
+    } else if (look.sandwich) {
+      // LITTLE BEAR SPECIAL: a towering Italian sub
+      const rr = (x, y, w2, h2, r) => { g.beginPath(); g.roundRect(x, y, w2, h2, r); g.fill(); };
+      g.fillStyle = '#c98d48'; rr(-17, -32, 34, 16, 6);           // bottom bread
+      g.fillStyle = '#7dc45f';                                     // lettuce ruffle
+      for (let lx = -15; lx <= 12; lx += 6) { g.beginPath(); g.arc(lx, -33, 4, 0, 7); g.fill(); }
+      g.fillStyle = '#d43b2f';                                     // salami
+      for (let sx = -11; sx <= 9; sx += 10) { g.beginPath(); g.arc(sx, -39, 4.5, 0, 7); g.fill(); }
+      g.fillStyle = '#ffd24a'; g.fillRect(-16, -46, 32, 4);        // cheese
+      g.fillStyle = '#a05a3c'; g.fillRect(-15, -51, 30, 5);        // meat
+      g.fillStyle = '#e0a860'; rr(-17, -76, 34, 24, 10);           // top bread dome
+      g.fillStyle = '#fff4dd';                                     // sesame seeds
+      for (const [sx2, sy2] of [[-9, -70], [-2, -73], [6, -69], [10, -64], [-12, -63]]) {
+        g.beginPath(); g.ellipse(sx2, sy2, 1.6, 1, 0.5, 0, 7); g.fill();
+      }
+      g.fillStyle = '#1a1408';                                     // eyes on the bread
+      g.beginPath(); g.arc(4, -60, 1.8, 0, 7); g.fill();
+      g.beginPath(); g.arc(11, -60, 1.8, 0, 7); g.fill();
     } else {
     // torso
     limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 13 * muscleW, torsoCol);
@@ -842,7 +878,7 @@ const Game = (() => {
     }
     // front leg
     limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, legCol);
-    if (!look.printer && !look.wrench && !look.chicken) {
+    if (!look.printer && !look.wrench && !look.chicken && !look.sandwich) {
     // head
     g.fillStyle = o.hood ? o.color2 : o.skin;
     g.beginPath(); g.arc(3 + lean * 0.6, headY - 7, 9, 0, 7); g.fill();
@@ -886,6 +922,13 @@ const Game = (() => {
         g.beginPath(); g.arc(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5, 4.5, 0, 7); g.fill();
       } else if (o.weaponStyle === 'staff') {
         g.beginPath(); g.moveTo(frontHand[0] - wl * 0.8, frontHand[1] + wl * 0.5); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.6); g.stroke();
+      } else if (o.weaponStyle === 'sandwich') {
+        const sw = 8 + o.weaponTier * 1.7;
+        g.fillStyle = '#e0a860';
+        g.fillRect(frontHand[0] - 2, frontHand[1] - 7.5, sw, 3);
+        g.fillRect(frontHand[0] - 2, frontHand[1] - 1.5, sw, 3);
+        g.fillStyle = '#7dc45f'; g.fillRect(frontHand[0] - 3, frontHand[1] - 4.8, sw + 2, 1.7);
+        g.fillStyle = '#d43b2f'; g.fillRect(frontHand[0] - 1, frontHand[1] - 3.1, sw - 2, 1.7);
       } else if (o.weaponStyle === 'feet') {
         g.fillStyle = wc; g.globalAlpha = 0.85;
         g.beginPath(); g.arc(frontFoot[0], frontFoot[1] - 2, 5, 0, 7); g.fill();
@@ -1004,6 +1047,17 @@ const Game = (() => {
       g.fillStyle = pr.color;
       if (pr.type === 'wave' || pr.type === 'pwave') {
         g.beginPath(); g.moveTo(pr.x - 16, GROUND_Y); g.lineTo(pr.x, GROUND_Y - 34); g.lineTo(pr.x + 16, GROUND_Y); g.fill();
+      } else if (pr.shape === 'brooks') {
+        g.save();
+        g.translate(pr.x, pr.y);
+        g.rotate(pr.life * 16);
+        g.strokeStyle = '#37b34a'; g.lineWidth = 3; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(0, -2); g.lineTo(0, 8); g.stroke();
+        g.beginPath(); g.moveTo(-6, 12); g.lineTo(0, 8); g.lineTo(6, 12); g.stroke();
+        g.beginPath(); g.moveTo(-8, 0); g.lineTo(0, -1); g.lineTo(8, 0); g.stroke(); // helicopter arms
+        g.fillStyle = '#e8b58a';
+        g.beginPath(); g.arc(0, -7, 4.5, 0, 7); g.fill();
+        g.restore();
       } else if (pr.shape === 'chicken') {
         g.save();
         g.translate(pr.x, pr.y);
