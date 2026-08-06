@@ -182,13 +182,14 @@ const Game = (() => {
       case 'projectile': {
         const n = def.count || 1;
         const dirs = def.both ? [-1, 1] : [p.facing];
+        const spd = (def.speed || 560) * (def.scaleSpeed ? 1 + 0.08 * p.upg.ability : 1);
         for (const dir of dirs) {
           for (let i = 0; i < n; i++) {
             projectiles.push({
-              type: 'fire', hostile: false, x: p.x + dir * 30, y: p.y - 55 - i * 16,
-              vx: dir * (def.speed || 560), vy: def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0,
-              dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: 1.5,
-              pierce: def.pierce !== false, shape: def.shape, bounty: def.bounty, color: col,
+              type: 'fire', hostile: false, x: p.x + dir * 30, y: p.y - (def.arc ? 78 : 55) - i * 16,
+              vx: dir * spd, vy: def.arc ? 250 : (def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0),
+              dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: def.life || 1.5,
+              pierce: def.pierce !== false, shape: def.shape, bounty: def.bounty, bounce: def.bounce, color: col,
             });
           }
         }
@@ -466,11 +467,18 @@ const Game = (() => {
   // ---------- Projectiles / coins / fx ----------
   function updateProjectiles(dt) {
     for (const pr of [...projectiles]) {
+      if (pr.bounce) pr.vy += 1500 * dt;
       pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.life -= dt;
       if (pr.life <= 0 || pr.x < -60 || pr.x > STAGE_W + 60) { projectiles.splice(projectiles.indexOf(pr), 1); continue; }
       if (!pr.hostile && pr.vy > 0 && pr.y >= GROUND_Y) {
-        burst(pr.x, GROUND_Y - 6, pr.color, 10, 220);
-        projectiles.splice(projectiles.indexOf(pr), 1); continue;
+        if (pr.bounce) {
+          pr.y = GROUND_Y;
+          pr.vy = -Math.max(Math.abs(pr.vy) * 0.8, 320);
+          burst(pr.x, GROUND_Y - 4, pr.color, 4, 160, false);
+        } else {
+          burst(pr.x, GROUND_Y - 6, pr.color, 10, 220);
+          projectiles.splice(projectiles.indexOf(pr), 1); continue;
+        }
       }
       if (Math.random() < 0.5) particles.push({ x: pr.x, y: pr.y + rand(-4, 4), vx: -pr.vx * 0.15, vy: rand(-30, 30), life: 0.25, max: 0.25, r: rand(1.5, 3.5), color: pr.color, grav: false });
       if (pr.hostile) {
@@ -711,7 +719,7 @@ const Game = (() => {
       frontHand = [36, -54]; lean = 4;
     }
     if (o.hurt) { lean = -8; frontHand = [18, -40]; backHand = [-16, -52]; }
-    if (look.printer) {
+    if (look.printer || look.wrench) {
       // machine proportions: stubby legs under the base, gripper arms out the sides
       hip = [0, -13]; sh = [0, -56];
       backHand = [-21, -46]; frontHand = [21, -46];
@@ -761,6 +769,27 @@ const Game = (() => {
       g.globalAlpha = 1;
       g.fillStyle = '#ffffff';
       g.beginPath(); g.arc(ecx, -29, 1.8, 0, 7); g.fill();
+    } else if (look.wrench) {
+      // WRENCHY: giant anthropomorphic golden pipe wrench
+      const gold = '#ffd24a', goldDark = '#b8922a';
+      g.shadowColor = gold; g.shadowBlur = 10;
+      g.strokeStyle = gold; g.lineWidth = 14;
+      g.beginPath(); g.moveTo(0, -16); g.lineTo(0, -58); g.stroke();
+      g.shadowBlur = 0;
+      g.strokeStyle = goldDark; g.lineWidth = 2.6;
+      g.beginPath(); g.moveTo(-4, -22); g.lineTo(-4, -52); g.stroke();
+      // adjustment nut
+      g.fillStyle = goldDark;
+      g.beginPath(); g.ellipse(0, -60, 8.5, 5, 0, 0, 7); g.fill();
+      // jaws (the mouth opens toward his enemies)
+      g.fillStyle = gold;
+      g.fillRect(-7, -71, 23, 7);   // lower jaw
+      g.fillRect(-7, -85, 23, 7);   // upper jaw
+      g.fillRect(-7, -85, 7, 21);   // jaw back
+      // eyes on the upper jaw
+      g.fillStyle = '#1a1408';
+      g.beginPath(); g.arc(6, -81.5, 1.8, 0, 7); g.fill();
+      g.beginPath(); g.arc(12, -81.5, 1.8, 0, 7); g.fill();
     } else {
     // torso
     limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 13 * muscleW, torsoCol);
@@ -778,7 +807,7 @@ const Game = (() => {
     }
     // front leg
     limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, o.color);
-    if (!look.printer) {
+    if (!look.printer && !look.wrench) {
     // head
     g.fillStyle = o.hood ? o.color2 : o.skin;
     g.beginPath(); g.arc(3 + lean * 0.6, headY - 7, 9, 0, 7); g.fill();
@@ -812,7 +841,7 @@ const Game = (() => {
     limb([sh[0] + lean * 0.5, sh[1]], frontHand, armW, frontArmCol);
     if (o.weaponTier > 0) {
       const wl = 10 + o.weaponTier * 4.5;
-      const wc = WEAPON_COLORS[o.weaponTier - 1];
+      const wc = (o.weaponColors && o.weaponColors[o.weaponTier - 1]) || WEAPON_COLORS[o.weaponTier - 1];
       g.strokeStyle = wc; g.lineWidth = 3.4;
       if (o.weaponTier >= 5) { g.shadowColor = wc; g.shadowBlur = 8; }
       if (o.weaponStyle === 'club') {
@@ -920,7 +949,7 @@ const Game = (() => {
           onGround: p.onGround, crouch: p.crouch,
           attackKey: p.attack ? p.attack.key : null, attackExt: attackExt(p.attack),
           hurt: p.hurtT > 0, flash: p.flash, frozen: false,
-          weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, ascended: p.ascended,
+          weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, weaponColors: p.cdef.weaponColors, ascended: p.ascended,
           look: p.cdef.finalForm.look,
         });
       }
@@ -938,6 +967,16 @@ const Game = (() => {
       g.fillStyle = pr.color;
       if (pr.type === 'wave' || pr.type === 'pwave') {
         g.beginPath(); g.moveTo(pr.x - 16, GROUND_Y); g.lineTo(pr.x, GROUND_Y - 34); g.lineTo(pr.x + 16, GROUND_Y); g.fill();
+      } else if (pr.shape === 'ball') {
+        g.save();
+        g.translate(pr.x, pr.y);
+        g.rotate(pr.life * 10 * Math.sign(pr.vx));
+        g.fillStyle = '#f2f4f8';
+        g.beginPath(); g.arc(0, 0, pr.r, 0, 7); g.fill();
+        g.strokeStyle = '#3468b0'; g.lineWidth = 1.6;
+        g.beginPath(); g.arc(0, 0, pr.r * 0.72, 0.3, 2.2); g.stroke();
+        g.beginPath(); g.arc(0, 0, pr.r * 0.72, Math.PI + 0.3, Math.PI + 2.2); g.stroke();
+        g.restore();
       } else if (pr.shape === 'book') {
         g.save();
         g.translate(pr.x, pr.y);
@@ -1103,7 +1142,7 @@ const Game = (() => {
       color: cdef.color, color2: cdef.color2, accent: cdef.accent, skin: cdef.skin,
       moving: false, walkCyc: 0, animT: 2, onGround: true,
       crouch: false, attackKey: null, attackExt: 0,
-      hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: cdef.weaponStyle, ascended,
+      hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: cdef.weaponStyle, weaponColors: cdef.weaponColors, ascended,
       look: cdef.finalForm.look,
     });
   }

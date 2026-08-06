@@ -190,7 +190,40 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'jacob',     name: 'JACOB',      color: '#4ae86a' },
+  {
+    id: 'jacob', name: 'JACOB', color: '#4ae86a',
+    title: 'The Master Plumber',
+    // Plumber archetype: maxed out in every aspect. The most powerful archetype.
+    hp: 150, speed: 370, dmg: 1.3, atkSpeed: 0.8,
+    weaponStyle: 'club',
+    weaponColors: ['#c9ccd8', '#b87333', '#dfe3e8', '#8a4ae8', '#ffd24a'],
+    special: {
+      type: 'projectile', name: 'Volleyball Spike',
+      desc: 'Spikes a volleyball that rockets down and ricochets through the enemy line. Upgrades make it faster and meaner.',
+      dmg: 24, speed: 540, r: 10, pierce: true, shape: 'ball', arc: true, bounce: true, scaleSpeed: true, life: 2.4,
+    },
+    tracks: {
+      weapon: {
+        icon: '🔧', label: 'Plumbing Tools',
+        tiers: ['Plunger', 'Basin Wrench', 'Pipe Cutter', 'Press Tool', 'The Golden Pipe Wrench'],
+        blurb: '+35% attack damage per tier — union rates apply.',
+      },
+      armor: { tiers: ['Work Tee', 'Knee Pads', 'Tool Belt', 'Coverall Carbonweave', 'HM Master Plumber Plate'] },
+      ability: {
+        icon: '🏐', label: 'Volleyball',
+        tiers: ['Backyard Bump', 'Set & Spike', 'Jump Serve', 'Six-Pack Spike', 'The Kill Shot'],
+        blurb: '+40% spike damage, faster ball, cheaper energy per tier.',
+      },
+    },
+    finalForm: {
+      name: 'WRENCHY',
+      desc: 'He becomes a giant anthropomorphic golden pipe wrench. The jaws talk. The torque is infinite.',
+      look: { wrench: true },
+      boost: { maxHp: 1.7, dmg: 2.0, speed: 1.3, defense: 0.6, special: 2.2 },
+      sizeMult: 1.4,
+    },
+    designed: true,
+  },
   { id: 'samantha',  name: 'SAMANTHA',   color: '#4ae8b2' },
   { id: 'cassandra', name: 'CASSANDRA',  color: '#4adbe8' },
   { id: 'erika',     name: 'ERIKA',      color: '#4a86e8' },
