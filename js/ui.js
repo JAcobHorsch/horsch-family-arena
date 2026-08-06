@@ -40,7 +40,9 @@ const UI = (() => {
     return `<div class="stat-row"><b>${label}</b><div class="stat-bar"><i style="width:${Math.round(frac * 100)}%"></i></div></div>`;
   }
   function buildSelect() {
-    $('selectLevelLabel').textContent = 'LEVEL ' + Save.data.level + (Save.data.level % 5 === 0 ? '  —  WARLORD AWAITS' : '');
+    const selWorld = worldFor(Save.data.level);
+    $('selectLevelLabel').textContent = selWorld.name + '  —  LEVEL ' + Save.data.level + ': ' +
+      selWorld.levelNames[(Save.data.level - 1) % 5] + (Save.data.level % 5 === 0 ? '  —  BOSS LEVEL' : '');
     $('selectMoney').textContent = money();
     const grid = $('charGrid');
     grid.innerHTML = '';

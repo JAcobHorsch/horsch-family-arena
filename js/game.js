@@ -79,14 +79,14 @@ const Game = (() => {
     earned = 0; mode = 'playing'; paused = false; timeScale = 1; hitstop = 0;
     ambient = [];
     Input.consume(); // discard anything buffered on menu screens
-    setBanner('LEVEL ' + plan.level, plan.boss ? 'THE WARLORD AWAITS' : plan.waves.length + ' WAVES', 2.0);
+    setBanner(plan.levelName.toUpperCase(), plan.world.name + '  —  LEVEL ' + plan.level + (plan.boss ? '  —  BOSS' : ''), 2.2);
   }
 
   function spawnWave() {
     const list = plan.waves[waveIdx];
     let side = player.x > STAGE_W / 2 ? -1 : 1;
     for (let i = 0; i < list.length; i++) {
-      const t = ENEMY_TYPES[list[i]];
+      const t = worldEnemyDef(plan.world, list[i]);
       const dir = (i % 2 === 0) ? side : -side;
       const x = clamp(player.x + dir * (viewW / 2 + rand(60, 220)), 50, STAGE_W - 50);
       const e = {
@@ -102,7 +102,7 @@ const Game = (() => {
       enemies.push(e);
       burst(e.x, e.y - e.h / 2, theme.glow, 12, 200, false);
     }
-    setBanner('WAVE ' + (waveIdx + 1) + ' / ' + plan.waves.length, plan.boss && waveIdx === plan.waves.length - 1 ? 'WARLORD INCOMING' : '', 1.3);
+    setBanner('WAVE ' + (waveIdx + 1) + ' / ' + plan.waves.length, plan.boss && waveIdx === plan.waves.length - 1 ? 'THE BOSS APPROACHES' : '', 1.3);
     waveIdx++;
   }
 
@@ -860,15 +860,48 @@ const Game = (() => {
     }
     g.lineTo(camX + viewW, VH); g.closePath(); g.fill();
 
-    // near pillars (parallax 0.55) — ruined temple columns
+    // near props (parallax 0.55) — styled per world
     g.fillStyle = theme.near;
     const r2 = seeded((plan ? plan.level : 1) + 77);
+    const propStyle = plan ? plan.world.props : 'castle';
     for (let i = 0; i < 10; i++) {
       const px = i * 300 + r2() * 120 - camX * 0.55;
       const sx = ((px % (viewW + 300)) + viewW + 300) % (viewW + 300) - 150 + camX;
       const h = 150 + r2() * 130, w = 26 + r2() * 22;
-      g.fillRect(sx, GROUND_Y - h, w, h);
-      g.fillRect(sx - 6, GROUND_Y - h - 12, w + 12, 14);
+      if (propStyle === 'fence') {
+        // picket fence run + a bush
+        for (let f = 0; f < 4; f++) {
+          g.fillRect(sx + f * 16, GROUND_Y - 46, 9, 46);
+          g.beginPath(); g.moveTo(sx + f * 16, GROUND_Y - 46); g.lineTo(sx + f * 16 + 4.5, GROUND_Y - 56); g.lineTo(sx + f * 16 + 9, GROUND_Y - 46); g.fill();
+        }
+        g.fillRect(sx - 6, GROUND_Y - 36, 76, 7);
+        g.beginPath(); g.arc(sx + 88, GROUND_Y - 14, 16, 0, 7); g.fill();
+      } else if (propStyle === 'pipes') {
+        // vertical pipe with elbow and valve wheel
+        g.fillRect(sx, GROUND_Y - h, 20, h);
+        g.fillRect(sx - 8, GROUND_Y - h, 36, 14);
+        g.fillRect(sx - 4, GROUND_Y - h * 0.55, 28, 10);
+        g.beginPath(); g.arc(sx + 10, GROUND_Y - h * 0.55 - 12, 9, 0, 7); g.fill();
+      } else if (propStyle === 'road') {
+        // highway sign: post + diamond
+        g.fillRect(sx + 8, GROUND_Y - h * 0.7, 7, h * 0.7);
+        g.save();
+        g.translate(sx + 11.5, GROUND_Y - h * 0.7 - 4);
+        g.rotate(Math.PI / 4);
+        g.fillRect(-16, -16, 32, 32);
+        g.restore();
+      } else {
+        // castle tower with crenellations
+        g.fillRect(sx, GROUND_Y - h, w, h);
+        for (let c = 0; c < 3; c++) g.fillRect(sx - 4 + c * (w + 8) / 3, GROUND_Y - h - 12, (w + 8) / 5, 14);
+      }
+    }
+    if (propStyle === 'road') {
+      // center-line dashes on the asphalt
+      g.fillStyle = 'rgba(232,226,208,0.25)';
+      for (let dx0 = Math.floor(camX / 90) * 90; dx0 < camX + viewW; dx0 += 90) {
+        g.fillRect(dx0, GROUND_Y + 26, 42, 5);
+      }
     }
 
     // ground
@@ -1176,6 +1209,74 @@ const Game = (() => {
       // glowing eyes
       g.fillStyle = o.eyeColor || '#ffd34a';
       g.fillRect(5 + lean * 0.6, headY - 9, 4, 2.6);
+      // world-themed accessory
+      const ax = 3 + lean * 0.6, ay = headY - 7;
+      switch (o.accessory) {
+        case 'gnomehat':
+          g.fillStyle = '#d43b2f';
+          g.beginPath(); g.moveTo(ax - 8, ay - 8); g.lineTo(ax + 1, ay - 26); g.lineTo(ax + 8, ay - 8); g.closePath(); g.fill();
+          break;
+        case 'conehat':
+          g.fillStyle = '#e8742a';
+          g.beginPath(); g.moveTo(ax - 8, ay - 8); g.lineTo(ax, ay - 24); g.lineTo(ax + 8, ay - 8); g.closePath(); g.fill();
+          g.fillStyle = '#f2ede0'; g.fillRect(ax - 5, ay - 16, 10, 3);
+          break;
+        case 'wizardhat':
+          g.fillStyle = o.color;
+          g.fillRect(ax - 11, ay - 10, 22, 4);
+          g.beginPath(); g.moveTo(ax - 7, ay - 10); g.lineTo(ax + 3, ay - 28); g.lineTo(ax + 7, ay - 10); g.closePath(); g.fill();
+          break;
+        case 'wings': {
+          const wf2 = Math.sin((o.animT || 0) * 26) * 4;
+          g.fillStyle = 'rgba(232,240,255,0.65)';
+          g.beginPath(); g.ellipse(-10, -58 * cf + wf2, 9, 4.5, -0.5, 0, 7); g.fill();
+          g.beginPath(); g.ellipse(-13, -54 * cf - wf2, 8, 4, -0.9, 0, 7); g.fill();
+          break;
+        }
+        case 'mask':
+          g.fillStyle = '#1d1d24';
+          g.fillRect(ax - 8, ay - 3.5, 16, 5);
+          g.fillStyle = o.eyeColor || '#ffd34a';
+          g.fillRect(ax + 2, ay - 2, 4, 2.4);
+          break;
+        case 'ears':
+          g.fillStyle = o.color2;
+          g.beginPath(); g.arc(ax - 6, ay - 10, 4, 0, 7); g.fill();
+          g.beginPath(); g.arc(ax + 6, ay - 10, 4, 0, 7); g.fill();
+          break;
+        case 'imphorns':
+          g.fillStyle = '#e8d9b0';
+          g.beginPath(); g.moveTo(ax - 6, ay - 8); g.lineTo(ax - 9, ay - 16); g.lineTo(ax - 3, ay - 9); g.fill();
+          g.beginPath(); g.moveTo(ax + 6, ay - 8); g.lineTo(ax + 9, ay - 16); g.lineTo(ax + 3, ay - 9); g.fill();
+          break;
+        case 'antenna':
+          g.strokeStyle = o.color2; g.lineWidth = 2;
+          g.beginPath(); g.moveTo(ax, ay - 9); g.lineTo(ax, ay - 20); g.stroke();
+          g.fillStyle = o.eyeColor || '#ffd34a';
+          g.beginPath(); g.arc(ax, ay - 22, 2.5, 0, 7); g.fill();
+          break;
+        case 'ribs':
+          g.strokeStyle = 'rgba(240,238,228,0.8)'; g.lineWidth = 1.6;
+          for (let rr2 = 0; rr2 < 3; rr2++) {
+            g.beginPath(); g.moveTo(-5, -58 * cf + rr2 * 6); g.lineTo(7, -58 * cf + rr2 * 6); g.stroke();
+          }
+          break;
+        case 'bolts':
+          g.fillStyle = '#e8c84a';
+          g.beginPath(); g.arc(-3, -56 * cf, 1.8, 0, 7); g.fill();
+          g.beginPath(); g.arc(5, -50 * cf, 1.8, 0, 7); g.fill();
+          g.beginPath(); g.arc(-1, -44 * cf, 1.8, 0, 7); g.fill();
+          break;
+        case 'tire':
+          g.strokeStyle = '#101014'; g.lineWidth = 6;
+          g.beginPath(); g.ellipse(0, -48 * cf, 13, 9, 0.2, 0, 7); g.stroke();
+          break;
+        case 'drip':
+          g.fillStyle = o.color2;
+          g.beginPath(); g.arc(-4, -30 * cf, 2.4, 0, 7); g.fill();
+          g.beginPath(); g.arc(6, -38 * cf, 2, 0, 7); g.fill();
+          break;
+      }
     } else if (look.helmet) {
       g.fillStyle = look.helmetColor || '#d43b2f';
       g.beginPath(); g.arc(3 + lean * 0.6, headY - 9, 9.5, Math.PI, 0); g.fill();
@@ -1370,7 +1471,7 @@ const Game = (() => {
       drawFighter(g, {
         x: e.x, y: e.y, facing: e.facing, size: e.size,
         color: e.def.color, color2: e.def.color2, accent: e.def.color2, skin: e.def.color,
-        hood: true, boss: !!e.def.boss, eyeColor: e.def.boss ? '#ff4a3a' : '#ffd34a',
+        hood: true, boss: !!e.def.boss, accessory: e.def.accessory, eyeColor: e.def.boss ? '#ff4a3a' : '#ffd34a',
         moving: e.state === 'approach' && e.frozenT <= 0, walkCyc: e.walkCyc, animT: e.animT,
         onGround: e.y >= GROUND_Y - 1, attackKey: key,
         hurt: e.hurtT > 0, flash: e.flash, frozen: e.frozenT > 0,
@@ -1624,20 +1725,20 @@ const Game = (() => {
       // level / wave
       g.textAlign = 'center';
       const cx = window.innerWidth / scale / 2;
-      g.font = "900 14px 'Segoe UI', sans-serif";
+      g.font = "900 13px 'Segoe UI', sans-serif";
       g.fillStyle = '#e8e2d0';
-      g.fillText('LEVEL ' + plan.level, cx, 20);
-      g.font = "700 11px 'Segoe UI', sans-serif";
+      g.fillText(plan.levelName.toUpperCase(), cx, 18);
+      g.font = "700 10px 'Segoe UI', sans-serif";
       g.fillStyle = '#9a927e';
-      g.fillText('WAVE ' + Math.min(waveIdx, plan.waves.length) + ' / ' + plan.waves.length, cx, 36);
+      g.fillText('LEVEL ' + plan.level + '  —  WAVE ' + Math.min(waveIdx, plan.waves.length) + ' / ' + plan.waves.length, cx, 34);
 
       // boss bar
       const boss = enemies.find(e => e.def.boss);
       if (boss) {
         const bw = Math.min(420, window.innerWidth / scale - 120);
-        bar(g, cx - bw / 2, 46, bw, 13, boss.hp / boss.maxHp, '#d43b2f');
+        bar(g, cx - bw / 2, 44, bw, 13, boss.hp / boss.maxHp, '#d43b2f');
         g.font = "900 10px 'Segoe UI', sans-serif"; g.fillStyle = '#ffb0a8';
-        g.fillText('WARLORD', cx, 56.5);
+        g.fillText(boss.def.name.toUpperCase(), cx, 54.5);
       }
 
       // banner
@@ -1721,7 +1822,7 @@ const Game = (() => {
     return {
       mode, waveIdx, spawnDelay: +spawnDelay.toFixed(2), timeScale, hitstop: +hitstop.toFixed(3),
       enemies: enemies.map(e => ({
-        t: e.type, hp: Math.round(e.hp), x: Math.round(e.x), y: Math.round(e.y),
+        t: e.type, name: e.def.name, hp: Math.round(e.hp), x: Math.round(e.x), y: Math.round(e.y),
         st: e.state, cd: +e.cd.toFixed(2), fz: +e.frozenT.toFixed(1), hu: +e.hurtT.toFixed(1),
       })),
       player: player && { x: Math.round(player.x), hp: Math.round(player.hp), energy: Math.round(player.energy), attack: player.attack && player.attack.key },

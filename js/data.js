@@ -687,20 +687,90 @@ const ATTACKS = {
   B: { name: 'Rising Break', dmg: 13, startup: 0.16, active: 0.12, recovery: 0.30, radius: 118, kb: 220, kbY: -540, anim: 'upper' },
 };
 
-const ENEMY_TYPES = {
-  grunt:   { name: 'Grunt',   hp: 30,  dmg: 8,  speed: 125, reach: 62, windup: 0.5,  cooldown: 1.0, value: 15,  size: 1.0,  color: '#8a4a5c', color2: '#3d1f28' },
-  stinger: { name: 'Stinger', hp: 18,  dmg: 6,  speed: 235, reach: 55, windup: 0.32, cooldown: 0.7, value: 18,  size: 0.85, color: '#7dc45f', color2: '#2c4d1e' },
-  brute:   { name: 'Brute',   hp: 95,  dmg: 18, speed: 82,  reach: 78, windup: 0.85, cooldown: 1.4, value: 40,  size: 1.32, color: '#b06a32', color2: '#4d2a10' },
-  shooter: { name: 'Shooter', hp: 24,  dmg: 10, speed: 105, reach: 380, windup: 0.7, cooldown: 1.8, value: 30,  size: 0.95, color: '#9a6ad4', color2: '#3c2360', ranged: true },
-  boss:    { name: 'Warlord', hp: 420, dmg: 24, speed: 95,  reach: 95, windup: 0.75, cooldown: 1.2, value: 320, size: 1.7,  color: '#d43b2f', color2: '#4d0e08', boss: true },
+// Base combat roles — per-world enemy skins override name/colors/accessory,
+// the numbers stay role-based so balance is uniform everywhere.
+const ENEMY_ROLES = {
+  grunt:   { hp: 30,  dmg: 8,  speed: 125, reach: 62, windup: 0.5,  cooldown: 1.0, value: 15,  size: 1.0 },
+  stinger: { hp: 18,  dmg: 6,  speed: 235, reach: 55, windup: 0.32, cooldown: 0.7, value: 18,  size: 0.85 },
+  brute:   { hp: 95,  dmg: 18, speed: 82,  reach: 78, windup: 0.85, cooldown: 1.4, value: 40,  size: 1.32 },
+  shooter: { hp: 24,  dmg: 10, speed: 105, reach: 380, windup: 0.7, cooldown: 1.8, value: 30,  size: 0.95, ranged: true },
+  boss:    { hp: 420, dmg: 24, speed: 95,  reach: 95, windup: 0.75, cooldown: 1.2, value: 320, size: 1.7,  boss: true },
 };
 
-// Level plan: waves grow in size, new enemy types unlock, stats scale up.
+// The four worlds. Five levels each; the fifth is a boss level.
+// Worlds loop endlessly with the difficulty curve still climbing.
+const WORLDS = [
+  {
+    id: 'home', name: 'HORSCH FAMILY LAND',
+    levelNames: ['The Backyard', 'The Kitchen', 'The Church Parking Lot', 'The Lake', 'The Cul-de-Sac Showdown'],
+    props: 'fence',
+    theme: { sky1: '#2e1e3e', sky2: '#0d0a14', glow: '#ffb04a', ground: '#1f2418', groundTop: '#3d4a2a', far: '#191024', near: '#242c1a' },
+    enemies: {
+      grunt:   { name: 'Yard Gnome',        color: '#c9342a', color2: '#3a5a8a', accessory: 'gnomehat' },
+      stinger: { name: 'Murder Wasp',       color: '#e8c84a', color2: '#2a2418', accessory: 'wings' },
+      brute:   { name: 'Trash Panda',       color: '#8d8d96', color2: '#3a3a42', accessory: 'mask' },
+      shooter: { name: 'Sprinkler Sentry',  color: '#5fae6a', color2: '#24482a', accessory: 'antenna' },
+      boss:    { name: 'Warlord',           color: '#d43b2f', color2: '#4d0e08' },
+    },
+  },
+  {
+    id: 'pipes', name: 'THE PLUMBING UNDERWORLD',
+    levelNames: ['The Crawlspace', 'The Drain Line', 'The Sewer Kingdom', 'The Water Heater Caverns', 'The Boiler Depths'],
+    props: 'pipes',
+    theme: { sky1: '#0f2a28', sky2: '#050d0d', glow: '#4ae8b2', ground: '#132018', groundTop: '#28443a', far: '#0a1a17', near: '#123128' },
+    enemies: {
+      grunt:   { name: 'Clog Blob',       color: '#6a8a3a', color2: '#2c3a18', accessory: 'drip' },
+      stinger: { name: 'Drain Rat',       color: '#8a7a6a', color2: '#3a3028', accessory: 'ears' },
+      brute:   { name: 'Rust Golem',      color: '#b06a32', color2: '#4d2a10', accessory: 'bolts' },
+      shooter: { name: 'Grease Spitter',  color: '#3a3a2a', color2: '#e8c84a', accessory: 'drip' },
+      boss:    { name: 'Warlord',         color: '#d43b2f', color2: '#4d0e08' },
+    },
+  },
+  {
+    id: 'road', name: 'THE ROAD TO KANSAS CITY',
+    levelNames: ['Leaving the Driveway', 'The Gas Station', "The World's Largest Ball of Twine", 'The Rest Stop at 2 AM', 'Kansas City Limits'],
+    props: 'road',
+    theme: { sky1: '#4a1e2e', sky2: '#140a10', glow: '#ff6a3c', ground: '#26221e', groundTop: '#4a4238', far: '#1d1218', near: '#2c2018' },
+    enemies: {
+      grunt:   { name: 'Traffic Cone',        color: '#e8742a', color2: '#5a2c10', accessory: 'conehat' },
+      stinger: { name: 'Runaway Tire',        color: '#3a3a42', color2: '#18181e', accessory: 'tire' },
+      brute:   { name: 'Rest-Stop Sasquatch', color: '#6a4a32', color2: '#2c1e12', accessory: 'ears' },
+      shooter: { name: 'Speed Camera',        color: '#6a7288', color2: '#282c3a', accessory: 'antenna' },
+      boss:    { name: 'Warlord',             color: '#d43b2f', color2: '#4d0e08' },
+    },
+  },
+  {
+    id: 'fantasy', name: 'THE FANTASY REALMS',
+    levelNames: ['The Enchanted Forest', 'The Frost Peaks', 'The Volcano Rim', 'The Haunted Keep', 'The Shadow Throne'],
+    props: 'castle',
+    theme: { sky1: '#241040', sky2: '#0a0614', glow: '#c24ae8', ground: '#1a1224', groundTop: '#38284a', far: '#140a20', near: '#221430' },
+    enemies: {
+      grunt:   { name: 'Skeleton',  color: '#d8d4c8', color2: '#8a8578', accessory: 'ribs' },
+      stinger: { name: 'Imp',       color: '#d4503a', color2: '#4d1408', accessory: 'imphorns' },
+      brute:   { name: 'Ogre',      color: '#5f8a3a', color2: '#243a12', accessory: 'imphorns' },
+      shooter: { name: 'Dark Mage', color: '#7a4ae8', color2: '#2c1460', accessory: 'wizardhat' },
+      boss:    { name: 'Warlord',   color: '#d43b2f', color2: '#4d0e08' },
+    },
+  },
+];
+
+function worldFor(L) {
+  return WORLDS[Math.floor((L - 1) / 5) % WORLDS.length];
+}
+
+function worldEnemyDef(world, role) {
+  return Object.assign({}, ENEMY_ROLES[role], world.enemies[role] || {});
+}
+
+// Level plan: waves grow in size, world enemy types unlock across each
+// world's five levels, stats scale with absolute level forever.
 function levelPlan(L) {
+  const world = worldFor(L);
+  const lw = ((L - 1) % 5) + 1; // level within the world
   const pool = ['grunt'];
-  if (L >= 2) pool.push('stinger');
-  if (L >= 3) pool.push('brute');
-  if (L >= 4) pool.push('shooter');
+  if (lw >= 2) pool.push('stinger');
+  if (lw >= 3) pool.push('brute');
+  if (lw >= 4) pool.push('shooter');
   const weights = { grunt: 4, stinger: 3, brute: 2, shooter: 2 };
 
   const nWaves = Math.min(2 + Math.ceil(L / 2), 6);
@@ -718,26 +788,20 @@ function levelPlan(L) {
     }
     waves.push(arr);
   }
-  if (L % 5 === 0) waves[waves.length - 1].push('boss');
+  if (lw === 5) waves[waves.length - 1].push('boss');
 
   const k = L - 1;
   return {
     level: L,
+    world, lw,
+    levelName: world.levelNames[lw - 1],
     waves,
     hpMult: 1 + 0.22 * k + 0.035 * k * k,
     dmgMult: 1 + 0.16 * k,
     speedMult: 1 + Math.min(0.04 * k, 0.5),
     valueMult: 1 + 0.32 * k,
-    boss: L % 5 === 0,
+    boss: lw === 5,
   };
 }
 
-// Arena palettes cycle as you climb.
-const THEMES = [
-  { sky1: '#2a1230', sky2: '#0b0a12', glow: '#ff6a3c', ground: '#241722', groundTop: '#4a2f3a', far: '#170d1e', near: '#251429' },
-  { sky1: '#0f2438', sky2: '#070b14', glow: '#5ab8ff', ground: '#14202c', groundTop: '#2c4356', far: '#0b1622', near: '#12233a' },
-  { sky1: '#31240c', sky2: '#100c06', glow: '#ffd24a', ground: '#292013', groundTop: '#54432a', far: '#1c1408', near: '#2c2210' },
-  { sky1: '#0f2e1c', sky2: '#06110a', glow: '#5fe08a', ground: '#12251a', groundTop: '#2b4d36', far: '#0a1b10', near: '#123422' },
-  { sky1: '#380f14', sky2: '#12060a', glow: '#ff3a4a', ground: '#2a1216', groundTop: '#57262c', far: '#1d0a0e', near: '#331318' },
-];
-function themeFor(L) { return THEMES[(L - 1) % THEMES.length]; }
+function themeFor(L) { return worldFor(L).theme; }
