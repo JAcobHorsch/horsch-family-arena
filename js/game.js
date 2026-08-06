@@ -61,7 +61,7 @@ const Game = (() => {
       hp: stats.maxHp, energy: 100, onGround: true, crouch: false,
       buffT: 0, buffDmg: 1, buffSpeed: 1,
       attack: null, hurtT: 0, invulnT: 0, walkCyc: 0, animT: 0, flash: 0,
-      ascended: upg.ascended, size: upg.ascended ? (cdef.finalForm.sizeMult || 1.12) : 1,
+      ascended: upg.ascended, size: upg.ascended ? (cdef.finalForm.sizeMult || 1.12) : (cdef.baseSize || 1),
     };
     enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = [];
     if (upg.ascended && cdef.finalForm.minions) {
@@ -845,7 +845,18 @@ const Game = (() => {
       else if (o.attackKey === 'B') { frontHand = [16, -60 - 26 * pExt]; backHand = [-16, -60 - 26 * pExt]; }
     } else if (look.chicken) {
       hip = [0, -24]; // drumstick legs under the body
+    } else if (look.crawl) {
+      // baby crawl: horizontal body on all fours
+      hip = [-12, -16]; sh = [10, -20];
+      const cw = Math.sin(o.walkCyc || 0) * 5;
+      backFoot = [-20 + cw, 0]; frontFoot = [-4 - cw, 0];
+      backHand = [4 - cw, 0]; frontHand = [14 + cw, 0];
+      const cExt = o.attackExt || 0;
+      if (o.attackKey === 'X' || o.attackKey === 'A') frontHand = [18 + 22 * cExt, -12];
+      else if (o.attackKey === 'Y') frontFoot = [-8, -6 - 22 * cExt];
+      else if (o.attackKey === 'B') frontHand = [12, -24 - 20 * cExt];
     }
+    if (look.wobble) lean += Math.sin((o.animT || 0) * 6) * 5; // toddler balance
     const legCol = look.chicken ? '#e8a020' : o.color;
     const legCol2 = look.chicken ? '#b87a10' : o.color2;
 
@@ -857,7 +868,8 @@ const Game = (() => {
 
     // final-form look overrides (bald / beard / shirtless / muscle / fat)
     const muscleW = look.fat ? 1.9 : (look.muscle || 1);
-    const armW = 6 * (1 + (muscleW - 1) * 0.7);
+    let armW = 6 * (1 + (muscleW - 1) * 0.7);
+    if (o.weaponStyle === 'muscles' && o.weaponTier > 0) armW *= 1 + o.weaponTier * 0.32; // the arms ARE the weapon
     const torsoCol = look.shirtless ? o.skin : o.color;
     const backArmCol = look.shirtless ? hexMix(o.skin, '#000000', 0.3) : o.color2;
     const frontArmCol = look.shirtless ? o.skin : o.color;
@@ -993,17 +1005,32 @@ const Game = (() => {
         g.beginPath(); g.moveTo(-4 + lean * 0.4, ay); g.lineTo(5 + lean * 0.4, ay); g.stroke();
       }
     }
-    // belt
-    g.fillStyle = o.accent;
-    g.fillRect(-7 + lean * 0.3, hip[1] - 3, 14, 4);
+    // belt (or diaper)
+    if (look.baby) {
+      g.fillStyle = '#f6f2e8';
+      g.beginPath(); g.roundRect(hip[0] - 7, hip[1] - 5, 14, 9, 4); g.fill();
+    } else {
+      g.fillStyle = o.accent;
+      g.fillRect(-7 + lean * 0.3, hip[1] - 3, 14, 4);
+    }
     }
     // front leg
     if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, legCol);
     if (!look.printer && !look.wrench && !look.chicken && !look.sandwich && !look.firetruck) {
     // head
+    const hx = (look.crawl ? 17 : 3) + lean * 0.6;
+    const hy = look.crawl ? -26 : headY - 7;
     g.fillStyle = o.hood ? o.color2 : o.skin;
-    g.beginPath(); g.arc(3 + lean * 0.6, headY - 7, 9, 0, 7); g.fill();
-    if (o.hood) {
+    g.beginPath(); g.arc(hx, hy, 9, 0, 7); g.fill();
+    if (look.baby) {
+      // single proud curl + pacifier
+      g.strokeStyle = '#b87a3a'; g.lineWidth = 1.6;
+      g.beginPath(); g.arc(hx - 1, hy - 10, 2.5, Math.PI * 0.2, Math.PI * 1.4); g.stroke();
+      g.fillStyle = '#4ab2e8';
+      g.beginPath(); g.arc(hx + 7, hy + 2.5, 2.6, 0, 7); g.fill();
+      g.fillStyle = '#2f7bd4';
+      g.beginPath(); g.arc(hx + 7, hy + 2.5, 1.1, 0, 7); g.fill();
+    } else if (o.hood) {
       g.fillStyle = o.color;
       g.fillRect(-6 + lean * 0.6, headY - 17, 18, 6);
       // glowing eyes
@@ -1061,6 +1088,15 @@ const Game = (() => {
         g.beginPath(); g.arc(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5, 4.5, 0, 7); g.fill();
       } else if (o.weaponStyle === 'staff') {
         g.beginPath(); g.moveTo(frontHand[0] - wl * 0.8, frontHand[1] + wl * 0.5); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.6); g.stroke();
+      } else if (o.weaponStyle === 'muscles') {
+        // bicep definition bumps from tier 2 up
+        if (o.weaponTier >= 2) {
+          g.fillStyle = o.skin;
+          const bx = (sh[0] + frontHand[0]) / 2, by = (sh[1] + frontHand[1]) / 2 - 2;
+          g.beginPath(); g.arc(bx, by, 2.2 + o.weaponTier * 0.9, 0, 7); g.fill();
+          const bx2 = (sh[0] + backHand[0]) / 2, by2 = (sh[1] + backHand[1]) / 2 - 2;
+          g.beginPath(); g.arc(bx2, by2, 2 + o.weaponTier * 0.8, 0, 7); g.fill();
+        }
       } else if (o.weaponStyle === 'letters') {
         // his name orbits his fist, spelling doom
         const word = (o.weaponWord || 'RON').slice(0, 9);
@@ -1215,6 +1251,17 @@ const Game = (() => {
       g.fillStyle = pr.color;
       if (pr.type === 'wave' || pr.type === 'pwave') {
         g.beginPath(); g.moveTo(pr.x - 16, GROUND_Y); g.lineTo(pr.x, GROUND_Y - 34); g.lineTo(pr.x + 16, GROUND_Y); g.fill();
+      } else if (pr.shape === 'pacifier') {
+        g.save();
+        g.translate(pr.x, pr.y);
+        g.rotate(pr.life * 12);
+        g.strokeStyle = '#4ab2e8'; g.lineWidth = 2.5;
+        g.beginPath(); g.arc(0, 2, 5.5, 0, 7); g.stroke();  // ring
+        g.fillStyle = '#f2a3c2';
+        g.beginPath(); g.ellipse(0, -4, 6, 3.5, 0, 0, 7); g.fill(); // shield
+        g.fillStyle = '#e8b58a';
+        g.beginPath(); g.arc(0, -8.5, 3, 0, 7); g.fill();   // teat
+        g.restore();
       } else if (pr.shape === 'glasses') {
         g.save();
         g.translate(pr.x, pr.y);

@@ -471,7 +471,42 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'isla',      name: 'ISLA',       color: '#f2a3c2' },
+  {
+    id: 'isla', name: 'ISLA', color: '#f2a3c2',
+    title: 'The Baby',
+    // Baby archetype: cannot walk. Maxed stats. Incredibly powerful.
+    hp: 145, speed: 300, dmg: 1.4, atkSpeed: 0.85,
+    weaponStyle: 'muscles',
+    baseSize: 0.6,
+    baseLook: { crawl: true, baby: true },
+    special: {
+      type: 'projectile', name: 'Pacifier Throw',
+      desc: 'Hurls her pacifier with terrifying force. She wants it back immediately.',
+      dmg: 28, speed: 560, r: 8, pierce: true, shape: 'pacifier',
+    },
+    tracks: {
+      weapon: {
+        icon: '💪', label: 'Arms',
+        tiers: ['Noodle Arms', 'Chunky Arms', 'Toddler Guns', 'Full Biceps', 'The Baby Swole'],
+        blurb: '+35% attack damage per tier — visibly swole-er arms each time.',
+      },
+      armor: { tiers: ['Onesie', 'Double Diaper', 'Footie Pajamas', 'Snowsuit of Invulnerability', 'The Car Seat Carapace'] },
+      ability: {
+        icon: '🍼', label: 'Bottle',
+        tiers: ['Snack Bottle', 'Full Bottle', 'Warm Bottle', 'The Good Bottle', 'Bottomless Bottle'],
+        blurb: '+40% special damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'WALKING ISLA',
+      desc: 'She walks now. Poorly. Wobbling, unbalanced, unstoppable — and blasting milk at everyone.',
+      look: { baby: true, wobble: true },
+      special: { type: 'projectile', name: 'Milk Blast', dmg: 12, count: 4, spreadY: 30, speed: 600, r: 9, pierce: true, color: '#f4f0e6' },
+      boost: { maxHp: 1.7, dmg: 2.0, speed: 1.2, defense: 0.6 },
+      sizeMult: 0.75,
+    },
+    designed: true,
+  },
   { id: 'hayes',     name: 'HAYES',      color: '#5c4ae8' },
   { id: 'addi',      name: 'ADDI',       color: '#e8a04a' },
   { id: 'brooks',    name: 'BROOKS',     color: '#37b34a' },
