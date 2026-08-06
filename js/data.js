@@ -610,7 +610,40 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'dayne',     name: 'DAYNE',      color: '#b0b6c4' },
+  {
+    id: 'dayne', name: 'DAYNE', color: '#b0b6c4',
+    title: 'The Dumb Guy',
+    // Dumb Guy archetype: low stats, but hey — not Erika.
+    hp: 85, speed: 250, dmg: 0.75, atkSpeed: 1.25,
+    weaponStyle: 'noodle',
+    weaponColors: ['#e8d24a', '#4ab2e8', '#e84a92', '#37b34a', '#ff7a2c'],
+    special: {
+      type: 'dive', name: 'Volleyball Dive',
+      desc: 'A ball is tossed in from offscreen. He dives. He misses. It hits him in the chest. Upgrades only worsen his timing.',
+      selfDmg: 6,
+    },
+    tracks: {
+      weapon: {
+        icon: '🛟', label: 'Soft Objects',
+        tiers: ['Throw Pillow', 'Pool Noodle', 'Body Pillow', 'Foam Pit Cube', 'The Bouncy Castle Beam'],
+        blurb: '+35% attack damage per tier, softly.',
+      },
+      armor: { tiers: ['Tank Top', 'Cargo Shorts', 'Knee Brace', 'Jorts of Fortitude', 'The Full Sweatsuit'] },
+      ability: {
+        icon: '🏐', label: 'Timing',
+        tiers: ['Late', 'Later', 'Way Off', 'Embarrassing', 'The Worst Timing Imaginable'],
+        blurb: 'Each tier makes his timing worse. The ball hits harder. Why upgrade this? Great question.',
+      },
+    },
+    finalForm: {
+      name: 'KANSAS CITY DAYNE',
+      desc: 'He made the move. He will not stop talking about it.',
+      look: { cap: true, capColor: '#d43b2f' },
+      chatter: ["I'm moving to Kansas City", 'Get in the car Brooks, we are going to Kansas City'],
+      boost: { maxHp: 1.4, dmg: 1.5, speed: 1.1 },
+    },
+    designed: true,
+  },
 ].map(makeChar);
 
 function trackMeta(cdef, key) {

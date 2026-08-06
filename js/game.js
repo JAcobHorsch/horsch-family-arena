@@ -59,7 +59,7 @@ const Game = (() => {
       cdef, upg, stats,
       x: 260, y: GROUND_Y, vx: 0, vy: 0, w: 36, h: 96, facing: 1,
       hp: stats.maxHp, energy: 100, onGround: true, crouch: false,
-      buffT: 0, buffDmg: 1, buffSpeed: 1, returnT: 0,
+      buffT: 0, buffDmg: 1, buffSpeed: 1, returnT: 0, diveT: 0,
       attack: null, hurtT: 0, invulnT: 0, walkCyc: 0, animT: 0, flash: 0,
       ascended: upg.ascended, size: upg.ascended ? (cdef.finalForm.sizeMult || 1.12) : (cdef.baseSize || 1),
     };
@@ -354,6 +354,17 @@ const Game = (() => {
         Sfx.heavy();
         break;
       }
+      case 'dive': {
+        // someone offscreen tosses Dayne a volleyball. this ends predictably.
+        projectiles.push({
+          type: 'fire', hostile: false, noContact: true, shape: 'ball',
+          x: p.x + p.facing * 520, y: p.y - 120, vx: -p.facing * 700, vy: 40,
+          dmg: 0, r: 10, life: 0.8, pierce: true, color: '#f2f4f8',
+        });
+        p.diveT = 0.62;
+        p.diveDmg = Math.round((def.selfDmg || 6) * (1 + 0.5 * p.upg.ability) * (asc ? 1.5 : 1));
+        break;
+      }
       case 'oops': {
         // Erika's special. It helps no one.
         const selfDmg = Math.round((def.selfDmg || 8) * (1 + 0.5 * p.upg.ability) * (asc ? 1.5 : 1));
@@ -381,6 +392,25 @@ const Game = (() => {
     if (p.invulnT > 0) p.invulnT -= dt;
     if (p.hurtT > 0) { p.hurtT -= dt; }
     if (p.buffT > 0) p.buffT -= dt;
+    // Volleyball Dive: the miss, the sternum, the shame
+    if (p.diveT > 0) {
+      p.diveT -= dt;
+      if (p.diveT <= 0) {
+        p.x = clamp(p.x + p.facing * 80, 40, STAGE_W - 40);
+        p.hp = Math.max(1, p.hp - (p.diveDmg || 6));
+        p.hurtT = 0.4; p.flash = 0.8;
+        addFloat(p.x, p.y - p.h - 16, '-' + (p.diveDmg || 6), '#ff6a5a');
+        const DIVE_LINES = ['RIGHT IN THE STERNUM', 'HE MISSED', 'NOT EVEN CLOSE', 'GOT IT! (he did not)'];
+        addFloat(p.x, p.y - p.h - 42, DIVE_LINES[Math.floor(Math.random() * DIVE_LINES.length)], '#e8d24a', true);
+        projectiles.push({
+          type: 'fire', hostile: false, noContact: true, shape: 'ball', bounce: true,
+          x: p.x + p.facing * 10, y: p.y - 60, vx: -p.facing * 180, vy: -260,
+          dmg: 0, r: 10, life: 1.3, pierce: true, color: '#f2f4f8',
+        });
+        Sfx.hurt();
+        shakeT = 0.15; shakeMag = 3;
+      }
+    }
     // Boomerang Brooks: the return leg of the self-toss
     if (p.returnT > 0) {
       p.returnT -= dt;
@@ -1150,6 +1180,10 @@ const Game = (() => {
       g.fillStyle = look.helmetColor || '#d43b2f';
       g.beginPath(); g.arc(3 + lean * 0.6, headY - 9, 9.5, Math.PI, 0); g.fill();
       g.fillRect(-9 + lean * 0.6, headY - 10, 24, 3.5);
+    } else if (look.cap) {
+      g.fillStyle = look.capColor || '#d43b2f';
+      g.beginPath(); g.arc(hx, hy - 3.5, 9.2, Math.PI, 0); g.fill();
+      g.fillRect(hx - 1, hy - 6, 14, 3.2); // forward brim
     } else if (look.crown) {
       g.fillStyle = look.crownColor || '#ffd24a';
       g.beginPath();
@@ -1206,6 +1240,14 @@ const Game = (() => {
         g.beginPath(); g.arc(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5, 4.5, 0, 7); g.fill();
       } else if (o.weaponStyle === 'staff') {
         g.beginPath(); g.moveTo(frontHand[0] - wl * 0.8, frontHand[1] + wl * 0.5); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.6); g.stroke();
+      } else if (o.weaponStyle === 'noodle') {
+        // floppy, wobbling, deeply unthreatening
+        const wob = Math.sin((o.animT || 0) * 9) * 4;
+        g.strokeStyle = wc; g.lineWidth = 5; g.lineCap = 'round';
+        g.beginPath();
+        g.moveTo(frontHand[0], frontHand[1]);
+        g.quadraticCurveTo(frontHand[0] + wl * 0.6, frontHand[1] - wl * 0.8, frontHand[0] + wl + 2, frontHand[1] - wl * 0.3 + wob);
+        g.stroke();
       } else if (o.weaponStyle === 'teeth') {
         // the chomp: jaws snap shut at the strike point
         if (o.attackKey && (o.attackExt || 0) > 0.25) {
