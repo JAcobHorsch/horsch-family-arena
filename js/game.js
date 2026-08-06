@@ -171,7 +171,9 @@ const Game = (() => {
 
   // ---------- Specials (data-driven — see the special move library in data.js) ----------
   function fireSpecial() {
-    const p = player, st = p.stats, def = p.cdef.special;
+    const p = player, st = p.stats;
+    // final forms may carry a whole replacement special (e.g. Ryan Dugan)
+    const def = (p.ascended && p.cdef.finalForm.special) || p.cdef.special;
     if (p.energy < st.energyCost) { addFloat(p.x, p.y - p.h - 18, 'NO ENERGY', '#7fb8ff'); Sfx.denied(); return; }
     p.energy -= st.energyCost;
     Sfx.special();
@@ -266,6 +268,34 @@ const Game = (() => {
         p.hp = Math.min(p.stats.maxHp, p.hp + amt);
         addFloat(p.x, p.y - p.h - 18, '+' + amt + ' HP', '#7fd98a', true);
         burst(p.x, p.y - 50, '#7fd98a', 20, 240, false);
+        break;
+      }
+      case 'shout': {
+        const R = (def.radius || 320) * (asc ? 1.4 : 1);
+        if (def.shoutLines) def.shoutLines.forEach((ln, i) => addFloat(p.x, p.y - p.h - 34 + i * 26, ln, p.cdef.accent, true));
+        for (const e of [...enemies]) {
+          if (Math.abs(e.x - p.x) < R + e.w / 2) {
+            if (def.stun) e.hurtT = Math.max(e.hurtT, def.stun);
+            hitEnemy(e, (def.dmg || 20) * S, (e.x >= p.x ? 1 : -1) * (def.kb || 380), -120, true);
+          }
+        }
+        burst(p.x, p.y - 60, col, 20, 360, false);
+        shakeT = 0.3; shakeMag = 7;
+        break;
+      }
+      case 'radial': {
+        const n = def.count || 8;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          projectiles.push({
+            type: 'fire', hostile: false, x: p.x, y: p.y - 55,
+            vx: Math.cos(a) * (def.speed || 480), vy: Math.sin(a) * (def.speed || 480) * 0.6,
+            dmg: (def.dmg || 16) * S, r: def.r || 9, life: def.life || 1.4,
+            pierce: true, shape: def.shape, color: col,
+          });
+        }
+        if (def.shoutLines) def.shoutLines.forEach((ln, i) => addFloat(p.x, p.y - p.h - 34 + i * 26, ln, p.cdef.accent, true));
+        shakeT = 0.25; shakeMag = 6;
         break;
       }
       case 'car': {
@@ -938,6 +968,12 @@ const Game = (() => {
       g.fillStyle = look.beardColor || '#6b4423';
       g.beginPath(); g.arc(3 + lean * 0.6, headY - 4, 7.6, -0.04 * Math.PI, 1.04 * Math.PI); g.fill();
     }
+    if (look.glasses) {
+      g.strokeStyle = '#2a2a35'; g.lineWidth = 1.4;
+      g.beginPath(); g.arc(0.5 + lean * 0.6, headY - 6.5, 3.1, 0, 7); g.stroke();
+      g.beginPath(); g.arc(7.5 + lean * 0.6, headY - 6.5, 3.1, 0, 7); g.stroke();
+      g.beginPath(); g.moveTo(3.6 + lean * 0.6, headY - 6.5); g.lineTo(4.4 + lean * 0.6, headY - 6.5); g.stroke();
+    }
     }
     if (o.boss) { // horns
       g.fillStyle = '#e8d9b0';
@@ -958,6 +994,22 @@ const Game = (() => {
         g.beginPath(); g.arc(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5, 4.5, 0, 7); g.fill();
       } else if (o.weaponStyle === 'staff') {
         g.beginPath(); g.moveTo(frontHand[0] - wl * 0.8, frontHand[1] + wl * 0.5); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.6); g.stroke();
+      } else if (o.weaponStyle === 'letters') {
+        // his name orbits his fist, spelling doom
+        const word = (o.weaponWord || 'RON').slice(0, 9);
+        g.font = '700 7px "Segoe UI", sans-serif';
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillStyle = wc;
+        for (let li = 0; li < word.length; li++) {
+          if (word[li] === ' ') continue;
+          const ang = (o.animT || 0) * 1.3 + li * (Math.PI * 2 / word.length);
+          g.save();
+          g.translate(frontHand[0] + Math.cos(ang) * 13, frontHand[1] + Math.sin(ang) * 8);
+          g.scale(o.facing, 1); // unmirror the glyphs
+          g.fillText(word[li], 0, 0);
+          g.restore();
+        }
+        g.textBaseline = 'alphabetic';
       } else if (o.weaponStyle === 'swat') {
         // her weapon is disappointment; there is nothing to draw
       } else if (o.weaponStyle === 'sandwich') {
@@ -1068,7 +1120,9 @@ const Game = (() => {
           onGround: p.onGround, crouch: p.crouch,
           attackKey: p.attack ? p.attack.key : null, attackExt: attackExt(p.attack),
           hurt: p.hurtT > 0, flash: p.flash, frozen: false,
-          weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, weaponColors: p.cdef.weaponColors, ascended: p.ascended,
+          weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, weaponColors: p.cdef.weaponColors,
+          weaponWord: p.upg.weapon > 0 ? trackMeta(p.cdef, 'weapon').tiers[p.upg.weapon - 1].split(' ')[0] : '',
+          ascended: p.ascended,
           look: p.cdef.finalForm.look,
         });
       }
@@ -1086,6 +1140,18 @@ const Game = (() => {
       g.fillStyle = pr.color;
       if (pr.type === 'wave' || pr.type === 'pwave') {
         g.beginPath(); g.moveTo(pr.x - 16, GROUND_Y); g.lineTo(pr.x, GROUND_Y - 34); g.lineTo(pr.x + 16, GROUND_Y); g.fill();
+      } else if (pr.shape === 'glasses') {
+        g.save();
+        g.translate(pr.x, pr.y);
+        g.rotate(pr.life * 8);
+        g.fillStyle = 'rgba(160,220,255,0.35)';
+        g.beginPath(); g.arc(-5, 0, 4, 0, 7); g.fill();
+        g.beginPath(); g.arc(5, 0, 4, 0, 7); g.fill();
+        g.strokeStyle = '#2a2a35'; g.lineWidth = 2;
+        g.beginPath(); g.arc(-5, 0, 4, 0, 7); g.stroke();
+        g.beginPath(); g.arc(5, 0, 4, 0, 7); g.stroke();
+        g.beginPath(); g.moveTo(-1.5, 0); g.lineTo(1.5, 0); g.stroke();
+        g.restore();
       } else if (pr.shape === 'car') {
         g.save();
         g.translate(pr.x, pr.y);

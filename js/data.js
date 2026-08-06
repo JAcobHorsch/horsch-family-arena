@@ -358,7 +358,44 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'ronathon',  name: 'RONATHON',   color: '#c24ae8' },
+  {
+    id: 'ronathon', name: 'RONATHON', color: '#c24ae8',
+    title: 'The Man of Many Names',
+    // All-rounder: dependable under any alias.
+    hp: 118, speed: 318, dmg: 1.06, atkSpeed: 0.97,
+    weaponStyle: 'letters',
+    special: {
+      type: 'shout', name: "I'M NOT BUYING YOU A NEW MINIVAN SAMANTHA!",
+      desc: 'He means it. A shockwave of pure dad-budget fury staggers everyone nearby.',
+      dmg: 20, radius: 320, kb: 400, stun: 0.4,
+      shoutLines: ["I'M NOT BUYING YOU", 'A NEW MINIVAN SAMANTHA!'],
+    },
+    tracks: {
+      weapon: {
+        icon: '🔤', label: 'Names',
+        tiers: ['RONALD', 'REGINALD', 'RON TRON THE SKELETON', 'REGGIE', 'DOUGANOLD'],
+        blurb: '+35% attack damage per tier — every alias hits harder than the last.',
+      },
+      armor: { tiers: ['Polo Shirt', 'Business Casual', 'Name Tag of Power', 'Triple-Alias Vest', 'The Full Douganold'] },
+      ability: {
+        icon: '📢', label: 'Dad Voice',
+        tiers: ['Stern Look', 'Raised Voice', 'Middle Name Used', 'Full Name Used', 'The Final Warning'],
+        blurb: '+40% shout damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'RYAN DUGAN',
+      desc: 'The final alias. Eyeglasses blast from his body in all directions. No one knows why. No one asks twice.',
+      look: { glasses: true },
+      special: {
+        type: 'radial', name: 'Glasses Barrage',
+        count: 10, dmg: 16, speed: 500, r: 9, shape: 'glasses', life: 1.6,
+        shoutLines: ["I'M NOT BUYING YOU", 'A NEW MINIVAN SAMANTHA!'],
+      },
+      boost: { dmg: 1.9, maxHp: 1.6 },
+    },
+    designed: true,
+  },
   { id: 'tim',       name: 'TIM',        color: '#cfe84a' },
   { id: 'myah',      name: 'MYAH',       color: '#e84ad0' },
   { id: 'isla',      name: 'ISLA',       color: '#f2a3c2' },
