@@ -268,6 +268,20 @@ const Game = (() => {
         burst(p.x, p.y - 50, '#7fd98a', 20, 240, false);
         break;
       }
+      case 'oops': {
+        // Erika's special. It helps no one.
+        const selfDmg = Math.round((def.selfDmg || 8) * (1 + 0.5 * p.upg.ability) * (asc ? 1.5 : 1));
+        p.hp = Math.max(1, p.hp - selfDmg);
+        p.flash = 0.8;
+        addFloat(p.x, p.y - p.h - 18, '-' + selfDmg, '#ff6a5a');
+        addFloat(p.x, p.y - p.h - 42, 'OH NO.', '#c9a227', true);
+        for (let i = 0; i < 14; i++) {
+          particles.push({ x: p.x + p.facing * rand(0, 8), y: p.y - rand(8, 38), vx: rand(-25, 25), vy: rand(40, 150), life: rand(0.4, 0.8), max: 0.8, r: rand(2, 4.5), color: '#7a5230', grav: true });
+        }
+        shakeT = 0.15; shakeMag = 3;
+        Sfx.hurt();
+        break;
+      }
     }
     // burn a bit of anim time so the special reads as a move
     p.attack = { key: 'A', su: 0.06, ac: 0.1, rec: 0.18, t: 0, hits: new Set(), def: null };
@@ -766,8 +780,8 @@ const Game = (() => {
       g.beginPath(); g.moveTo(from[0], from[1]); g.lineTo(to[0], to[1]); g.stroke();
     };
 
-    // final-form look overrides (bald / beard / shirtless / muscle)
-    const muscleW = look.muscle || 1;
+    // final-form look overrides (bald / beard / shirtless / muscle / fat)
+    const muscleW = look.fat ? 1.9 : (look.muscle || 1);
     const armW = 6 * (1 + (muscleW - 1) * 0.7);
     const torsoCol = look.shirtless ? o.skin : o.color;
     const backArmCol = look.shirtless ? hexMix(o.skin, '#000000', 0.3) : o.color2;
@@ -864,6 +878,10 @@ const Game = (() => {
     } else {
     // torso
     limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 13 * muscleW, torsoCol);
+    if (look.fat) {
+      g.fillStyle = o.color;
+      g.beginPath(); g.ellipse(2 + lean * 0.3, -36 * cf, 13, 11, 0, 0, 7); g.fill();
+    }
     if (look.shirtless) {
       // ab definition
       g.strokeStyle = hexMix(o.skin, '#000000', 0.25); g.lineWidth = 1.3;
@@ -922,6 +940,8 @@ const Game = (() => {
         g.beginPath(); g.arc(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5, 4.5, 0, 7); g.fill();
       } else if (o.weaponStyle === 'staff') {
         g.beginPath(); g.moveTo(frontHand[0] - wl * 0.8, frontHand[1] + wl * 0.5); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.6); g.stroke();
+      } else if (o.weaponStyle === 'swat') {
+        // her weapon is disappointment; there is nothing to draw
       } else if (o.weaponStyle === 'sandwich') {
         const sw = 8 + o.weaponTier * 1.7;
         g.fillStyle = '#e0a860';

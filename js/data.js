@@ -291,7 +291,39 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'erika',     name: 'ERIKA',      color: '#4a86e8' },
+  {
+    id: 'erika', name: 'ERIKA', color: '#4a86e8',
+    title: 'Hard Mode Herself',
+    // Terrible archetype: the worst at everything, on purpose.
+    hp: 70, speed: 210, dmg: 0.55, atkSpeed: 1.35,
+    weaponStyle: 'swat',
+    special: {
+      type: 'oops', name: 'Diarrhea',
+      desc: 'It goes down her own leg. Does nothing to enemies. Hurts Erika. Upgrades only mean more diarrhea.',
+      selfDmg: 8,
+    },
+    tracks: {
+      weapon: {
+        icon: '🖐', label: 'Her Hands',
+        tiers: ['Limp Wrist', 'Open Palm', 'Both Hands', 'Slightly Firmer Swat', 'Maximum Effort Swat'],
+        blurb: '+35% attack damage per tier, which for Erika means very little.',
+      },
+      armor: { tiers: ['Wet Wipes', 'Spare Pants', 'Plastic Poncho', 'Adult Diaper', 'Industrial Tarp'] },
+      ability: {
+        icon: '💩', label: 'Digestion',
+        tiers: ['Mild Rumble', 'Concerning Gurgle', 'Code Brown', 'Full Evacuation', 'The Unspeakable'],
+        blurb: 'Each tier is +50% more diarrhea. This helps no one.',
+      },
+    },
+    finalForm: {
+      name: 'RICKMOTHY',
+      desc: 'Somehow smaller, weaker, and fatter all at once. A lateral move at best.',
+      look: { fat: true },
+      boost: { maxHp: 0.9, dmg: 0.8, speed: 0.9, defense: 1.15, special: 1 },
+      sizeMult: 0.82,
+    },
+    designed: true,
+  },
   { id: 'levi',      name: 'LEVI',       color: '#8a4ae8' },
   { id: 'ronathon',  name: 'RONATHON',   color: '#c24ae8' },
   { id: 'tim',       name: 'TIM',        color: '#cfe84a' },
