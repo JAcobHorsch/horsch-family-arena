@@ -59,6 +59,7 @@ const Game = (() => {
       cdef, upg, stats,
       x: 260, y: GROUND_Y, vx: 0, vy: 0, w: 36, h: 96, facing: 1,
       hp: stats.maxHp, energy: 100, onGround: true, crouch: false,
+      buffT: 0, buffDmg: 1, buffSpeed: 1,
       attack: null, hurtT: 0, invulnT: 0, walkCyc: 0, animT: 0, flash: 0,
       ascended: upg.ascended, size: upg.ascended ? 1.12 : 1,
     };
@@ -157,41 +158,85 @@ const Game = (() => {
     if (player.hp <= 0) { player.hp = 0; loseLevel(); }
   }
 
-  // ---------- Specials ----------
+  // ---------- Specials (data-driven — see the special move library in data.js) ----------
   function fireSpecial() {
-    const p = player, st = p.stats;
+    const p = player, st = p.stats, def = p.cdef.special;
     if (p.energy < st.energyCost) { addFloat(p.x, p.y - p.h - 18, 'NO ENERGY', '#7fb8ff'); Sfx.denied(); return; }
     p.energy -= st.energyCost;
     Sfx.special();
     const asc = p.ascended;
-    const id = p.cdef.id;
-    if (id === 'blaze') {
-      projectiles.push({
-        type: 'fire', hostile: false, x: p.x + p.facing * 30, y: p.y - 55, vx: p.facing * 580, vy: 0,
-        dmg: 24 * st.specialMult, r: asc ? 22 : 13, life: 1.5, pierce: true, color: '#ff7a2c',
-      });
-    } else if (id === 'frost') {
-      const R = asc ? 250 : 175;
-      burst(p.x, p.y - 45, '#9fdcff', 34, 420, false);
-      for (const e of [...enemies]) {
-        if (Math.abs(e.x - p.x) < R + e.w / 2) {
-          e.frozenT = asc ? 3.4 : 2.1;
-          hitEnemy(e, 18 * st.specialMult, (e.x >= p.x ? 1 : -1) * 120, -80, true);
+    const S = st.specialMult;
+    const size = asc ? 1.45 : 1;
+    const col = p.cdef.color;
+    switch (def.type) {
+      case 'projectile': {
+        const n = def.count || 1;
+        for (let i = 0; i < n; i++) {
+          projectiles.push({
+            type: 'fire', hostile: false, x: p.x + p.facing * 30, y: p.y - 55 - i * 16,
+            vx: p.facing * (def.speed || 560), vy: def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0,
+            dmg: (def.dmg || 22) * S, r: (def.r || 13) * size, life: 1.5, pierce: def.pierce !== false, color: col,
+          });
         }
+        break;
       }
-      shakeT = 0.3; shakeMag = 8;
-    } else if (id === 'volt') {
-      const dx = (asc ? 400 : 290) * p.facing;
-      const x0 = Math.min(p.x, p.x + dx), x1 = Math.max(p.x, p.x + dx);
-      for (let i = 0; i < 16; i++) particles.push({ x: x0 + (x1 - x0) * (i / 15), y: p.y - rand(20, 80), vx: 0, vy: rand(-60, 60), life: 0.35, max: 0.35, r: rand(2, 5), color: '#fff7ae', grav: false });
-      for (const e of [...enemies]) {
-        if (e.x + e.w / 2 > x0 - 20 && e.x - e.w / 2 < x1 + 20) {
-          hitEnemy(e, 22 * st.specialMult, p.facing * 260, -180, true);
+      case 'nova': {
+        const R = (def.radius || 175) * size;
+        burst(p.x, p.y - 45, col, 34, 420, false);
+        for (const e of [...enemies]) {
+          if (Math.abs(e.x - p.x) < R + e.w / 2) {
+            if (def.freeze) e.frozenT = def.freeze * (asc ? 1.6 : 1);
+            hitEnemy(e, (def.dmg || 18) * S, (e.x >= p.x ? 1 : -1) * (def.kb || 120), -80, true);
+          }
         }
+        shakeT = 0.3; shakeMag = 8;
+        break;
       }
-      p.x = clamp(p.x + dx, 40, STAGE_W - 40);
-      p.invulnT = Math.max(p.invulnT, 0.35);
-      shakeT = 0.2; shakeMag = 6;
+      case 'dash': {
+        const dx = (def.dist || 290) * (asc ? 1.35 : 1) * p.facing;
+        const x0 = Math.min(p.x, p.x + dx), x1 = Math.max(p.x, p.x + dx);
+        for (let i = 0; i < 16; i++) particles.push({ x: x0 + (x1 - x0) * (i / 15), y: p.y - rand(20, 80), vx: 0, vy: rand(-60, 60), life: 0.35, max: 0.35, r: rand(2, 5), color: p.cdef.accent, grav: false });
+        for (const e of [...enemies]) {
+          if (e.x + e.w / 2 > x0 - 20 && e.x - e.w / 2 < x1 + 20) hitEnemy(e, (def.dmg || 22) * S, p.facing * 260, -180, true);
+        }
+        p.x = clamp(p.x + dx, 40, STAGE_W - 40);
+        p.invulnT = Math.max(p.invulnT, 0.35);
+        shakeT = 0.2; shakeMag = 6;
+        break;
+      }
+      case 'buff': {
+        p.buffT = (def.dur || 6) * (asc ? 1.5 : 1);
+        p.buffDmg = def.dmgMult || 1.5;
+        p.buffSpeed = def.speedMult || 1.25;
+        burst(p.x, p.y - 50, col, 24, 300, false);
+        addFloat(p.x, p.y - p.h - 18, def.name.toUpperCase() + '!', p.cdef.accent, true);
+        break;
+      }
+      case 'rain': {
+        const n = def.count || 5;
+        for (let i = 0; i < n; i++) {
+          projectiles.push({
+            type: 'meteor', hostile: false, x: p.x + p.facing * (70 + i * 60) + rand(-18, 18), y: -30 - i * 50,
+            vx: p.facing * 40, vy: 540, dmg: (def.dmg || 16) * S, r: (def.r || 11) * size, life: 3, pierce: false, color: col,
+          });
+        }
+        break;
+      }
+      case 'wave': {
+        const dirs = def.both ? [-1, 1] : [p.facing];
+        for (const d of dirs) {
+          projectiles.push({ type: 'pwave', hostile: false, x: p.x + d * 30, y: GROUND_Y, vx: d * (def.speed || 340), vy: 0, dmg: (def.dmg || 20) * S, r: 18, life: 1.8, pierce: true, color: col });
+        }
+        shakeT = 0.2; shakeMag = 5;
+        break;
+      }
+      case 'heal': {
+        const amt = Math.round(p.stats.maxHp * (def.pct || 0.25) * (asc ? 1.5 : 1));
+        p.hp = Math.min(p.stats.maxHp, p.hp + amt);
+        addFloat(p.x, p.y - p.h - 18, '+' + amt + ' HP', '#7fd98a', true);
+        burst(p.x, p.y - 50, '#7fd98a', 20, 240, false);
+        break;
+      }
     }
     // burn a bit of anim time so the special reads as a move
     p.attack = { key: 'A', su: 0.06, ac: 0.1, rec: 0.18, t: 0, hits: new Set(), def: null };
@@ -204,6 +249,7 @@ const Game = (() => {
     if (p.flash > 0) p.flash -= dt * 5;
     if (p.invulnT > 0) p.invulnT -= dt;
     if (p.hurtT > 0) { p.hurtT -= dt; }
+    if (p.buffT > 0) p.buffT -= dt;
     p.energy = Math.min(100, p.energy + 11 * dt);
 
     const busy = p.hurtT > 0 || mode !== 'playing';
@@ -230,7 +276,7 @@ const Game = (() => {
       if (Input.right) mx += 1;
       if (mx !== 0) p.facing = mx;
     }
-    const targetVx = mx * st.speed;
+    const targetVx = mx * st.speed * (p.buffT > 0 ? p.buffSpeed : 1);
     p.vx += (targetVx - p.vx) * Math.min(1, dt * 12);
     if (mx !== 0 && p.onGround) p.walkCyc += dt * st.speed * 0.045;
 
@@ -259,7 +305,7 @@ const Game = (() => {
           if (hit) {
             a.hits.add(e);
             const dir = d.radius ? (e.x >= p.x ? 1 : -1) : p.facing;
-            hitEnemy(e, d.dmg * st.dmg, dir * d.kb, d.kbY, a.key !== 'X');
+            hitEnemy(e, d.dmg * st.dmg * (p.buffT > 0 ? p.buffDmg : 1), dir * d.kb, d.kbY, a.key !== 'X');
           }
         }
       }
@@ -351,6 +397,10 @@ const Game = (() => {
     for (const pr of [...projectiles]) {
       pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.life -= dt;
       if (pr.life <= 0 || pr.x < -60 || pr.x > STAGE_W + 60) { projectiles.splice(projectiles.indexOf(pr), 1); continue; }
+      if (!pr.hostile && pr.vy > 0 && pr.y >= GROUND_Y) {
+        burst(pr.x, GROUND_Y - 6, pr.color, 10, 220);
+        projectiles.splice(projectiles.indexOf(pr), 1); continue;
+      }
       if (Math.random() < 0.5) particles.push({ x: pr.x, y: pr.y + rand(-4, 4), vx: -pr.vx * 0.15, vy: rand(-30, 30), life: 0.25, max: 0.25, r: rand(1.5, 3.5), color: pr.color, grav: false });
       if (pr.hostile) {
         const [px, py, pw, ph] = entRect(player);
@@ -618,7 +668,21 @@ const Game = (() => {
       const wc = WEAPON_COLORS[o.weaponTier - 1];
       g.strokeStyle = wc; g.lineWidth = 3.4;
       if (o.weaponTier >= 5) { g.shadowColor = wc; g.shadowBlur = 8; }
-      g.beginPath(); g.moveTo(frontHand[0], frontHand[1]); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.35); g.stroke();
+      if (o.weaponStyle === 'club') {
+        g.lineWidth = 5;
+        g.beginPath(); g.moveTo(frontHand[0], frontHand[1]); g.lineTo(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5); g.stroke();
+        g.fillStyle = wc;
+        g.beginPath(); g.arc(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5, 4.5, 0, 7); g.fill();
+      } else if (o.weaponStyle === 'staff') {
+        g.beginPath(); g.moveTo(frontHand[0] - wl * 0.8, frontHand[1] + wl * 0.5); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.6); g.stroke();
+      } else if (o.weaponStyle === 'none') {
+        g.fillStyle = wc; g.globalAlpha = 0.85;
+        g.beginPath(); g.arc(frontHand[0], frontHand[1], 5.5, 0, 7); g.fill();
+        g.beginPath(); g.arc(backHand[0], backHand[1], 5, 0, 7); g.fill();
+        g.globalAlpha = 1;
+      } else {
+        g.beginPath(); g.moveTo(frontHand[0], frontHand[1]); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.35); g.stroke();
+      }
       g.shadowBlur = 0;
     }
     // fists
@@ -688,15 +752,22 @@ const Game = (() => {
           onGround: p.onGround, crouch: p.crouch,
           attackKey: p.attack ? p.attack.key : null, attackExt: attackExt(p.attack),
           hurt: p.hurtT > 0, flash: p.flash, frozen: false,
-          weaponTier: p.upg.weapon, ascended: p.ascended,
+          weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, ascended: p.ascended,
         });
+      }
+      if (p.buffT > 0) {
+        g.strokeStyle = p.cdef.accent;
+        g.globalAlpha = 0.45 + 0.3 * Math.sin(p.animT * 10);
+        g.lineWidth = 3;
+        g.beginPath(); g.ellipse(p.x, p.y - 2, 30, 8, 0, 0, 7); g.stroke();
+        g.globalAlpha = 1;
       }
     }
 
     // projectiles
     for (const pr of projectiles) {
       g.fillStyle = pr.color;
-      if (pr.type === 'wave') {
+      if (pr.type === 'wave' || pr.type === 'pwave') {
         g.beginPath(); g.moveTo(pr.x - 16, GROUND_Y); g.lineTo(pr.x, GROUND_Y - 34); g.lineTo(pr.x + 16, GROUND_Y); g.fill();
       } else {
         g.shadowColor = pr.color; g.shadowBlur = 12;
@@ -837,16 +908,14 @@ const Game = (() => {
   function drawPortrait(canvas, cdef, ascended) {
     const g = canvas.getContext('2d');
     g.clearRect(0, 0, canvas.width, canvas.height);
-    g.save();
-    g.translate(0, 0);
     drawFighter(g, {
-      x: 55, y: 118, facing: 1, size: ascended ? 1.2 : 1.1,
+      x: canvas.width / 2, y: canvas.height - 8, facing: 1,
+      size: (canvas.height / 118) * (ascended ? 1.08 : 1),
       color: cdef.color, color2: cdef.color2, accent: cdef.accent, skin: cdef.skin,
       moving: false, walkCyc: 0, animT: 2, onGround: true,
       crouch: false, attackKey: null, attackExt: 0,
-      hurt: false, flash: 0, frozen: false, weaponTier: 0, ascended,
+      hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: cdef.weaponStyle, ascended,
     });
-    g.restore();
   }
 
   function setPaused(v) { paused = v; if (!v) last = performance.now(); }

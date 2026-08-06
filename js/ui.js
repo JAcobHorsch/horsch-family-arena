@@ -52,7 +52,7 @@ const UI = (() => {
       card.style.setProperty('--cc', c.color);
       card.innerHTML = `
         ${u.ascended ? `<div class="ff-badge">★ ${c.finalForm.name} ★</div>` : ''}
-        <canvas width="110" height="130"></canvas>
+        <canvas width="76" height="92"></canvas>
         <div class="char-name">${u.ascended ? c.finalForm.name : c.name}</div>
         <div class="char-title">${c.title}</div>
         <div class="char-stats">
@@ -61,7 +61,7 @@ const UI = (() => {
           ${statBar('SPEED', st.speed / 460)}
         </div>
         <div class="char-upg">⚔ <b>${u.weapon}</b>/5 &nbsp; ⛨ <b>${u.armor}</b>/5 &nbsp; ✦ <b>${u.ability}</b>/5</div>
-        <div class="char-special">A: ${c.specialName} — ${u.ascended ? c.finalForm.desc : c.specialDesc}</div>`;
+        <div class="char-special">A: ${c.special.name} — ${u.ascended ? c.finalForm.desc : c.special.desc}</div>`;
       card.addEventListener('click', () => { Sfx.buy(); show(null); Game.startLevel(c.id); });
       grid.appendChild(card);
       Game.drawPortrait(card.querySelector('canvas'), c, u.ascended);
@@ -89,7 +89,8 @@ const UI = (() => {
     const cards = $('shopCards');
     cards.innerHTML = '';
 
-    for (const [key, track] of Object.entries(UPGRADE_TRACKS)) {
+    for (const key of ['weapon', 'armor', 'ability']) {
+      const track = trackMeta(c, key);
       const tier = u[key];
       const maxed = tier >= MAX_TIER;
       const cost = maxed ? 0 : track.costs[tier];

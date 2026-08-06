@@ -1,30 +1,19 @@
 // ===== Horsch Family Arena — static game data & balance =====
 
-const CHARACTERS = [
-  {
-    id: 'blaze', name: 'BLAZE', title: 'The Ember Fist',
-    color: '#ff5a2c', color2: '#8a1e00', accent: '#ffd977', skin: '#e8b58a',
-    hp: 95, speed: 360, dmg: 0.95, atkSpeed: 0.8,
-    specialName: 'Fireball', specialDesc: 'Hurls a piercing ball of flame across the arena.',
-    finalForm: { name: 'INFERNO KING', desc: 'Wreathed in living flame. Fireballs erupt twice as large.' },
-  },
-  {
-    id: 'frost', name: 'FROST', title: 'The Iron Glacier',
-    color: '#5ab8ff', color2: '#123c6b', accent: '#d9f1ff', skin: '#cfd8e6',
-    hp: 140, speed: 265, dmg: 1.0, atkSpeed: 1.05,
-    specialName: 'Ice Nova', specialDesc: 'Freezes and shatters everything nearby.',
-    finalForm: { name: 'GLACIER TITAN', desc: 'An unbreakable colossus. Novas leave enemies frozen solid.' },
-  },
-  {
-    id: 'volt', name: 'VOLT', title: 'The Storm Blade',
-    color: '#e6d84a', color2: '#5c5210', accent: '#ffffff', skin: '#d6a878',
-    hp: 115, speed: 305, dmg: 1.25, atkSpeed: 1.12,
-    specialName: 'Storm Dash', specialDesc: 'Blinks forward as lightning, scorching all in the path.',
-    finalForm: { name: 'STORM GOD', desc: 'Becomes the storm itself. Dashes chain devastation.' },
-  },
-];
+// -- small color helpers so each fighter only needs one base color --
+function hexMix(hex, target, f) {
+  const h = hex.replace('#', '');
+  const t = target.replace('#', '');
+  const c = [0, 2, 4].map(i => {
+    const a = parseInt(h.slice(i, i + 2), 16), b = parseInt(t.slice(i, i + 2), 16);
+    return Math.round(a + (b - a) * f).toString(16).padStart(2, '0');
+  });
+  return '#' + c.join('');
+}
 
 // Upgrade tracks: 5 tiers each. Maxing all three unlocks Ascension (final form).
+// Characters may override label/icon/tiers/blurb with their own themed versions;
+// costs and the underlying math stay global so balance is uniform.
 const UPGRADE_TRACKS = {
   weapon: {
     label: 'Weapons', icon: '⚔',
@@ -47,6 +36,67 @@ const UPGRADE_TRACKS = {
 };
 const MAX_TIER = 5;
 const ASCEND_COST = 6000;
+
+// Special move library — each character's A-button move is one of these types:
+//   projectile: {dmg, speed, r, pierce, count, spreadY}   straight shot(s)
+//   nova:       {dmg, radius, freeze, kb}                 blast around the fighter
+//   dash:       {dmg, dist}                               lightning blink through enemies
+//   buff:       {dur, dmgMult, speedMult}                 battle cry: temp power/speed
+//   rain:       {dmg, count, r}                           projectiles crash down ahead
+//   wave:       {dmg, speed, both}                        ground shockwave
+//   heal:       {pct}                                     restore % of max HP
+// Ascension automatically scales the special (double power, bigger effects).
+
+function makeChar(def) {
+  const base = {
+    title: 'Horsch Family Fighter',
+    hp: 110, speed: 310, dmg: 1.0, atkSpeed: 1.0,
+    skin: '#e8b58a',
+    weaponStyle: 'blade', // 'blade' | 'club' | 'staff' | 'none' (glowing fists)
+    special: { type: 'projectile', name: 'Energy Bolt', desc: 'Hurls a bolt of raw energy.', dmg: 22, speed: 560, r: 13, pierce: true },
+    tracks: {}, // per-character overrides of UPGRADE_TRACKS entries
+    designed: false,
+  };
+  const c = Object.assign(base, def);
+  c.color2 = c.color2 || hexMix(c.color, '#000000', 0.55);
+  c.accent = c.accent || hexMix(c.color, '#ffffff', 0.65);
+  c.finalForm = c.finalForm || { name: 'ASCENDED ' + c.name, desc: 'Final form to be designed — maxing all upgrades still unlocks a huge power boost.' };
+  return c;
+}
+
+// The Horsch family roster. Colors are provisional; stats, specials, weapons,
+// tracks and final forms get personalized one character at a time.
+const CHARACTERS = [
+  { id: 'todd',      name: 'SUPER TODD', color: '#e8524a' },
+  { id: 'sonya',     name: 'SONYA',      color: '#e84a92' },
+  { id: 'jordan',    name: 'JORDAN',     color: '#e8784a' },
+  { id: 'jerod',     name: 'JEROD',      color: '#e8c84a' },
+  { id: 'jacob',     name: 'JACOB',      color: '#4ae86a' },
+  { id: 'samantha',  name: 'SAMANTHA',   color: '#4ae8b2' },
+  { id: 'cassandra', name: 'CASSANDRA',  color: '#4adbe8' },
+  { id: 'erika',     name: 'ERIKA',      color: '#4a86e8' },
+  { id: 'levi',      name: 'LEVI',       color: '#8a4ae8' },
+  { id: 'ronathon',  name: 'RONATHON',   color: '#c24ae8' },
+  { id: 'tim',       name: 'TIM',        color: '#cfe84a' },
+  { id: 'myah',      name: 'MYAH',       color: '#e84ad0' },
+  { id: 'isla',      name: 'ISLA',       color: '#f2a3c2' },
+  { id: 'hayes',     name: 'HAYES',      color: '#5c4ae8' },
+  { id: 'addi',      name: 'ADDI',       color: '#e8a04a' },
+  { id: 'brooks',    name: 'BROOKS',     color: '#37b34a' },
+  { id: 'dayne',     name: 'DAYNE',      color: '#b0b6c4' },
+].map(makeChar);
+
+function trackMeta(cdef, key) {
+  const base = UPGRADE_TRACKS[key];
+  const o = (cdef.tracks && cdef.tracks[key]) || {};
+  return {
+    label: o.label || base.label,
+    icon: o.icon || base.icon,
+    tiers: o.tiers || base.tiers,
+    costs: base.costs,
+    blurb: o.blurb || base.blurb,
+  };
+}
 
 function computeStats(cdef, upg) {
   const w = upg.weapon, a = upg.armor, ab = upg.ability;

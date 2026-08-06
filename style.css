@@ -48,36 +48,36 @@ canvas#game { position:fixed; inset:0; display:block; }
 .moneytag { color:#ffd977; font-weight:800; font-size:16px; letter-spacing:1px; }
 
 /* ---------- Character select ---------- */
-#charGrid { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; max-width:980px; }
+#charGrid { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:1160px; }
 .char-card {
-  width:min(280px, 88vw); background:linear-gradient(180deg, #1c1726, #131019); border:2px solid #3a3350;
-  border-radius:14px; padding:14px 14px 16px; cursor:pointer; text-align:center; position:relative;
+  width:min(172px, 44vw); background:linear-gradient(180deg, #1c1726, #131019); border:2px solid #3a3350;
+  border-radius:12px; padding:10px 8px 12px; cursor:pointer; text-align:center; position:relative;
   transition:transform .12s, border-color .12s, box-shadow .12s;
 }
 .char-card:active { transform:scale(.97); }
 .char-card:hover { border-color:var(--cc, #f3c14b); box-shadow:0 0 20px rgba(243,193,75,.18); }
-.char-card canvas { width:110px; height:130px; }
-.char-name { font-size:20px; font-weight:900; letter-spacing:2px; color:var(--cc, #fff); }
-.char-title { font-size:11px; color:#8d8574; letter-spacing:2px; text-transform:uppercase; margin-bottom:8px; }
-.char-stats { display:flex; flex-direction:column; gap:4px; margin:8px 0; }
-.stat-row { display:flex; align-items:center; gap:8px; font-size:10px; color:#9a927e; }
-.stat-row b { width:46px; text-align:right; font-weight:600; letter-spacing:1px; }
+.char-card canvas { width:76px; height:92px; }
+.char-name { font-size:14px; font-weight:900; letter-spacing:1px; color:var(--cc, #fff); }
+.char-title { font-size:8.5px; color:#8d8574; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:5px; }
+.char-stats { display:flex; flex-direction:column; gap:3px; margin:6px 0; }
+.stat-row { display:flex; align-items:center; gap:6px; font-size:9px; color:#9a927e; }
+.stat-row b { width:38px; text-align:right; font-weight:600; letter-spacing:.5px; }
 .stat-bar { flex:1; height:6px; border-radius:3px; background:#26212f; overflow:hidden; }
 .stat-bar i { display:block; height:100%; border-radius:3px; background:var(--cc, #f3c14b); }
-.char-upg { font-size:11px; color:#b9b09a; letter-spacing:1px; }
+.char-upg { font-size:10px; color:#b9b09a; letter-spacing:.5px; }
 .char-upg b { color:#ffd977; }
 .ff-badge {
   position:absolute; top:-10px; left:50%; transform:translateX(-50%); white-space:nowrap;
   background:linear-gradient(180deg,#ffe08a,#e89b2d); color:#3a2000; font-size:10px; font-weight:900;
   letter-spacing:2px; padding:3px 10px; border-radius:99px; box-shadow:0 0 14px rgba(255,215,199,.6);
 }
-.char-special { font-size:11px; color:#7e7666; margin-top:6px; min-height:26px; }
+.char-special { font-size:9px; color:#7e7666; margin-top:5px; min-height:30px; }
 
 /* ---------- Marketplace ---------- */
 .shop-top { display:flex; gap:16px; align-items:center; flex-wrap:wrap; justify-content:center; }
-#shopCharTabs { display:flex; gap:8px; }
+#shopCharTabs { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; max-width:92vw; }
 .shop-tab {
-  font:inherit; font-size:13px; font-weight:700; letter-spacing:1px; cursor:pointer; padding:8px 16px;
+  font:inherit; font-size:11px; font-weight:700; letter-spacing:.5px; cursor:pointer; padding:6px 10px;
   border-radius:8px; background:#1b1626; color:#8d8574; border:2px solid #322b45;
 }
 .shop-tab.active { color:#fff; border-color:var(--cc, #f3c14b); background:#241d33; }
