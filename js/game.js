@@ -27,9 +27,9 @@ const Game = (() => {
   let mode = 'idle';        // idle | playing | victory | defeat
   let paused = false;
   let plan = null, theme = themeFor(1);
-  let player = null, enemies = [], projectiles = [], coins = [], particles = [], floats = [];
+  let player = null, enemies = [], projectiles = [], coins = [], particles = [], floats = [], minions = [];
   let waveIdx = 0, spawnDelay = 0, endTimer = 0, endFired = false;
-  let camX = 0, shakeT = 0, shakeMag = 0, hitstop = 0, timeScale = 1;
+  let camX = 0, shakeT = 0, shakeMag = 0, hitstop = 0, timeScale = 1, flashFxT = 0;
   let banner = null; // {text, sub, t}
   let earned = 0, lastCharId = null;
   let ambient = [];
@@ -63,7 +63,17 @@ const Game = (() => {
       attack: null, hurtT: 0, invulnT: 0, walkCyc: 0, animT: 0, flash: 0,
       ascended: upg.ascended, size: upg.ascended ? 1.12 : 1,
     };
-    enemies = []; projectiles = []; coins = []; particles = []; floats = [];
+    enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = [];
+    if (upg.ascended && cdef.finalForm.minions) {
+      cdef.finalForm.minions.forEach((mid, i) => {
+        const mdef = CHARACTERS.find(c => c.id === mid);
+        minions.push({
+          cdef: mdef, x: player.x - 60 - i * 40, y: GROUND_Y, vx: 0, vy: 0, facing: 1,
+          size: 0.55, walkCyc: 0, animT: rand(0, 6), cd: rand(1, 3), strikeT: 0,
+          oopsT: rand(6, 12), wanderX: 0, wanderT: 0, onGround: true,
+        });
+      });
+    }
     waveIdx = 0; spawnDelay = 1.2; endTimer = 0; endFired = false;
     camX = clamp(player.x - viewW / 2, 0, Math.max(0, STAGE_W - viewW));
     earned = 0; mode = 'playing'; paused = false; timeScale = 1; hitstop = 0;
@@ -234,6 +244,19 @@ const Game = (() => {
         shakeT = 0.2; shakeMag = 5;
         break;
       }
+      case 'flash': {
+        flashFxT = 0.35;
+        const range = (def.range || 420) * (asc ? 1.4 : 1);
+        for (const e of [...enemies]) {
+          const dx = e.x - p.x;
+          if (p.facing > 0 ? (dx > -40 && dx < range) : (dx < 40 && dx > -range)) {
+            if (def.stun) e.hurtT = Math.max(e.hurtT, def.stun * (asc ? 1.5 : 1));
+            hitEnemy(e, (def.dmg || 16) * S, Math.sign(dx || p.facing) * 100, -60, true);
+          }
+        }
+        shakeT = 0.15; shakeMag = 4;
+        break;
+      }
       case 'heal': {
         const amt = Math.round(p.stats.maxHp * (def.pct || 0.25) * (asc ? 1.5 : 1));
         p.hp = Math.min(p.stats.maxHp, p.hp + amt);
@@ -396,6 +419,50 @@ const Game = (() => {
     }
   }
 
+  // ---------- Minions (Babysitter Jordan's nieces & nephews) ----------
+  const OOPS_LINES = ['OOPS!', 'SORRY UNCLE JORDAN!', 'MY BAD!', 'I MEANT TO DO THAT', 'FRIENDLY FIRE!', 'WAS THAT YOU?'];
+  function updateMinion(m, dt) {
+    m.animT += dt;
+    if (m.strikeT > 0) m.strikeT -= dt;
+    m.vy += GRAV * dt;
+    m.y += m.vy * dt;
+    if (m.y >= GROUND_Y) { m.y = GROUND_Y; m.vy = 0; m.onGround = true; } else m.onGround = false;
+    if (mode !== 'playing') return;
+    m.cd -= dt;
+    m.wanderT -= dt;
+    if (m.wanderT <= 0) {
+      m.wanderT = rand(1.5, 3.5);
+      m.wanderX = rand(-70, 70);
+      if (Math.random() < 0.18 && m.onGround) m.vy = -420; // kids gonna hop
+    }
+    let target = null, best = 1e9;
+    for (const e of enemies) { const d = Math.abs(e.x - m.x); if (d < best) { best = d; target = e; } }
+    const anchor = target ? target.x + m.wanderX * 0.4 : player.x + m.wanderX;
+    const dx = anchor - m.x;
+    if (Math.abs(dx) > 30) {
+      m.facing = Math.sign(dx);
+      m.x = clamp(m.x + Math.sign(dx) * 240 * dt, 40, STAGE_W - 40);
+      m.walkCyc += dt * 11;
+    } else if (target) m.facing = Math.sign(target.x - m.x) || 1;
+    if (target && best < 70 && m.cd <= 0) {
+      m.cd = rand(1.2, 2.4);
+      m.strikeT = 0.22;
+      hitEnemy(target, 8 * player.stats.dmg, m.facing * 140, -100, false);
+    }
+    // the babysitting tax: sometimes they kick the wrong guy
+    m.oopsT -= dt;
+    if (m.oopsT <= 0) {
+      m.oopsT = rand(6, 13);
+      if (Math.abs(m.x - player.x) < 130 && player.hp > 1) {
+        player.hp = Math.max(1, player.hp - 3);
+        player.flash = 0.6;
+        addFloat(player.x, player.y - player.h - 16, '-3', '#ff6a5a');
+        addFloat(m.x, m.y - 62, OOPS_LINES[Math.floor(Math.random() * OOPS_LINES.length)], m.cdef.accent, true);
+        Sfx.hurt();
+      }
+    }
+  }
+
   // ---------- Projectiles / coins / fx ----------
   function updateProjectiles(dt) {
     for (const pr of [...projectiles]) {
@@ -484,6 +551,7 @@ const Game = (() => {
 
     updatePlayer(dt);
     for (const e of [...enemies]) updateEnemy(e, dt);
+    for (const m of minions) updateMinion(m, dt);
     updateProjectiles(dt);
     updateCoins(dt);
     updateFx(dt);
@@ -523,6 +591,7 @@ const Game = (() => {
     camX += (target - camX) * Math.min(1, dt * 6);
     if (STAGE_W < viewW) camX = (STAGE_W - viewW) / 2;
     if (shakeT > 0) shakeT -= dt;
+    if (flashFxT > 0) flashFxT -= dt;
     if (banner) { banner.t -= dt; if (banner.t <= 0) banner = null; }
   }
 
@@ -715,6 +784,11 @@ const Game = (() => {
         g.beginPath(); g.arc(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5, 4.5, 0, 7); g.fill();
       } else if (o.weaponStyle === 'staff') {
         g.beginPath(); g.moveTo(frontHand[0] - wl * 0.8, frontHand[1] + wl * 0.5); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.6); g.stroke();
+      } else if (o.weaponStyle === 'feet') {
+        g.fillStyle = wc; g.globalAlpha = 0.85;
+        g.beginPath(); g.arc(frontFoot[0], frontFoot[1] - 2, 5, 0, 7); g.fill();
+        g.beginPath(); g.arc(backFoot[0], backFoot[1] - 2, 4.6, 0, 7); g.fill();
+        g.globalAlpha = 1;
       } else if (o.weaponStyle === 'book') {
         const bw = 9 + o.weaponTier * 1.6, bh = 7 + o.weaponTier * 0.8;
         g.fillStyle = wc;
@@ -785,6 +859,16 @@ const Game = (() => {
         g.fillStyle = 'rgba(255,80,60,0.85)';
         g.beginPath(); g.arc(e.x, e.y - e.h - 22, 5, 0, 7); g.fill();
       }
+    }
+
+    for (const m of minions) {
+      drawFighter(g, {
+        x: m.x, y: m.y, facing: m.facing, size: m.size,
+        color: m.cdef.color, color2: m.cdef.color2, accent: m.cdef.accent, skin: m.cdef.skin,
+        moving: m.strikeT <= 0, walkCyc: m.walkCyc, animT: m.animT,
+        onGround: m.y >= GROUND_Y - 1, attackKey: m.strikeT > 0 ? 'strike' : null,
+        hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: 'none', crouch: false, ascended: false,
+      });
     }
 
     const p = player;
@@ -947,6 +1031,10 @@ const Game = (() => {
     const vg = ctx.createRadialGradient(w / 2, h / 2, h * 0.45, w / 2, h / 2, h * 0.95);
     vg.addColorStop(0, 'transparent'); vg.addColorStop(1, 'rgba(0,0,0,0.5)');
     ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+    if (flashFxT > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,' + Math.min(0.85, flashFxT * 2.6).toFixed(3) + ')';
+      ctx.fillRect(0, 0, w, h);
+    }
     if (mode !== 'idle') drawHUD();
   }
 
@@ -997,6 +1085,7 @@ const Game = (() => {
       })),
       player: player && { x: Math.round(player.x), hp: Math.round(player.hp), energy: Math.round(player.energy), attack: player.attack && player.attack.key },
       coins: coins.length, projectiles: projectiles.length,
+      minions: minions.map(m => ({ id: m.cdef.id, x: Math.round(m.x) })),
     };
   }
 

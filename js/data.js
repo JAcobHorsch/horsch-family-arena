@@ -126,7 +126,37 @@ const CHARACTERS = [
     },
     designed: true,
   },
-  { id: 'jordan',    name: 'JORDAN',     color: '#e8784a' },
+  {
+    id: 'jordan', name: 'JORDAN', color: '#e8784a',
+    title: 'The Shutter Speedster',
+    // Speedster: fastest feet in the family, glass jaw.
+    hp: 92, speed: 380, dmg: 0.9, atkSpeed: 0.78,
+    weaponStyle: 'feet',
+    special: {
+      type: 'flash', name: 'Photography',
+      desc: 'Snaps a photo — the camera flash sears everything in front of him and leaves enemies seeing spots.',
+      dmg: 16, range: 430, stun: 0.9,
+    },
+    tracks: {
+      weapon: {
+        icon: '🦵', label: 'Kicks',
+        tiers: ['Front Kick', 'Roundhouse', 'Spinning Back Kick', 'Flying Scissor Kick', 'The 720 No-Look'],
+        blurb: '+35% attack damage per tier — fancier footwork hits harder.',
+      },
+      armor: { tiers: ['Hoodie', 'Camera Strap Harness', 'Photographer Vest', 'Tripod Plating', 'Uncle Armor'] },
+      ability: {
+        icon: '📸', label: 'Camera',
+        tiers: ['Disposable Camera', 'Point & Shoot', 'DSLR', 'Full-Frame Mirrorless', 'The Paparazzi Rig'],
+        blurb: '+40% flash damage, cheaper energy cost per tier.',
+      },
+    },
+    finalForm: {
+      name: 'BABYSITTER JORDAN',
+      desc: 'The nieces and nephews join the fight — Hayes, Addi, Brooks and Isla swarm his enemies... and occasionally kick Uncle Jordan by mistake.',
+      minions: ['hayes', 'addi', 'brooks', 'isla'],
+    },
+    designed: true,
+  },
   { id: 'jerod',     name: 'JEROD',      color: '#e8c84a' },
   { id: 'jacob',     name: 'JACOB',      color: '#4ae86a' },
   { id: 'samantha',  name: 'SAMANTHA',   color: '#4ae8b2' },
