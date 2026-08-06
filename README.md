@@ -3,7 +3,14 @@
 *Fight. Earn. Ascend.* A Mortal Kombat-styled side-scrolling arena brawler that runs in any
 browser — desktop or mobile. No build step, no dependencies: plain HTML5 canvas + vanilla JS.
 
-## Run it
+## ▶ Play now
+
+**<https://jacobhorsch.github.io/horsch-family-arena/>**
+
+On a phone, open that link and use "Add to Home Screen" for a fullscreen, app-like experience.
+Progress saves per device.
+
+## Run it locally
 
 Any static file server works. From this folder:
 
