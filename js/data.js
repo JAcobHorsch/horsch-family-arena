@@ -707,8 +707,8 @@ const WORLDS = [
     theme: { sky1: '#2e1e3e', sky2: '#0d0a14', glow: '#ffb04a', ground: '#1f2418', groundTop: '#3d4a2a', far: '#191024', near: '#242c1a' },
     enemies: {
       grunt:   { name: 'Yard Gnome',        color: '#c9342a', color2: '#3a5a8a', accessory: 'gnomehat' },
-      stinger: { name: 'Murder Wasp',       color: '#e8c84a', color2: '#2a2418', accessory: 'wings' },
-      brute:   { name: 'Trash Panda',       color: '#8d8d96', color2: '#3a3a42', accessory: 'mask' },
+      stinger: { name: 'Murder Wasp',       color: '#e8c84a', color2: '#2a2418', accessory: 'wings', signature: 'lunge' },
+      brute:   { name: 'Trash Panda',       color: '#8d8d96', color2: '#3a3a42', accessory: 'mask', signature: 'thief' },
       shooter: { name: 'Sprinkler Sentry',  color: '#5fae6a', color2: '#24482a', accessory: 'antenna' },
       boss:    { name: 'The Goose', color: '#b8bcc4', color2: '#1d1d24', bossKind: 'goose' },
     },
@@ -719,8 +719,8 @@ const WORLDS = [
     props: 'pipes',
     theme: { sky1: '#0f2a28', sky2: '#050d0d', glow: '#4ae8b2', ground: '#132018', groundTop: '#28443a', far: '#0a1a17', near: '#123128' },
     enemies: {
-      grunt:   { name: 'Clog Blob',       color: '#6a8a3a', color2: '#2c3a18', accessory: 'drip' },
-      stinger: { name: 'Drain Rat',       color: '#8a7a6a', color2: '#3a3028', accessory: 'ears' },
+      grunt:   { name: 'Clog Blob',       color: '#6a8a3a', color2: '#2c3a18', accessory: 'drip', signature: 'split' },
+      stinger: { name: 'Drain Rat',       color: '#8a7a6a', color2: '#3a3028', accessory: 'ears', signature: 'pack' },
       brute:   { name: 'Rust Golem',      color: '#b06a32', color2: '#4d2a10', accessory: 'bolts' },
       shooter: { name: 'Grease Spitter',  color: '#3a3a2a', color2: '#e8c84a', accessory: 'drip' },
       boss:    { name: 'The Water Heater', color: '#b06a32', color2: '#4d2a10', bossKind: 'heater' },
@@ -733,7 +733,7 @@ const WORLDS = [
     theme: { sky1: '#4a1e2e', sky2: '#140a10', glow: '#ff6a3c', ground: '#26221e', groundTop: '#4a4238', far: '#1d1218', near: '#2c2018' },
     enemies: {
       grunt:   { name: 'Traffic Cone',        color: '#e8742a', color2: '#5a2c10', accessory: 'conehat' },
-      stinger: { name: 'Runaway Tire',        color: '#3a3a42', color2: '#18181e', accessory: 'tire' },
+      stinger: { name: 'Runaway Tire',        color: '#3a3a42', color2: '#18181e', signature: 'roll' },
       brute:   { name: 'Rest-Stop Sasquatch', color: '#6a4a32', color2: '#2c1e12', accessory: 'ears' },
       shooter: { name: 'Speed Camera',        color: '#6a7288', color2: '#282c3a', accessory: 'antenna' },
       boss:    { name: 'Road Rage', color: '#b8a888', color2: '#3a3028', bossKind: 'van' },
@@ -745,8 +745,8 @@ const WORLDS = [
     props: 'castle',
     theme: { sky1: '#241040', sky2: '#0a0614', glow: '#c24ae8', ground: '#1a1224', groundTop: '#38284a', far: '#140a20', near: '#221430' },
     enemies: {
-      grunt:   { name: 'Skeleton',  color: '#d8d4c8', color2: '#8a8578', accessory: 'ribs' },
-      stinger: { name: 'Imp',       color: '#d4503a', color2: '#4d1408', accessory: 'imphorns' },
+      grunt:   { name: 'Skeleton',  color: '#d8d4c8', color2: '#8a8578', accessory: 'ribs', signature: 'revive' },
+      stinger: { name: 'Imp',       color: '#d4503a', color2: '#4d1408', accessory: 'imphorns', signature: 'blink' },
       brute:   { name: 'Ogre',      color: '#5f8a3a', color2: '#243a12', accessory: 'imphorns' },
       shooter: { name: 'Dark Mage', color: '#7a4ae8', color2: '#2c1460', accessory: 'wizardhat' },
       boss:    { name: 'Shadow Dragon', color: '#8a4ae8', color2: '#2c1460', bossKind: 'dragon' },
@@ -790,11 +790,18 @@ function levelPlan(L) {
   }
   if (lw === 5) waves[waves.length - 1].push('boss');
 
+  // level events: a chance of a mutator on non-boss levels from level 2 on
+  const EVENT_POOL = ['coinrain', 'fog', 'fullsend', 'goose'];
+  const event = (lw !== 5 && L >= 2 && Math.random() < 0.35)
+    ? EVENT_POOL[Math.floor(Math.random() * EVENT_POOL.length)]
+    : null;
+
   const k = L - 1;
   return {
     level: L,
     world, lw,
     levelName: world.levelNames[lw - 1],
+    event,
     waves,
     hpMult: 1 + 0.22 * k + 0.035 * k * k,
     dmgMult: 1 + 0.16 * k,

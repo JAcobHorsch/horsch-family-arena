@@ -48,8 +48,9 @@ const Game = (() => {
   let mode = 'idle';        // idle | playing | victory | defeat
   let paused = false;
   let plan = null, theme = themeFor(1);
-  let player = null, enemies = [], projectiles = [], coins = [], particles = [], floats = [], minions = [], beams = [];
+  let player = null, enemies = [], projectiles = [], coins = [], particles = [], floats = [], minions = [], beams = [], pickups = [];
   let waveIdx = 0, spawnDelay = 0, endTimer = 0, endFired = false;
+  let coinrainT = 0, gooseSpawned = false;
   let camX = 0, shakeT = 0, shakeMag = 0, hitstop = 0, timeScale = 1, flashFxT = 0;
   let banner = null; // {text, sub, t}
   let earned = 0, lastCharId = null;
@@ -81,10 +82,13 @@ const Game = (() => {
       x: 260, y: GROUND_Y, vx: 0, vy: 0, w: 36, h: 96, facing: 1,
       hp: stats.maxHp, energy: 100, onGround: true, crouch: false,
       buffT: 0, buffDmg: 1, buffSpeed: 1, returnT: 0, diveT: 0,
+      combo: 0, comboT: 0, comboPop: 0,
+      pwGiantT: 0, pwMagnetT: 0, shieldHits: 0,
       attack: null, hurtT: 0, invulnT: 0, walkCyc: 0, animT: 0, flash: 0,
       ascended: upg.ascended, size: upg.ascended ? (cdef.finalForm.sizeMult || 1.12) : (cdef.baseSize || 1),
     };
-    enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = []; beams = [];
+    enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = []; beams = []; pickups = [];
+    coinrainT = 2; gooseSpawned = false;
     if (upg.ascended && cdef.finalForm.minions) {
       cdef.finalForm.minions.forEach((mid, i) => {
         const mdef = CHARACTERS.find(c => c.id === mid);
@@ -100,7 +104,9 @@ const Game = (() => {
     earned = 0; mode = 'playing'; paused = false; timeScale = 1; hitstop = 0;
     ambient = [];
     Input.consume(); // discard anything buffered on menu screens
-    setBanner(plan.levelName.toUpperCase(), plan.world.name + '  —  LEVEL ' + plan.level + (plan.boss ? '  —  BOSS' : ''), 2.2);
+    const evLabel = { coinrain: 'EVENT: COIN RAIN', fog: 'EVENT: FOG NIGHT', fullsend: 'EVENT: FULL SEND', goose: 'EVENT: GOOSE SIGHTING' }[plan.event] || '';
+    setBanner(plan.levelName.toUpperCase(),
+      plan.world.name + '  —  LEVEL ' + plan.level + (plan.boss ? '  —  BOSS' : '') + (evLabel ? '  —  ' + evLabel : ''), 2.2);
   }
 
   function spawnWave() {
@@ -120,6 +126,21 @@ const Game = (() => {
         hurtT: 0, frozenT: 0, flash: 0, walkCyc: 0, animT: rand(0, 6),
         shockT: t.boss ? 4 : 0, onGround: true,
       };
+      // spawn modifiers: one roll per enemy, never on bosses
+      if (!t.boss) {
+        const roll = Math.random();
+        if (plan.level >= 3 && roll < 0.06) {
+          e.elite = true; e.valueMult = 5;
+          e.hp *= 2; e.maxHp *= 2;
+          e.size *= 1.15; e.w *= 1.15; e.h *= 1.15;
+        } else if (roll < 0.16 || plan.event === 'fullsend') {
+          e.frenzy = true; e.valueMult = 1.5;
+          e.speed *= 1.5; e.dmg *= 1.3;
+        } else if (roll < 0.26) {
+          e.armorHits = 2;
+        }
+      }
+      if (e.def.signature === 'roll') { e.rollDir = -dir; e.touchCd = 0; }
       enemies.push(e);
       burst(e.x, e.y - e.h / 2, theme.glow, 12, 200, false);
     }
@@ -129,7 +150,18 @@ const Game = (() => {
 
   function winLevel() {
     mode = 'victory'; timeScale = 0.55; endTimer = 2.0; endFired = false;
-    setBanner('VICTORY', '+$' + earned + ' earned', 2.0);
+    let sub = '+$' + earned + ' earned';
+    // bounty: win any level as the wanted fighter
+    const b = Save.data.bounty;
+    if (b && lastCharId === b.charId) {
+      Save.data.money += b.reward;
+      earned += b.reward;
+      sub += '  ·  BOUNTY +$' + b.reward + '!';
+      addFloat(player.x, player.y - player.h - 40, 'BOUNTY COMPLETE! +$' + b.reward, '#ffd24a', true);
+      Save.data.bounty = null;
+      ensureBounty();
+    }
+    setBanner('VICTORY', sub, 2.0);
     Sfx.victory();
     for (const c of coins) c.magnet = true; // vacuum the rest
   }
@@ -146,7 +178,22 @@ const Game = (() => {
   }
   function entRect(e) { return [e.x - e.w / 2, e.y - e.h * (e === player && e.crouch ? 0.62 : 1), e.w, e.h * (e === player && e.crouch ? 0.62 : 1)]; }
 
+  const IMPACT_WORDS = ['POW!', 'BAM!', 'WHACK!', 'BONK!', 'KRAK!', 'THWAP!'];
+  function impactWord(x, y, txt) {
+    floats.push({ x, y, txt, color: '#1a1408', t: 0.55, big: true, word: true, rot: rand(-0.18, 0.18) });
+  }
+
   function hitEnemy(e, dmg, kbx, kby, heavy) {
+    // armored enemies shrug off the first hits
+    if (e.armorHits > 0) {
+      e.armorHits--;
+      e.flash = 0.5;
+      e.vx += kbx * 0.2;
+      burst(e.x, e.y - e.h * 0.6, '#c9ccd8', 6, 180, false);
+      addFloat(e.x, e.y - e.h - 14, e.armorHits === 0 ? 'ARMOR BREAK!' : 'CLANK', '#c9ccd8', e.armorHits === 0);
+      Sfx.hit();
+      return;
+    }
     e.hp -= dmg;
     e.flash = 1;
     e.vx += kbx; e.vy += kby || 0;
@@ -155,15 +202,66 @@ const Game = (() => {
     if (e.state === 'windup') { e.state = 'approach'; e.cd = 0.5; }
     addFloat(e.x, e.y - e.h - 14, Math.round(dmg), '#ffd977');
     burst(e.x, e.y - e.h * 0.55, '#ffcf7a', heavy ? 10 : 5, heavy ? 320 : 200);
+    if (heavy && Math.random() < 0.35) impactWord(e.x + rand(-10, 10), e.y - e.h * 0.6, IMPACT_WORDS[Math.floor(Math.random() * IMPACT_WORDS.length)]);
     player.energy = Math.min(100, player.energy + 6);
+    // combo: consecutive hits without taking damage multiply coin drops
+    player.combo++;
+    player.comboT = 4;
+    player.comboPop = 0.25;
+    if (player.combo > 0 && player.combo % 10 === 0) addFloat(player.x, player.y - player.h - 34, 'COMBO ×' + player.combo + '!', '#ffd24a', true);
     hitstop = Math.max(hitstop, heavy ? 0.07 : 0.035);
     shakeT = Math.max(shakeT, heavy ? 0.22 : 0.1); shakeMag = heavy ? 7 : 3;
     heavy ? Sfx.heavy() : Sfx.hit();
-    if (e.hp <= 0) killEnemy(e);
+    if (e.hp <= 0) {
+      // fantasy skeletons sometimes collapse into a pile and reassemble
+      if (e.def.signature === 'revive' && !e.revived && Math.random() < 0.6) {
+        e.revived = true;
+        e.state = 'pile';
+        e.pileT = 2.5;
+        e.hp = 0.1;
+        burst(e.x, e.y - 20, '#d8d4c8', 14, 220);
+        addFloat(e.x, e.y - 40, 'rattle rattle...', '#d8d4c8');
+        return;
+      }
+      killEnemy(e);
+      return;
+    }
+    // imps blink away when struck
+    if (e.def.signature === 'blink' && Math.random() < 0.4) {
+      burst(e.x, e.y - e.h * 0.5, e.def.color, 10, 240, false);
+      e.x = clamp(e.x + (Math.random() < 0.5 ? -1 : 1) * rand(120, 200), 40, STAGE_W - 40);
+      burst(e.x, e.y - e.h * 0.5, e.def.color, 10, 240, false);
+    }
   }
 
   function killEnemy(e) {
-    const v = Math.max(2, Math.round(e.def.value * plan.valueMult));
+    const comboMult = 1 + Math.min(player ? player.combo : 0, 50) * 0.02;
+    let v = Math.max(2, Math.round(e.def.value * plan.valueMult * (e.valueMult || 1) * comboMult));
+    if (e.stolen) v += e.stolen * 2; // trash pandas pay back double
+    if (e.def.cameo) addFloat(e.x, e.y - e.h, 'GOOSE BOUNTY!', '#ffd24a', true);
+    if (e.elite) addFloat(e.x, e.y - e.h - 26, 'ELITE DOWN! ×5', '#ffd24a', true);
+    // clog blobs split into two minis
+    if (e.def.signature === 'split' && !e.noSplit) {
+      for (const dir of [-1, 1]) {
+        const mini = {
+          type: e.type, def: Object.assign({}, e.def, { value: 6 }),
+          x: clamp(e.x + dir * 26, 40, STAGE_W - 40), y: e.y, vx: dir * 160, vy: -240, facing: dir,
+          w: e.w * 0.62, h: e.h * 0.62, size: e.size * 0.62,
+          hp: e.maxHp * 0.3, maxHp: e.maxHp * 0.3,
+          dmg: e.dmg * 0.5, speed: e.speed * 1.2,
+          state: 'approach', stateT: 0, cd: rand(0.4, 1), pref: e.pref,
+          hurtT: 0, frozenT: 0, flash: 0, walkCyc: 0, animT: rand(0, 6),
+          shockT: 0, onGround: false, noSplit: true,
+        };
+        enemies.push(mini);
+      }
+    }
+    // pickups: hearts, energy, powerups
+    if (!e.def.cameo && Math.random() < (e.elite ? 0.5 : 0.13)) {
+      const r = Math.random();
+      const type = r < 0.4 ? 'heart' : r < 0.65 ? 'energy' : r < 0.79 ? 'giant' : r < 0.92 ? 'magnet' : 'shield';
+      pickups.push({ x: e.x, y: e.y - 30, vy: -300, type, t: 0, life: 9 });
+    }
     const n = e.def.boss ? 8 : 2 + Math.floor(Math.random() * 3);
     for (let i = 0; i < n; i++) {
       coins.push({
@@ -178,6 +276,15 @@ const Game = (() => {
 
   function damagePlayer(dmg, fromX) {
     if (player.invulnT > 0 || mode !== 'playing') return;
+    if (player.shieldHits > 0) {
+      player.shieldHits--;
+      player.invulnT = 0.6;
+      burst(player.x, player.y - 50, '#7fdcff', 16, 300, false);
+      addFloat(player.x, player.y - player.h - 18, 'BLOCKED!', '#7fdcff', true);
+      Sfx.heavy();
+      return;
+    }
+    player.combo = 0; // combo breaks when you get hit
     let d = dmg * player.stats.defense;
     if (player.crouch) d *= 0.5;
     d = Math.max(1, Math.round(d));
@@ -413,6 +520,10 @@ const Game = (() => {
     if (p.invulnT > 0) p.invulnT -= dt;
     if (p.hurtT > 0) { p.hurtT -= dt; }
     if (p.buffT > 0) p.buffT -= dt;
+    if (p.pwGiantT > 0) p.pwGiantT -= dt;
+    if (p.pwMagnetT > 0) p.pwMagnetT -= dt;
+    if (p.comboPop > 0) p.comboPop -= dt;
+    if (p.comboT > 0) { p.comboT -= dt; if (p.comboT <= 0) p.combo = 0; }
     // Volleyball Dive: the miss, the sternum, the shame
     if (p.diveT > 0) {
       p.diveT -= dt;
@@ -519,7 +630,7 @@ const Game = (() => {
           if (hit) {
             a.hits.add(e);
             const dir = d.radius ? (e.x >= p.x ? 1 : -1) : p.facing;
-            hitEnemy(e, d.dmg * st.dmg * (p.buffT > 0 ? p.buffDmg : 1), dir * d.kb, d.kbY, a.key !== 'X');
+            hitEnemy(e, d.dmg * st.dmg * (p.buffT > 0 ? p.buffDmg : 1) * (p.pwGiantT > 0 ? 1.5 : 1), dir * d.kb, d.kbY, a.key !== 'X');
             const wb = p.cdef.weaponBurn;
             if (wb && p.upg.weapon >= wb.tier && enemies.includes(e)) e.burnT = wb.dur;
           }
@@ -563,6 +674,57 @@ const Game = (() => {
     if (e.hurtT > 0) { e.hurtT -= dt; return; }
     if (mode !== 'playing') return;
 
+    // signature: skeleton bone pile, reassembling
+    if (e.state === 'pile') {
+      e.pileT -= dt;
+      if (e.pileT <= 0) {
+        e.hp = e.maxHp * 0.3;
+        e.state = 'approach';
+        e.cd = 0.8;
+        addFloat(e.x, e.y - e.h, 'REASSEMBLED!', '#d8d4c8');
+        burst(e.x, e.y - e.h * 0.5, '#d8d4c8', 10, 200, false);
+      }
+      return;
+    }
+    // goose cameo: sprints across the arena robbing the place, then leaves
+    if (e.def.cameo) {
+      e.x += e.rollDir * e.def.speed * dt;
+      e.facing = e.rollDir;
+      e.walkCyc += dt * 20;
+      for (const c of [...coins]) {
+        if (Math.abs(c.x - e.x) < 60 && !c.magnet) {
+          e.stolen = (e.stolen || 0) + c.v;
+          coins.splice(coins.indexOf(c), 1);
+          addFloat(e.x, e.y - e.h - 10, 'HONK', '#ffffff');
+        }
+      }
+      if (e.x < 26 || e.x > STAGE_W - 26) enemies.splice(enemies.indexOf(e), 1);
+      return;
+    }
+    // signature: rolling tire — bounces across the arena; jump it
+    if (e.def.signature === 'roll') {
+      e.touchCd = (e.touchCd || 0) - dt;
+      e.x += e.rollDir * e.speed * 1.7 * dt;
+      e.walkCyc += e.rollDir * dt * 9;
+      if (e.x <= 44 || e.x >= STAGE_W - 44) e.rollDir *= -1;
+      if (e.touchCd <= 0 && Math.abs(e.x - player.x) < 46 && player.y > e.y - 60) {
+        damagePlayer(e.dmg, e.x);
+        e.touchCd = 1.1;
+      }
+      return;
+    }
+    // signature: coin thief (trash panda) — eats your drops, pays double on death
+    if (e.def.signature === 'thief') {
+      for (const c of coins) {
+        if (Math.abs(c.x - e.x) < 60 && Math.abs(c.y - (e.y - 30)) < 60) {
+          e.stolen = (e.stolen || 0) + c.v;
+          coins.splice(coins.indexOf(c), 1);
+          addFloat(e.x, e.y - e.h - 10, 'YOINK', '#ffd977');
+          break;
+        }
+      }
+    }
+
     const dx = player.x - e.x;
     const dist = Math.abs(dx);
     e.facing = dx >= 0 ? 1 : -1;
@@ -600,18 +762,42 @@ const Game = (() => {
           const sep = e.x - o.x;
           if (Math.abs(sep) < 38 && Math.abs(e.y - o.y) < 10) e.x += (sep === 0 ? (Math.random() - 0.5) : Math.sign(sep)) * 40 * dt;
         }
-        if (move !== 0) { e.x = clamp(e.x + move * e.speed * dt, 40, STAGE_W - 40); e.walkCyc += dt * e.speed * 0.05; }
-        const inRange = e.def.ranged ? (dist <= e.def.reach && dist >= 150) : dist <= e.def.reach;
+        let spd = e.speed;
+        if (e.def.signature === 'pack') {
+          // drain rats hunt in packs: faster for every living packmate
+          const packmates = enemies.filter(o => o !== e && o.def.signature === 'pack' && o.state !== 'pile').length;
+          spd *= 1 + Math.min(0.75, 0.15 * packmates);
+        }
+        if (move !== 0) { e.x = clamp(e.x + move * spd * dt, 40, STAGE_W - 40); e.walkCyc += dt * spd * 0.05; }
+        const inRange = e.def.signature === 'lunge' ? dist <= 230
+          : (e.def.ranged ? (dist <= e.def.reach && dist >= 150) : dist <= e.def.reach);
         if (inRange && e.cd <= 0) { e.state = 'windup'; e.stateT = e.def.windup; }
         break;
       }
       case 'windup': {
         e.stateT -= dt;
-        if (e.stateT <= 0) { e.state = 'strike'; e.stateT = 0.16; doStrike(e); }
+        if (e.stateT <= 0) {
+          if (e.def.signature === 'lunge') {
+            // murder wasp: dive-bombs at the player
+            e.state = 'strike'; e.stateT = 0.6;
+            e.vx = (Math.sign(player.x - e.x) || 1) * 520;
+            e.vy = -330; e.onGround = false;
+            e.lungeHit = false; e.lunging = true;
+          } else {
+            e.state = 'strike'; e.stateT = 0.16; doStrike(e);
+          }
+        }
         break;
       }
       case 'strike': {
         e.stateT -= dt;
+        if (e.lunging) {
+          if (!e.lungeHit && Math.abs(e.x - player.x) < 55 && Math.abs(e.y - player.y) < 80) {
+            damagePlayer(e.dmg, e.x);
+            e.lungeHit = true;
+          }
+          if (e.onGround) e.lunging = false;
+        }
         if (e.stateT <= 0) { e.state = 'approach'; e.cd = e.def.cooldown; }
         break;
       }
@@ -804,12 +990,44 @@ const Game = (() => {
     }
   }
 
+  function updatePickups(dt) {
+    for (const pk of [...pickups]) {
+      pk.t += dt; pk.life -= dt;
+      pk.vy = (pk.vy || 0) + GRAV * 0.7 * dt;
+      pk.y += pk.vy * dt;
+      if (pk.y > GROUND_Y - 22) { pk.y = GROUND_Y - 22; pk.vy = 0; }
+      if (pk.life <= 0) { pickups.splice(pickups.indexOf(pk), 1); continue; }
+      if (mode === 'playing' && Math.hypot(player.x - pk.x, (player.y - 45) - pk.y) < 46) {
+        if (pk.type === 'heart') {
+          const amt = Math.round(player.stats.maxHp * 0.25);
+          player.hp = Math.min(player.stats.maxHp, player.hp + amt);
+          addFloat(player.x, player.y - player.h - 16, '+' + amt + ' HP', '#7fd98a', true);
+        } else if (pk.type === 'energy') {
+          player.energy = Math.min(100, player.energy + 50);
+          addFloat(player.x, player.y - player.h - 16, '+ENERGY', '#7fb8ff', true);
+        } else if (pk.type === 'giant') {
+          player.pwGiantT = 10;
+          addFloat(player.x, player.y - player.h - 16, 'GIANT FISTS!', '#ffb04a', true);
+        } else if (pk.type === 'magnet') {
+          player.pwMagnetT = 10;
+          addFloat(player.x, player.y - player.h - 16, 'COIN MAGNET!', '#ffd24a', true);
+        } else if (pk.type === 'shield') {
+          player.shieldHits = 1;
+          addFloat(player.x, player.y - player.h - 16, 'SHIELD UP!', '#7fdcff', true);
+        }
+        burst(pk.x, pk.y, '#ffffff', 8, 200, false);
+        Sfx.buy();
+        pickups.splice(pickups.indexOf(pk), 1);
+      }
+    }
+  }
+
   function updateCoins(dt) {
     for (const c of [...coins]) {
       c.t += dt;
       const dx = player.x - c.x, dy = (player.y - 40) - c.y;
       const dist = Math.hypot(dx, dy);
-      if (c.magnet || (c.t > 0.35 && dist < 140)) {
+      if (c.magnet || (c.t > 0.35 && dist < (player.pwMagnetT > 0 ? 4000 : 140))) {
         c.vx += (dx / (dist || 1)) * 2600 * dt;
         c.vy += (dy / (dist || 1)) * 2600 * dt;
         c.vx *= 0.92; c.vy *= 0.92;
@@ -861,10 +1079,34 @@ const Game = (() => {
     for (const m of minions) updateMinion(m, dt);
     updateProjectiles(dt);
     updateCoins(dt);
+    updatePickups(dt);
     updateFx(dt);
 
-    // waves
-    if (mode === 'playing' && enemies.length === 0) {
+    // level events
+    if (mode === 'playing' && plan.event === 'coinrain') {
+      coinrainT -= dt;
+      if (coinrainT <= 0) {
+        coinrainT = rand(1.2, 2.4);
+        coins.push({ x: clamp(camX + rand(60, viewW - 60), 50, STAGE_W - 50), y: -worldOffY - 20, v: 2 + Math.floor(Math.random() * 4), vx: rand(-30, 30), vy: 80, t: 0, magnet: false });
+      }
+    }
+    if (mode === 'playing' && plan.event === 'goose' && waveIdx >= 2 && !gooseSpawned) {
+      gooseSpawned = true;
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      enemies.push({
+        type: 'cameo',
+        def: { name: 'The Goose??', hp: 60, dmg: 0, speed: 430, reach: 0, windup: 1, cooldown: 1, value: 150, size: 1.1, bossKind: 'goose', cameo: true },
+        x: dir > 0 ? 30 : STAGE_W - 30, y: GROUND_Y, vx: 0, vy: 0, facing: dir, rollDir: dir,
+        w: 60, h: 80, size: 1.1, hp: 60, maxHp: 60, dmg: 0, speed: 430,
+        state: 'approach', stateT: 0, cd: 99, pref: 0,
+        hurtT: 0, frozenT: 0, flash: 0, walkCyc: 0, animT: 0, shockT: 0, onGround: true,
+      });
+      addFloat(dir > 0 ? camX + 80 : camX + viewW - 80, GROUND_Y - 140, 'HONK!!', '#ffffff', true);
+    }
+
+    // waves (goose cameos don't count toward clearing)
+    const combatants = enemies.filter(e => !e.def.cameo).length;
+    if (mode === 'playing' && combatants === 0) {
       if (waveIdx < plan.waves.length) {
         spawnDelay -= dt;
         if (spawnDelay <= 0) { spawnWave(); spawnDelay = 1.0; }
@@ -1641,8 +1883,37 @@ const Game = (() => {
       let key = null;
       if (e.state === 'windup') key = 'windup';
       else if (e.state === 'strike') key = 'strike';
-      if (e.def.bossKind) {
+      if (e.state === 'pile') {
+        // collapsed skeleton, plotting its comeback
+        g.fillStyle = '#d8d4c8';
+        g.beginPath(); g.ellipse(e.x, e.y - 8, 20 * e.size, 8, 0, 0, 7); g.fill();
+        g.beginPath(); g.arc(e.x - 8, e.y - 16, 6, 0, 7); g.fill();
+        g.fillStyle = '#1a1408';
+        g.beginPath(); g.arc(e.x - 10, e.y - 17, 1.5, 0, 7); g.fill();
+      } else if (e.def.bossKind) {
         drawBoss(g, e);
+      } else if (e.def.signature === 'roll') {
+        // an actual rolling tire
+        g.fillStyle = 'rgba(0,0,0,0.4)';
+        g.beginPath(); g.ellipse(e.x, e.y + 2, 20 * e.size, 5, 0, 0, 7); g.fill();
+        g.save();
+        g.translate(e.x, e.y - 22 * e.size);
+        g.rotate(e.walkCyc || 0);
+        g.fillStyle = '#1d1d24';
+        g.beginPath(); g.arc(0, 0, 22 * e.size, 0, 7); g.fill();
+        g.strokeStyle = '#0d0d12'; g.lineWidth = 3;
+        for (let ti = 0; ti < 6; ti++) {
+          const ta = ti * Math.PI / 3;
+          g.beginPath();
+          g.moveTo(Math.cos(ta) * 16 * e.size, Math.sin(ta) * 16 * e.size);
+          g.lineTo(Math.cos(ta) * 22 * e.size, Math.sin(ta) * 22 * e.size);
+          g.stroke();
+        }
+        g.fillStyle = '#3a3a42';
+        g.beginPath(); g.arc(0, 0, 11 * e.size, 0, 7); g.fill();
+        g.fillStyle = '#8d8d96';
+        g.beginPath(); g.arc(0, 0, 5 * e.size, 0, 7); g.fill();
+        g.restore();
       } else {
         drawFighter(g, {
           x: e.x, y: e.y, facing: e.facing, size: e.size,
@@ -1653,6 +1924,28 @@ const Game = (() => {
           hurt: e.hurtT > 0, flash: e.flash, frozen: e.frozenT > 0,
           weaponTier: 0, crouch: false, ascended: false,
         });
+      }
+      // spawn-modifier overlays
+      if (e.frenzy) {
+        g.globalAlpha = 0.28 + 0.14 * Math.sin(e.animT * 12);
+        g.fillStyle = '#ff4a3a';
+        g.beginPath(); g.ellipse(e.x, e.y - e.h * 0.5, e.w * 0.95, e.h * 0.62, 0, 0, 7); g.fill();
+        g.globalAlpha = 1;
+      }
+      if (e.armorHits > 0) {
+        g.fillStyle = '#9aa2b5';
+        g.fillRect(e.x - 9 * e.size, e.y - e.h * 0.74, 18 * e.size, 13 * e.size);
+        g.fillStyle = '#6a7288';
+        g.fillRect(e.x - 9 * e.size, e.y - e.h * 0.74, 18 * e.size, 3);
+      }
+      if (e.elite) {
+        g.fillStyle = '#ffd24a';
+        const cy2 = e.y - e.h - 4;
+        g.beginPath();
+        g.moveTo(e.x - 8, cy2); g.lineTo(e.x - 8, cy2 - 8); g.lineTo(e.x - 4, cy2 - 4);
+        g.lineTo(e.x, cy2 - 10); g.lineTo(e.x + 4, cy2 - 4); g.lineTo(e.x + 8, cy2 - 8); g.lineTo(e.x + 8, cy2);
+        g.closePath(); g.fill();
+        if (Math.random() < 0.15) particles.push({ x: e.x + rand(-14, 14), y: e.y - rand(20, e.h), vx: 0, vy: -40, life: 0.4, max: 0.4, r: 1.5, color: '#ffd24a', grav: false });
       }
       // burning overlay for Tim's enemies and Fire Sword victims
       if ((player && player.cdef.enemiesOnFire && !(e.dousedT > 0)) || e.burnT > 0) {
@@ -1689,7 +1982,7 @@ const Game = (() => {
       const blink = p.invulnT > 0 && Math.floor(p.invulnT * 14) % 2 === 0;
       if (!blink) {
         drawFighter(g, {
-          x: p.x, y: p.y, facing: p.facing, size: p.size,
+          x: p.x, y: p.y, facing: p.facing, size: p.size * (p.pwGiantT > 0 ? 1.3 : 1),
           color: p.cdef.color, color2: p.cdef.color2, accent: p.cdef.accent, skin: p.cdef.skin,
           moving: Math.abs(p.vx) > 40 && p.onGround, walkCyc: p.walkCyc, animT: p.animT,
           onGround: p.onGround, crouch: p.crouch,
@@ -1706,6 +1999,13 @@ const Game = (() => {
         g.globalAlpha = 0.45 + 0.3 * Math.sin(p.animT * 10);
         g.lineWidth = 3;
         g.beginPath(); g.ellipse(p.x, p.y - 2, 30, 8, 0, 0, 7); g.stroke();
+        g.globalAlpha = 1;
+      }
+      if (p.shieldHits > 0) {
+        g.strokeStyle = '#7fdcff';
+        g.globalAlpha = 0.45 + 0.2 * Math.sin(p.animT * 6);
+        g.lineWidth = 2.5;
+        g.beginPath(); g.ellipse(p.x, p.y - 48 * p.size, 34 * p.size, 58 * p.size, 0, 0, 7); g.stroke();
         g.globalAlpha = 1;
       }
     }
@@ -1842,6 +2142,40 @@ const Game = (() => {
       }
     }
 
+    // pickups
+    for (const pk of pickups) {
+      if (pk.life < 2 && Math.floor(pk.life * 8) % 2 === 0) continue; // expiring blink
+      const py2 = pk.y + Math.sin(pk.t * 4) * 3;
+      g.save();
+      g.translate(pk.x, py2);
+      if (pk.type === 'heart') {
+        g.fillStyle = '#ff5a6a';
+        g.beginPath();
+        g.moveTo(0, 8); g.bezierCurveTo(-12, -2, -7, -13, 0, -5); g.bezierCurveTo(7, -13, 12, -2, 0, 8);
+        g.fill();
+      } else if (pk.type === 'energy') {
+        g.fillStyle = '#4ab2e8';
+        g.beginPath();
+        g.moveTo(2, -10); g.lineTo(-5, 2); g.lineTo(-1, 2); g.lineTo(-2, 10); g.lineTo(5, -2); g.lineTo(1, -2);
+        g.closePath(); g.fill();
+      } else if (pk.type === 'giant') {
+        g.fillStyle = '#ffb04a';
+        g.beginPath(); g.arc(0, 0, 9, 0, 7); g.fill();
+        g.fillStyle = '#e8862a';
+        for (let k2 = -1; k2 <= 1; k2++) { g.beginPath(); g.arc(k2 * 5, -7, 2.5, 0, 7); g.fill(); }
+      } else if (pk.type === 'magnet') {
+        g.strokeStyle = '#ff4a3a'; g.lineWidth = 5;
+        g.beginPath(); g.arc(0, -2, 7, Math.PI, 0); g.stroke();
+        g.fillStyle = '#e8e2d0';
+        g.fillRect(-9.5, -2, 5, 6); g.fillRect(4.5, -2, 5, 6);
+      } else {
+        g.strokeStyle = '#7fdcff'; g.lineWidth = 2.5;
+        g.fillStyle = 'rgba(127,220,255,0.25)';
+        g.beginPath(); g.arc(0, 0, 10, 0, 7); g.fill(); g.stroke();
+      }
+      g.restore();
+    }
+
     // coins
     for (const c of coins) {
       g.fillStyle = '#ffd34a'; g.strokeStyle = '#8a6200'; g.lineWidth = 1.5;
@@ -1860,6 +2194,30 @@ const Game = (() => {
     // float texts
     for (const f of floats) {
       g.globalAlpha = Math.min(1, f.t * 2);
+      if (f.word) {
+        // comic impact word on a starburst
+        g.save();
+        g.translate(f.x, f.y);
+        g.rotate(f.rot || 0);
+        const ws = 1 + Math.max(0, f.t - 0.4) * 3;
+        g.scale(ws, ws);
+        g.fillStyle = '#ffd24a';
+        g.strokeStyle = '#1a1408'; g.lineWidth = 2;
+        g.beginPath();
+        for (let i2 = 0; i2 < 12; i2++) {
+          const a2 = i2 * Math.PI / 6;
+          const r2 = i2 % 2 === 0 ? 30 : 17;
+          if (i2 === 0) g.moveTo(Math.cos(a2) * r2 * 1.3, Math.sin(a2) * r2);
+          else g.lineTo(Math.cos(a2) * r2 * 1.3, Math.sin(a2) * r2);
+        }
+        g.closePath(); g.fill(); g.stroke();
+        g.font = "900 15px 'Segoe UI', sans-serif";
+        g.textAlign = 'center';
+        g.fillStyle = '#1a1408';
+        g.fillText(f.txt, 0, 5);
+        g.restore();
+        continue;
+      }
       g.font = (f.big ? '900 26px' : '800 15px') + " 'Segoe UI', sans-serif";
       g.textAlign = 'center';
       g.strokeStyle = 'rgba(0,0,0,0.7)'; g.lineWidth = 3;
@@ -1897,6 +2255,19 @@ const Game = (() => {
       g.fillStyle = '#7fb8ff'; g.font = "700 9px 'Segoe UI', sans-serif";
       g.fillText('ENERGY (A)', 168, 54);
 
+      // combo counter
+      if (p.combo >= 3) {
+        const pop = 1 + Math.max(0, p.comboPop) * 1.4;
+        g.textAlign = 'right';
+        g.font = "900 " + Math.round(22 * pop) + "px 'Segoe UI', sans-serif";
+        g.fillStyle = p.combo >= 30 ? '#ff4a3a' : p.combo >= 15 ? '#ff9a2c' : '#ffd24a';
+        g.fillText('×' + p.combo, hw - 14, 58);
+        g.font = "700 9px 'Segoe UI', sans-serif";
+        g.fillStyle = '#9a927e';
+        g.fillText('COMBO', hw - 14, 69);
+        g.textAlign = 'left';
+      }
+
       // money — top right, clear of pause button
       g.textAlign = 'right';
       g.font = "900 17px 'Segoe UI', sans-serif";
@@ -1912,6 +2283,11 @@ const Game = (() => {
       g.font = "700 10px 'Segoe UI', sans-serif";
       g.fillStyle = '#9a927e';
       g.fillText('LEVEL ' + plan.level + '  —  WAVE ' + Math.min(waveIdx, plan.waves.length) + ' / ' + plan.waves.length, cx, 34);
+      if (plan.event) {
+        g.font = "700 9px 'Segoe UI', sans-serif";
+        g.fillStyle = theme.glow;
+        g.fillText({ coinrain: '☂ COIN RAIN', fog: '~ FOG NIGHT ~', fullsend: '!! FULL SEND !!', goose: '? GOOSE SIGHTING ?' }[plan.event], cx, 46);
+      }
 
       // boss bar
       const boss = enemies.find(e => e.def.boss);
@@ -1962,6 +2338,13 @@ const Game = (() => {
     ctx.translate(-camX + ox, worldOffY + oy);
     drawBackground();
     if (mode !== 'idle') drawEntities();
+    if (mode !== 'idle' && plan && plan.event === 'fog' && player) {
+      const fg = ctx.createRadialGradient(player.x, player.y - 50, 240, player.x, player.y - 50, 430);
+      fg.addColorStop(0, 'rgba(6,6,12,0)');
+      fg.addColorStop(1, 'rgba(6,6,12,0.88)');
+      ctx.fillStyle = fg;
+      ctx.fillRect(camX - 20, -worldOffY - 20, viewW + 40, viewH + 40);
+    }
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     // vignette
     const w = SW, h = SH;

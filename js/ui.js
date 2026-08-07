@@ -23,6 +23,18 @@ const Save = {
   isMaxed(id) { const u = this.upg(id); return u.weapon >= MAX_TIER && u.armor >= MAX_TIER && u.ability >= MAX_TIER; },
 };
 
+// Rotating bounty: win any level as the wanted fighter for bonus cash.
+// Erika and Dayne pay triple — someone has to play them.
+function ensureBounty() {
+  if (Save.data.bounty) return;
+  const pool = CHARACTERS.filter(c => c.id !== Save.data.lastBountyChar);
+  const c = pool[Math.floor(Math.random() * pool.length)];
+  const hard = c.id === 'erika' || c.id === 'dayne';
+  Save.data.bounty = { charId: c.id, reward: (300 + Save.data.level * 100) * (hard ? 3 : 1) };
+  Save.data.lastBountyChar = c.id;
+  Save.write();
+}
+
 const UI = (() => {
   const screens = ['title', 'select', 'shop', 'defeat', 'pause'];
   const $ = (id) => document.getElementById(id);
@@ -40,9 +52,13 @@ const UI = (() => {
     return `<div class="stat-row"><b>${label}</b><div class="stat-bar"><i style="width:${Math.round(frac * 100)}%"></i></div></div>`;
   }
   function buildSelect() {
+    ensureBounty();
     const selWorld = worldFor(Save.data.level);
+    const b = Save.data.bounty;
+    const bChar = b && CHARACTERS.find(x => x.id === b.charId);
     $('selectLevelLabel').textContent = selWorld.name + '  —  LEVEL ' + Save.data.level + ': ' +
-      selWorld.levelNames[(Save.data.level - 1) % 5] + (Save.data.level % 5 === 0 ? '  —  BOSS LEVEL' : '');
+      selWorld.levelNames[(Save.data.level - 1) % 5] + (Save.data.level % 5 === 0 ? '  —  BOSS LEVEL' : '') +
+      (bChar ? '   ·   🎯 BOUNTY: win as ' + bChar.name + ' (+$' + b.reward.toLocaleString() + ')' : '');
     $('selectMoney').textContent = money();
     const grid = $('charGrid');
     grid.innerHTML = '';
@@ -54,6 +70,7 @@ const UI = (() => {
       card.style.setProperty('--cc', c.color);
       card.innerHTML = `
         ${u.ascended ? `<div class="ff-badge">★ ${c.finalForm.name} ★</div>` : ''}
+        ${Save.data.bounty && Save.data.bounty.charId === c.id ? `<div class="bounty-tag">🎯 BOUNTY $${Save.data.bounty.reward.toLocaleString()}</div>` : ''}
         <canvas width="76" height="92"></canvas>
         <div class="char-name">${u.ascended ? c.finalForm.name : c.name}</div>
         <div class="char-title">${c.title}</div>
