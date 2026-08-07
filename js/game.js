@@ -30,6 +30,10 @@ const Game = (() => {
     SW = m[0]; SH = m[1];
     cvs.width = Math.round(SW * DPR);
     cvs.height = Math.round(SH * DPR);
+    // canvas is a replaced element: without an explicit CSS size it displays at
+    // its intrinsic (backing-store) size — 3x too big on a DPR-3 phone
+    cvs.style.width = SW + 'px';
+    cvs.style.height = SH + 'px';
     scale = Math.min(SH / VH, SW / MIN_VW);
     viewW = SW / scale;
     viewH = SH / scale;
