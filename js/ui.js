@@ -62,11 +62,13 @@ const UI = (() => {
     $('selectMoney').textContent = money();
     const grid = $('charGrid');
     grid.innerHTML = '';
+    let cardIdx = 0;
     for (const c of CHARACTERS) {
+      cardIdx++;
       const u = Save.upg(c.id);
       const st = computeStats(c, u);
       const card = document.createElement('div');
-      card.className = 'char-card';
+      card.className = 'char-card' + (u.ascended ? ' holo' : '');
       card.style.setProperty('--cc', c.color);
       card.innerHTML = `
         ${u.ascended ? `<div class="ff-badge">★ ${c.finalForm.name} ★</div>` : ''}
@@ -80,7 +82,8 @@ const UI = (() => {
           ${statBar('SPEED', st.speed / 460)}
         </div>
         <div class="char-upg">${trackMeta(c, 'weapon').icon} <b>${u.weapon}</b>/5 &nbsp; ${trackMeta(c, 'armor').icon} <b>${u.armor}</b>/5 &nbsp; ${trackMeta(c, 'ability').icon} <b>${u.ability}</b>/5</div>
-        <div class="char-special">A: ${c.special.name} — ${u.ascended ? c.finalForm.desc : c.special.desc}</div>`;
+        <div class="char-special">A: ${c.special.name} — ${u.ascended ? c.finalForm.desc : c.special.desc}</div>
+        <div class="card-num">#${String(cardIdx).padStart(2, '0')}/${CHARACTERS.length}</div>`;
       card.addEventListener('click', () => { Sfx.buy(); show(null); Game.startLevel(c.id); });
       grid.appendChild(card);
       Game.drawPortrait(card.querySelector('canvas'), c, u.ascended);

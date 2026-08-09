@@ -607,9 +607,12 @@ const Game = (() => {
       }
     }
     p.x = clamp(p.x + p.vx * dt, 40, STAGE_W - 40);
+    const wasAirborne = !p.onGround;
     p.y += p.vy * dt;
     if (p.y < 150) { p.y = 150; if (p.vy < 0) p.vy = 0; } // flight ceiling
     if (p.y >= GROUND_Y) { p.y = GROUND_Y; p.vy = 0; p.onGround = true; } else p.onGround = false;
+    if (wasAirborne && p.onGround) p.landT = 0.11; // landing squash
+    if (p.landT > 0) p.landT -= dt;
 
     // attack progression + hit detection
     if (p.attack) {
@@ -1060,13 +1063,31 @@ const Game = (() => {
       b.t -= dt;
       if (b.t <= 0) beams.splice(beams.indexOf(b), 1);
     }
-    // ambient embers (span the full visible height, portrait included)
+    // per-world ambiance: fireflies, sewer drips, road dust, bats & embers
     if (ambient.length < 40 && Math.random() < 0.3) {
-      ambient.push({ x: camX + Math.random() * viewW, y: viewH - worldOffY + 10, vy: -rand(18, 60), drift: rand(-14, 14), r: rand(1, 2.6), a: rand(0.15, 0.5) });
+      const props = plan ? plan.world.props : 'castle';
+      if (props === 'fence') {
+        ambient.push({ kind: 'fly', x: camX + Math.random() * viewW, y: GROUND_Y - rand(20, 220), vy: rand(-12, 12), drift: rand(-24, 24), r: rand(1.4, 2.4), a: rand(0.4, 0.85), color: '#d8e86a', blink: true, t: rand(0, 9) });
+      } else if (props === 'pipes') {
+        ambient.push({ kind: 'drip', x: camX + Math.random() * viewW, y: -worldOffY - 8, vy: rand(200, 300), drift: 0, r: rand(1.5, 2.6), a: rand(0.4, 0.7), color: '#7fe2c0', t: 0 });
+      } else if (props === 'road') {
+        ambient.push({ kind: 'dust', x: camX + (Math.random() < 0.5 ? -10 : viewW + 10), y: GROUND_Y - rand(6, 90), vy: rand(-8, 8), drift: rand(60, 130) * (Math.random() < 0.5 ? 1 : -1), r: rand(1, 2.4), a: rand(0.2, 0.45), color: '#c9b8a0', t: 0 });
+      } else if (Math.random() < 0.18) {
+        ambient.push({ kind: 'bat', x: camX + (Math.random() < 0.5 ? -12 : viewW + 12), y: rand(-worldOffY + 40, GROUND_Y - 220), vy: 0, drift: rand(90, 150) * (Math.random() < 0.5 ? 1 : -1), r: 2, a: 0.8, t: rand(0, 9) });
+      } else {
+        ambient.push({ kind: 'ember', x: camX + Math.random() * viewW, y: viewH - worldOffY + 10, vy: -rand(18, 60), drift: rand(-14, 14), r: rand(1, 2.6), a: rand(0.15, 0.5), t: 0 });
+      }
     }
     for (const a of [...ambient]) {
+      a.t = (a.t || 0) + dt;
       a.y += a.vy * dt; a.x += a.drift * dt;
-      if (a.y < -worldOffY - 10) ambient.splice(ambient.indexOf(a), 1);
+      if (a.kind === 'bat') a.y += Math.sin(a.t * 4) * 30 * dt;
+      if (a.y < -worldOffY - 14 || a.y > viewH - worldOffY + 20 || a.x < camX - 50 || a.x > camX + viewW + 50) {
+        ambient.splice(ambient.indexOf(a), 1);
+      } else if (a.kind === 'drip' && a.y >= GROUND_Y - 4) {
+        burst(a.x, GROUND_Y - 4, '#7fe2c0', 3, 90, false);
+        ambient.splice(ambient.indexOf(a), 1);
+      }
     }
   }
 
@@ -1147,6 +1168,71 @@ const Game = (() => {
   // ---------- Drawing ----------
   function seeded(n) { let s = n * 2654435761 % 2 ** 32; return () => { s = (s * 1597334677) % 2 ** 32; return (s >>> 8) / 2 ** 24; }; }
 
+  // per-world ground texture, rendered once and repeated as a pattern
+  const groundPatterns = {};
+  function getGroundPattern(world) {
+    if (groundPatterns[world.id]) return groundPatterns[world.id];
+    const pc = document.createElement('canvas');
+    pc.width = 160; pc.height = 80;
+    const q = pc.getContext('2d');
+    if (world.props === 'fence') {
+      for (let i = 0; i < 90; i++) {
+        const x = Math.random() * 160, y2 = Math.random() * 80;
+        q.strokeStyle = Math.random() < 0.5 ? 'rgba(44,58,32,0.9)' : 'rgba(55,74,38,0.9)';
+        q.lineWidth = 1.4;
+        q.beginPath(); q.moveTo(x, y2); q.lineTo(x + (Math.random() * 4 - 2), y2 - 4 - Math.random() * 4); q.stroke();
+      }
+    } else if (world.props === 'pipes') {
+      q.strokeStyle = 'rgba(16,28,22,0.9)'; q.lineWidth = 2;
+      for (let x = 0; x < 161; x += 20) { q.beginPath(); q.moveTo(x, 0); q.lineTo(x, 80); q.stroke(); }
+      for (let y2 = 0; y2 < 81; y2 += 20) { q.beginPath(); q.moveTo(0, y2); q.lineTo(160, y2); q.stroke(); }
+      q.fillStyle = 'rgba(74,232,178,0.1)';
+      for (let x = 10; x < 160; x += 20) for (let y2 = 10; y2 < 80; y2 += 20) { q.beginPath(); q.arc(x, y2, 1.5, 0, 7); q.fill(); }
+    } else if (world.props === 'road') {
+      for (let i = 0; i < 160; i++) {
+        q.fillStyle = 'rgba(255,255,255,' + (Math.random() * 0.05).toFixed(3) + ')';
+        q.fillRect(Math.random() * 160, Math.random() * 80, 2, 2);
+      }
+      q.strokeStyle = 'rgba(10,8,8,0.55)'; q.lineWidth = 1.2;
+      for (let i = 0; i < 4; i++) {
+        let x = Math.random() * 160, y2 = Math.random() * 80;
+        q.beginPath(); q.moveTo(x, y2);
+        for (let s2 = 0; s2 < 4; s2++) { x += Math.random() * 18 - 9; y2 += Math.random() * 12 - 6; q.lineTo(x, y2); }
+        q.stroke();
+      }
+    } else {
+      for (let row = 0; row < 4; row++) {
+        for (let col2 = 0; col2 < 6; col2++) {
+          const ox2 = (row % 2) * 16;
+          q.fillStyle = 'rgba(56,40,74,' + (0.35 + Math.random() * 0.3).toFixed(2) + ')';
+          q.strokeStyle = 'rgba(10,6,20,0.7)'; q.lineWidth = 1.4;
+          q.beginPath(); q.roundRect(col2 * 32 + ox2 - 16, row * 20 + 2, 28, 16, 5); q.fill(); q.stroke();
+        }
+      }
+    }
+    groundPatterns[world.id] = ctx.createPattern(pc, 'repeat');
+    return groundPatterns[world.id];
+  }
+
+  // subtle print-grain overlay, built once
+  let grainPattern = null;
+  function getGrain() {
+    if (grainPattern) return grainPattern;
+    const pc = document.createElement('canvas');
+    pc.width = 200; pc.height = 200;
+    const q = pc.getContext('2d');
+    for (let i = 0; i < 420; i++) {
+      q.fillStyle = 'rgba(255,255,255,' + (Math.random() * 0.04).toFixed(3) + ')';
+      q.fillRect(Math.random() * 200, Math.random() * 200, 1.4, 1.4);
+    }
+    for (let i = 0; i < 60; i++) {
+      q.fillStyle = 'rgba(0,0,0,' + (Math.random() * 0.05).toFixed(3) + ')';
+      q.fillRect(Math.random() * 200, Math.random() * 200, 2.2, 1);
+    }
+    grainPattern = ctx.createPattern(pc, 'repeat');
+    return grainPattern;
+  }
+
   function drawBackground() {
     const g = ctx;
     const sky = g.createLinearGradient(0, -worldOffY, 0, GROUND_Y);
@@ -1216,17 +1302,33 @@ const Game = (() => {
     }
 
     // ground (extends to the bottom of tall portrait screens)
+    const groundH = Math.max(VH - GROUND_Y, viewH - worldOffY - GROUND_Y);
     g.fillStyle = theme.ground;
-    g.fillRect(camX, GROUND_Y, viewW, Math.max(VH - GROUND_Y, viewH - worldOffY - GROUND_Y));
+    g.fillRect(camX, GROUND_Y, viewW, groundH);
+    if (plan) {
+      g.fillStyle = getGroundPattern(plan.world);
+      g.fillRect(camX, GROUND_Y, viewW, groundH);
+    }
     g.fillStyle = theme.groundTop; g.fillRect(camX, GROUND_Y, viewW, 5);
     // stage edge glow markers
     g.fillStyle = theme.glow + '55';
     g.fillRect(30, GROUND_Y - 60, 6, 60); g.fillRect(STAGE_W - 36, GROUND_Y - 60, 6, 60);
 
-    // ambient embers
+    // ambiance
     for (const a of ambient) {
-      g.globalAlpha = a.a; g.fillStyle = theme.glow;
-      g.beginPath(); g.arc(a.x, a.y, a.r, 0, 7); g.fill();
+      g.globalAlpha = a.a * (a.blink ? (0.45 + 0.55 * Math.abs(Math.sin(a.t * 3))) : 1);
+      if (a.kind === 'bat') {
+        g.strokeStyle = '#1d1030'; g.lineWidth = 2;
+        const fl2 = Math.sin(a.t * 18) * 3;
+        g.beginPath();
+        g.moveTo(a.x - 6, a.y - fl2);
+        g.quadraticCurveTo(a.x - 2, a.y + 2, a.x, a.y);
+        g.quadraticCurveTo(a.x + 2, a.y + 2, a.x + 6, a.y - fl2);
+        g.stroke();
+      } else {
+        g.fillStyle = a.color || theme.glow;
+        g.beginPath(); g.arc(a.x, a.y, a.r, 0, 7); g.fill();
+      }
     }
     g.globalAlpha = 1;
   }
@@ -1258,7 +1360,7 @@ const Game = (() => {
       g.beginPath(); g.arc(0, -48 * o.size, 66 * o.size * (1 + 0.05 * Math.sin(t * 6)), 0, 7); g.fill();
     }
 
-    g.scale(o.facing * o.size, o.size);
+    g.scale(o.facing * o.size * (o.stretchY ? 2 - o.stretchY : 1), o.size * (o.stretchY || 1));
 
     let hip = [0, -40 * cf], sh = [2, -64 * cf];
     const headY = -78 * cf;
@@ -1319,7 +1421,11 @@ const Game = (() => {
     const legCol2 = look.chicken ? '#b87a10' : o.color2;
 
     g.lineCap = 'round'; g.lineJoin = 'round';
+    const INK = '#14101a';
     const limb = (from, to, width, color) => {
+      // hand-inked comic outline: every limb gets an ink pass under its color
+      g.strokeStyle = INK; g.lineWidth = width + 3;
+      g.beginPath(); g.moveTo(from[0], from[1]); g.lineTo(to[0], to[1]); g.stroke();
       g.strokeStyle = color; g.lineWidth = width;
       g.beginPath(); g.moveTo(from[0], from[1]); g.lineTo(to[0], to[1]); g.stroke();
     };
@@ -1483,9 +1589,32 @@ const Game = (() => {
       g.fillStyle = o.accent;
       g.fillRect(-7 + lean * 0.3, hip[1] - 3, 14, 4);
     }
+    // visible armor: your gear shows on your body
+    const at = o.armorTier || 0;
+    if (at >= 2) {
+      g.fillStyle = '#3a3444';
+      g.fillRect(-6 + lean * 0.3, hip[1] + 2, 5, 5);
+      g.fillRect(2 + lean * 0.3, hip[1] + 2, 5, 5);
+    }
+    if (at >= 3) {
+      g.fillStyle = hexMix(o.color, '#000000', 0.35);
+      g.strokeStyle = INK; g.lineWidth = 1.5;
+      g.beginPath(); g.roundRect(sh[0] + lean * 0.5 - 11, sh[1] - 5, 8, 7, 2); g.fill(); g.stroke();
+      g.beginPath(); g.roundRect(sh[0] + lean * 0.5 + 3, sh[1] - 5, 8, 7, 2); g.fill(); g.stroke();
+    }
+    if (at >= 4 && !look.shirtless) {
+      g.fillStyle = hexMix(o.color, '#ffffff', 0.18);
+      g.strokeStyle = INK; g.lineWidth = 1.5;
+      g.beginPath(); g.roundRect(-6 + lean * 0.4, sh[1] + 3, 14, 14, 3); g.fill(); g.stroke();
+    }
     }
     // front leg
     if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, legCol);
+    if ((o.armorTier || 0) >= 1 && !look.firetruck && !look.chicken) {
+      // kneepad
+      g.fillStyle = '#3a3444';
+      g.beginPath(); g.arc((hip[0] + frontFoot[0]) / 2 + lean * 0.15, (hip[1] + frontFoot[1]) / 2, 3.2, 0, 7); g.fill();
+    }
     if (look.gown) {
       g.fillStyle = o.color2;
       g.globalAlpha = 0.88;
@@ -1502,6 +1631,7 @@ const Game = (() => {
     const hy = look.crawl ? -26 : headY - 7;
     g.fillStyle = o.hood ? o.color2 : o.skin;
     g.beginPath(); g.arc(hx, hy, 9, 0, 7); g.fill();
+    g.strokeStyle = INK; g.lineWidth = 2; g.stroke();
     if (look.mecha) {
       g.fillStyle = '#8a92a8';
       g.beginPath(); g.roundRect(hx - 8.5, hy - 8, 17, 15, 3); g.fill();
@@ -1632,6 +1762,38 @@ const Game = (() => {
       g.beginPath(); g.arc(0.5 + lean * 0.6, headY - 6.5, 3.1, 0, 7); g.stroke();
       g.beginPath(); g.arc(7.5 + lean * 0.6, headY - 6.5, 3.1, 0, 7); g.stroke();
       g.beginPath(); g.moveTo(3.6 + lean * 0.6, headY - 6.5); g.lineTo(4.4 + lean * 0.6, headY - 6.5); g.stroke();
+    }
+    // the face: everyone in this family has eyes now
+    if (!o.hood && !look.glasses) {
+      const ex1 = hx + 2, ex2 = hx + 6.2, ey2 = hy - 1.5;
+      const blinkE = Math.sin((o.animT || 0) * 1.3 + ex1) > 0.985;
+      if (o.hurt) {
+        g.strokeStyle = INK; g.lineWidth = 1.3;
+        for (const exx of [ex1, ex2]) {
+          g.beginPath();
+          g.moveTo(exx - 1.6, ey2 - 1.6); g.lineTo(exx + 1.6, ey2 + 1.6);
+          g.moveTo(exx + 1.6, ey2 - 1.6); g.lineTo(exx - 1.6, ey2 + 1.6);
+          g.stroke();
+        }
+      } else if (blinkE) {
+        g.strokeStyle = INK; g.lineWidth = 1.3;
+        g.beginPath();
+        g.moveTo(ex1 - 1.5, ey2); g.lineTo(ex1 + 1.5, ey2);
+        g.moveTo(ex2 - 1.5, ey2); g.lineTo(ex2 + 1.5, ey2);
+        g.stroke();
+      } else {
+        g.fillStyle = '#ffffff';
+        g.beginPath(); g.arc(ex1, ey2, 2, 0, 7); g.fill();
+        g.beginPath(); g.arc(ex2, ey2, 2, 0, 7); g.fill();
+        g.fillStyle = INK;
+        g.beginPath(); g.arc(ex1 + 0.7, ey2, 1, 0, 7); g.fill();
+        g.beginPath(); g.arc(ex2 + 0.7, ey2, 1, 0, 7); g.fill();
+      }
+      if (o.attackKey && !o.hurt) {
+        g.strokeStyle = INK; g.lineWidth = 1.4;
+        g.beginPath(); g.moveTo(ex1 - 2, ey2 - 4); g.lineTo(ex1 + 1.5, ey2 - 2.6); g.stroke();
+        g.beginPath(); g.moveTo(ex2 + 2.5, ey2 - 4.2); g.lineTo(ex2 - 1, ey2 - 2.6); g.stroke();
+      }
     }
     }
     if (o.boss) { // horns
@@ -1988,6 +2150,8 @@ const Game = (() => {
           onGround: p.onGround, crouch: p.crouch,
           attackKey: p.attack ? p.attack.key : null, attackExt: attackExt(p.attack),
           hurt: p.hurtT > 0, flash: p.flash, frozen: false,
+          armorTier: p.upg.armor,
+          stretchY: p.landT > 0 ? 0.9 : (!p.onGround && p.vy < -160 ? 1.07 : 1),
           weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, weaponColors: p.cdef.weaponColors,
           weaponWord: p.upg.weapon > 0 ? trackMeta(p.cdef, 'weapon').tiers[p.upg.weapon - 1].split(' ')[0] : '',
           ascended: p.ascended,
@@ -2351,6 +2515,8 @@ const Game = (() => {
     const vg = ctx.createRadialGradient(w / 2, h / 2, h * 0.45, w / 2, h / 2, h * 0.95);
     vg.addColorStop(0, 'transparent'); vg.addColorStop(1, 'rgba(0,0,0,0.5)');
     ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = getGrain(); // print grain over everything
+    ctx.fillRect(0, 0, w, h);
     if (flashFxT > 0) {
       ctx.fillStyle = 'rgba(255,255,255,' + Math.min(0.85, flashFxT * 2.6).toFixed(3) + ')';
       ctx.fillRect(0, 0, w, h);
