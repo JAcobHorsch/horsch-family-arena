@@ -27,6 +27,12 @@ const UPGRADE_TRACKS = {
     costs: [80, 200, 500, 1200, 2600],
     blurb: '+15 max HP and damage resistance per tier.',
   },
+  ranged: {
+    label: 'Ranged', icon: '🏹',
+    tiers: ['Improvised Throw', 'Practiced Arm', 'Deadeye', 'Cannon Arm', 'Legendary Aim'],
+    costs: [90, 220, 550, 1300, 2800],
+    blurb: '+35% ranged damage per tier (Y button).',
+  },
   ability: {
     label: 'Abilities', icon: '✦',
     tiers: ['Focused Mind', 'Channeling I', 'Channeling II', 'Overcharge', 'Mastery'],
@@ -659,11 +665,12 @@ function trackMeta(cdef, key) {
 }
 
 function computeStats(cdef, upg) {
-  const w = upg.weapon, a = upg.armor, ab = upg.ability;
+  const w = upg.weapon, a = upg.armor, ab = upg.ability, rg = upg.ranged || 0;
   const s = {
     maxHp: cdef.hp + a * 15,
     speed: cdef.speed,
     dmg: cdef.dmg * (1 + 0.35 * w),
+    rangedMult: 1 + 0.35 * rg,
     atkSpeed: cdef.atkSpeed,
     defense: 1 / (1 + 0.25 * a),
     specialMult: 1 + 0.4 * ab,
@@ -673,6 +680,7 @@ function computeStats(cdef, upg) {
     const b = (cdef.finalForm && cdef.finalForm.boost) || {};
     s.maxHp = Math.round(s.maxHp * (b.maxHp || 1.5));
     s.dmg *= b.dmg || 1.75;
+    s.rangedMult *= b.dmg || 1.75;
     s.specialMult *= b.special || 2;
     s.speed *= b.speed || 1.15;
     s.defense *= b.defense || 0.7;
@@ -680,12 +688,43 @@ function computeStats(cdef, upg) {
   return s;
 }
 
-// Normal attacks (durations in seconds, scaled by character atkSpeed)
+// X is a real combo string now: jab -> cross -> spinning finisher.
+// Each step lunges forward and can cancel its recovery into the next.
+const CHAIN = [
+  { name: 'Jab',      dmg: 7,  startup: 0.06, active: 0.09, recovery: 0.15, range: 76,  kb: 130, kbY: -30,  lunge: 190, pose: 'X1' },
+  { name: 'Cross',    dmg: 9,  startup: 0.07, active: 0.09, recovery: 0.17, range: 84,  kb: 180, kbY: -50,  lunge: 235, pose: 'X2' },
+  { name: 'Finisher', dmg: 17, startup: 0.11, active: 0.11, recovery: 0.26, range: 100, kb: 540, kbY: -260, lunge: 300, pose: 'X3' },
+];
 const ATTACKS = {
-  X: { name: 'Light Strike', dmg: 8,  startup: 0.08, active: 0.10, recovery: 0.13, range: 76,  kb: 150, kbY: -40,  anim: 'punch' },
-  Y: { name: 'Heavy Kick',   dmg: 18, startup: 0.20, active: 0.12, recovery: 0.26, range: 100, kb: 460, kbY: -160, anim: 'kick'  },
   B: { name: 'Rising Break', dmg: 13, startup: 0.16, active: 0.12, recovery: 0.30, radius: 118, kb: 220, kbY: -540, anim: 'upper' },
 };
+
+// Every fighter carries a themed ranged weapon on Y, with its own tier track.
+const RANGED_WEAPONS = {
+  todd:      { icon: '🍢', label: 'Skewers', tiers: ['Toothpick', 'Kebab Stick', 'Steel Skewer', 'Rebar Rod', 'The Brochette of Doom'], proj: { dmg: 10, speed: 640, r: 5, shape: 'needle' } },
+  sonya:     { icon: '✈️', label: 'Late Notices', tiers: ['Friendly Reminder', '2nd Notice', 'Final Notice', 'Collections Letter', 'The Summons'], proj: { dmg: 9, speed: 480, r: 8, shape: 'plane', bounty: 2 } },
+  jordan:    { icon: '📀', label: 'Lens Discs', tiers: ['Lens Cap', 'Kit Lens', 'Prime Lens', 'Telephoto', 'The L Glass'], proj: { dmg: 10, speed: 560, r: 8, shape: 'ball', pierce: true } },
+  jerod:     { icon: '✴️', label: 'PLA Shurikens', tiers: ['Draft Quality', '0.2mm Layers', 'Carbon Star', 'Titanium Star', 'The Perfect Print'], proj: { dmg: 11, speed: 600, r: 7, shape: 'star' } },
+  jacob:     { icon: '🔩', label: 'Pipe Fittings', tiers: ['Washer', 'Coupling', 'Elbow Joint', 'T-Fitting', 'The Golden Valve'], proj: { dmg: 12, speed: 500, r: 7, arc: true, bounce: true, life: 1.8 } },
+  samantha:  { icon: '🧃', label: 'Juice Boxes', tiers: ['Water Cup', 'Apple Juice', 'Fruit Punch', 'The Big Capri', 'Sippy of Judgment'], proj: { dmg: 11, speed: 470, r: 8, arc: true } },
+  cassandra: { icon: '🥓', label: 'Deli Slices', tiers: ['Bologna', 'Ham', 'Salami', 'Prosciutto', 'The Charcuterie Frisbee'], proj: { dmg: 10, speed: 540, r: 8, shape: 'ball', pierce: true } },
+  erika:     { icon: '🧻', label: 'Damp Wipes', tiers: ['Single Ply', 'Damp Wipe', 'Damper Wipe', 'Alarmingly Damp', 'The Moist One'], proj: { dmg: 2, speed: 300, r: 5, life: 0.55 } },
+  levi:      { icon: '🔧', label: 'Lug Nuts', tiers: ['Loose Bolt', 'Lug Nut', 'Impact Socket', 'Chrome Nut', "The Camaro's Own"], proj: { dmg: 11, speed: 660, r: 5 } },
+  ronathon:  { icon: '📛', label: 'Name Tags', tiers: ['HELLO: RON', 'HELLO: REGGIE', 'HELLO: RONALD', 'HELLO: DOUGANOLD', 'HELLO: RYAN DUGAN'], proj: { dmg: 8, speed: 500, r: 7, count: 2, spreadY: 40, shape: 'plane' } },
+  tim:       { icon: '🎈', label: 'Water Balloons', tiers: ['Dollar Store', 'Double Knot', 'The Fat One', 'Pressure Packed', 'The Hydro Bomb'], proj: { dmg: 10, speed: 460, r: 8, arc: true, douse: true } },
+  myah:      { icon: '🧺', label: 'Dryer Balls', tiers: ['Sock Ball', 'Wool Ball', 'Double Bounce', 'Static Charged', 'The Uncatchable'], proj: { dmg: 10, speed: 520, r: 8, shape: 'ball', bounce: true, arc: true, life: 2 } },
+  isla:      { icon: '🥣', label: 'Cheerios', tiers: ['A Single O', 'Small Handful', 'Full Fist', 'Bowl Toss', 'The Whole Box'], proj: { dmg: 6, speed: 560, r: 4, count: 3, spreadY: 34 } },
+  hayes:     { icon: '⚡', label: 'Power Bolts', tiers: ['Sparkler', 'Zap Bolt', 'Plasma Bolt', 'Ion Lance', 'The Star Piercer'], proj: { dmg: 12, speed: 700, r: 6 } },
+  addi:      { icon: '❄️', label: 'Icicle Darts', tiers: ['Ice Chip', 'Icicle', 'Frost Dart', 'Glacier Needle', "Winter's Kiss"], proj: { dmg: 9, speed: 580, r: 6, shape: 'iceball', freeze: 0.6 } },
+  brooks:    { icon: '🦷', label: 'Loose Teeth', tiers: ['Wiggly Tooth', 'Baby Tooth', 'Molar', 'Full Set Volley', 'The Tooth Fairy Debt'], proj: { dmg: 7, speed: 620, r: 4, count: 2, spreadY: 26 } },
+  dayne:     { icon: '🎯', label: 'Lawn Darts', tiers: ['Foam Dart', 'Plastic Dart', 'Regulation Dart', 'Sharpened Dart', 'The Banned Original'], proj: { dmg: 12, speed: 480, r: 6, arc: true, shape: 'needle' } },
+};
+
+// wire each fighter's ranged weapon + its shop track names
+for (const c of CHARACTERS) {
+  c.rangedWeapon = RANGED_WEAPONS[c.id] || { icon: '🪨', label: 'Rocks', tiers: UPGRADE_TRACKS.ranged.tiers, proj: { dmg: 9, speed: 520, r: 6 } };
+  c.tracks.ranged = { icon: c.rangedWeapon.icon, label: c.rangedWeapon.label, tiers: c.rangedWeapon.tiers, blurb: '+35% ranged damage per tier (Y button).' };
+}
 
 // Base combat roles — per-world enemy skins override name/colors/accessory,
 // the numbers stay role-based so balance is uniform everywhere.

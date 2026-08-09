@@ -6,21 +6,24 @@ const Save = {
   data: null,
   fresh() {
     const chars = {};
-    for (const c of CHARACTERS) chars[c.id] = { weapon: 0, armor: 0, ability: 0, ascended: false };
+    for (const c of CHARACTERS) chars[c.id] = { weapon: 0, ranged: 0, armor: 0, ability: 0, ascended: false };
     return { money: 0, level: 1, chars };
   },
   load() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       this.data = raw ? Object.assign(this.fresh(), JSON.parse(raw)) : this.fresh();
-      for (const c of CHARACTERS) if (!this.data.chars[c.id]) this.data.chars[c.id] = { weapon: 0, armor: 0, ability: 0, ascended: false };
+      for (const c of CHARACTERS) {
+        if (!this.data.chars[c.id]) this.data.chars[c.id] = { weapon: 0, ranged: 0, armor: 0, ability: 0, ascended: false };
+        if (typeof this.data.chars[c.id].ranged !== 'number') this.data.chars[c.id].ranged = 0; // migrate pre-ranged saves
+      }
     } catch (e) { this.data = this.fresh(); }
     return this.data;
   },
   write() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); } catch (e) {} },
   reset() { this.data = this.fresh(); this.write(); },
   upg(id) { return this.data.chars[id]; },
-  isMaxed(id) { const u = this.upg(id); return u.weapon >= MAX_TIER && u.armor >= MAX_TIER && u.ability >= MAX_TIER; },
+  isMaxed(id) { const u = this.upg(id); return u.weapon >= MAX_TIER && u.ranged >= MAX_TIER && u.armor >= MAX_TIER && u.ability >= MAX_TIER; },
 };
 
 // Rotating bounty: win any level as the wanted fighter for bonus cash.
@@ -81,7 +84,7 @@ const UI = (() => {
           ${statBar('POWER', st.dmg / 4)}
           ${statBar('SPEED', st.speed / 460)}
         </div>
-        <div class="char-upg">${trackMeta(c, 'weapon').icon} <b>${u.weapon}</b>/5 &nbsp; ${trackMeta(c, 'armor').icon} <b>${u.armor}</b>/5 &nbsp; ${trackMeta(c, 'ability').icon} <b>${u.ability}</b>/5</div>
+        <div class="char-upg">${trackMeta(c, 'weapon').icon}<b>${u.weapon}</b> ${trackMeta(c, 'ranged').icon}<b>${u.ranged}</b> ${trackMeta(c, 'armor').icon}<b>${u.armor}</b> ${trackMeta(c, 'ability').icon}<b>${u.ability}</b></div>
         <div class="char-special">A: ${c.special.name} — ${u.ascended ? c.finalForm.desc : c.special.desc}</div>
         <div class="card-num">#${String(cardIdx).padStart(2, '0')}/${CHARACTERS.length}</div>`;
       card.addEventListener('click', () => { Sfx.buy(); show(null); Game.startLevel(c.id); });
@@ -111,7 +114,7 @@ const UI = (() => {
     const cards = $('shopCards');
     cards.innerHTML = '';
 
-    for (const key of ['weapon', 'armor', 'ability']) {
+    for (const key of ['weapon', 'ranged', 'armor', 'ability']) {
       const track = trackMeta(c, key);
       const tier = u[key];
       const maxed = tier >= MAX_TIER;
@@ -148,7 +151,7 @@ const UI = (() => {
     } else if (allMax) {
       asc.innerHTML = `<h3>★ ASCENSION ★</h3>
         <div class="shop-tier-name">${c.finalForm.name}</div>
-        <div class="shop-desc">${c.name} has mastered every upgrade. Unlock the final form: massive power, HP, speed and a doubled special.</div>
+        <div class="shop-desc">${c.name} has mastered all four tracks. Unlock the final form: massive power, HP, speed and a doubled special.</div>
         <button class="buybtn" ${Save.data.money < ASCEND_COST ? 'disabled' : ''}>ASCEND — $${ASCEND_COST.toLocaleString()}</button>`;
       asc.querySelector('.buybtn').addEventListener('click', () => {
         if (Save.data.money < ASCEND_COST) { Sfx.denied(); return; }

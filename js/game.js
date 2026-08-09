@@ -3,6 +3,12 @@
 const Game = (() => {
   const cvs = document.getElementById('game');
   const ctx = cvs.getContext('2d');
+  // the world renders to a low-res buffer and upscales with nearest-neighbor:
+  // everything becomes cohesive chunky pixel art (2 world units per pixel)
+  const lowCvs = document.createElement('canvas');
+  const lctx = lowCvs.getContext('2d');
+  let rctx = ctx; // active render target for world-pass drawing
+  let lowW = 1, lowH = 1;
 
   // Logical viewport: fixed height, variable width
   const VH = 540;
@@ -38,6 +44,10 @@ const Game = (() => {
     viewW = SW / scale;
     viewH = SH / scale;
     worldOffY = Math.max(0, viewH - GROUND_Y - 380); // keep the fight clear of the touch controls
+    lowW = Math.max(160, Math.ceil(viewW / 2));
+    lowH = Math.max(120, Math.ceil(viewH / 2));
+    lowCvs.width = lowW;
+    lowCvs.height = lowH;
   }
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => { resize(); setTimeout(resize, 300); });
@@ -48,7 +58,16 @@ const Game = (() => {
   let mode = 'idle';        // idle | playing | victory | defeat
   let paused = false;
   let plan = null, theme = themeFor(1);
-  let player = null, enemies = [], projectiles = [], coins = [], particles = [], floats = [], minions = [], beams = [], pickups = [];
+  let player = null, enemies = [], projectiles = [], coins = [], particles = [], floats = [], minions = [], beams = [], pickups = [], slashes = [], platforms = [];
+
+  // nearest standable surface at or below y for a given x
+  function floorAt(x, y) {
+    let f = GROUND_Y;
+    for (const pl of platforms) {
+      if (Math.abs(x - pl.x) < pl.w / 2 && pl.y >= y - 4 && pl.y < f) f = pl.y;
+    }
+    return f;
+  }
   let waveIdx = 0, spawnDelay = 0, endTimer = 0, endFired = false;
   let coinrainT = 0, gooseSpawned = false;
   let camX = 0, shakeT = 0, shakeMag = 0, hitstop = 0, timeScale = 1, flashFxT = 0;
@@ -83,11 +102,22 @@ const Game = (() => {
       hp: stats.maxHp, energy: 100, onGround: true, crouch: false,
       buffT: 0, buffDmg: 1, buffSpeed: 1, returnT: 0, diveT: 0,
       combo: 0, comboT: 0, comboPop: 0,
+      chainStep: 0, chainT: 0, rangedCd: 0,
+      dropT: 0, standPlat: null, jumpCut: false,
       pwGiantT: 0, pwMagnetT: 0, shieldHits: 0,
       attack: null, hurtT: 0, invulnT: 0, walkCyc: 0, animT: 0, flash: 0,
       ascended: upg.ascended, size: upg.ascended ? (cdef.finalForm.sizeMult || 1.12) : (cdef.baseSize || 1),
     };
-    enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = []; beams = []; pickups = [];
+    enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = []; beams = []; pickups = []; slashes = [];
+    // floating one-way platforms, spread across the stage at two heights
+    platforms = [];
+    for (let i = 0; i < 3; i++) {
+      platforms.push({
+        x: 300 + i * ((STAGE_W - 600) / 2) + rand(-90, 90),
+        y: GROUND_Y - (i % 2 === 0 ? 128 : 208) + rand(-12, 12),
+        w: rand(140, 210),
+      });
+    }
     coinrainT = 2; gooseSpawned = false;
     if (upg.ascended && cdef.finalForm.minions) {
       cdef.finalForm.minions.forEach((mid, i) => {
@@ -141,6 +171,13 @@ const Game = (() => {
         }
       }
       if (e.def.signature === 'roll') { e.rollDir = -dir; e.touchCd = 0; }
+      // half the snipers take the high ground
+      if (t.ranged && platforms.length && Math.random() < 0.5) {
+        const pl = platforms[Math.floor(Math.random() * platforms.length)];
+        e.plat = pl;
+        e.x = clamp(pl.x + rand(-pl.w / 4, pl.w / 4), 60, STAGE_W - 60);
+        e.y = pl.y;
+      }
       enemies.push(e);
       burst(e.x, e.y - e.h / 2, theme.glow, 12, 200, false);
     }
@@ -299,6 +336,26 @@ const Game = (() => {
     shakeT = 0.25; shakeMag = 6;
     Sfx.hurt();
     if (player.hp <= 0) { player.hp = 0; loseLevel(); }
+  }
+
+  // ---------- Ranged weapon (Y button) ----------
+  function fireRanged() {
+    const p = player, rw = p.cdef.rangedWeapon, def = rw.proj;
+    const dmg = (def.dmg || 9) * p.stats.rangedMult;
+    const n = def.count || 1;
+    for (let i = 0; i < n; i++) {
+      projectiles.push({
+        type: 'fire', hostile: false, x: p.x + p.facing * 26, y: p.y - (def.arc ? 74 : 56) - i * 12,
+        vx: p.facing * (def.speed || 520), vy: def.arc ? -170 : (def.spreadY ? (i - (n - 1) / 2) * def.spreadY : 0),
+        dmg, r: def.r || 6, life: def.life || 1.3,
+        pierce: !!def.pierce, shape: def.shape, bounce: def.bounce, arcGrav: def.arc && !def.bounce,
+        douse: def.douse, freeze: def.freeze, bounty: def.bounty,
+        dir: p.facing, color: p.cdef.color,
+      });
+    }
+    p.rangedCd = def.cd || 0.55;
+    p.attack = { key: 'X1', su: 0.04, ac: 0.06, rec: 0.14, t: 0, hits: new Set(), def: null };
+    Sfx.jump();
   }
 
   // ---------- Specials (data-driven — see the special move library in data.js) ----------
@@ -528,6 +585,8 @@ const Game = (() => {
     if (p.pwMagnetT > 0) p.pwMagnetT -= dt;
     if (p.comboPop > 0) p.comboPop -= dt;
     if (p.comboT > 0) { p.comboT -= dt; if (p.comboT <= 0) p.combo = 0; }
+    if (p.rangedCd > 0) p.rangedCd -= dt;
+    if (p.chainT > 0) { p.chainT -= dt; if (p.chainT <= 0) p.chainStep = 0; }
     // Volleyball Dive: the miss, the sternum, the shame
     if (p.diveT > 0) {
       p.diveT -= dt;
@@ -579,12 +638,30 @@ const Game = (() => {
       Input.consume();
     } else if (p.hurtT <= 0) {
       for (const code of Input.consume()) {
-        if (code === 'JUMP' && p.onGround && !p.crouch) { p.vy = -760; p.onGround = false; Sfx.jump(); }
+        if (code === 'JUMP' && p.onGround && p.crouch && p.standPlat) {
+          // down+jump: drop through the platform
+          p.dropT = 0.28; p.onGround = false; p.standPlat = null; p.y += 6;
+        } else if (code === 'JUMP' && p.onGround && !p.crouch) { p.vy = -760; p.onGround = false; p.jumpCut = false; Sfx.jump(); }
         else if (code === 'A' && !attacking) fireSpecial();
-        else if ((code === 'X' || code === 'Y' || code === 'B') && !attacking) {
-          const def = ATTACKS[code];
+        else if (code === 'Y' && !p.attack && p.rangedCd <= 0) fireRanged();
+        else if (code === 'B' && !p.attack) {
+          const def = ATTACKS.B;
           const sp = p.cdef.atkSpeed;
-          p.attack = { key: code, def, su: def.startup * sp, ac: def.active * sp, rec: def.recovery * sp, t: 0, hits: new Set() };
+          p.attack = { key: 'B', def, su: def.startup * sp, ac: def.active * sp, rec: def.recovery * sp, t: 0, hits: new Set() };
+        } else if (code === 'X') {
+          // real combo string: jab -> cross -> finisher, recovery-cancellable
+          const a = p.attack;
+          const canFresh = !a;
+          const canCancel = a && a.chain !== undefined && a.chain < 2 && a.t > a.su + a.ac * 0.5;
+          if (canFresh || canCancel) {
+            const step = (canCancel || p.chainT > 0) ? Math.min(p.chainStep, 2) : 0;
+            const def = CHAIN[step];
+            const sp = p.cdef.atkSpeed;
+            p.attack = { key: def.pose, chain: step, def, su: def.startup * sp, ac: def.active * sp, rec: def.recovery * sp, t: 0, hits: new Set(), slashed: false };
+            p.chainStep = step >= 2 ? 0 : step + 1;
+            p.chainT = step >= 2 ? 0 : 0.9;
+            if (p.onGround) p.vx = p.facing * def.lunge; // step into every hit
+          }
         }
       }
     }
@@ -611,10 +688,28 @@ const Game = (() => {
       }
     }
     p.x = clamp(p.x + p.vx * dt, 40, STAGE_W - 40);
+    // variable jump height: releasing jump early cuts the arc
+    if (!p.onGround && p.vy < -200 && !Input.jumpHeld && !p.jumpCut && !(p.ascended && p.cdef.finalForm.fly)) {
+      p.vy *= 0.5; p.jumpCut = true;
+    }
     const wasAirborne = !p.onGround;
+    const prevY = p.y;
     p.y += p.vy * dt;
     if (p.y < 150) { p.y = 150; if (p.vy < 0) p.vy = 0; } // flight ceiling
-    if (p.y >= GROUND_Y) { p.y = GROUND_Y; p.vy = 0; p.onGround = true; } else p.onGround = false;
+    if (p.dropT > 0) p.dropT -= dt;
+    p.onGround = false;
+    if (p.vy >= 0) {
+      if (p.dropT <= 0) {
+        // one-way platforms: land only when falling across the top
+        for (const pl of platforms) {
+          if (prevY <= pl.y + 1 && p.y >= pl.y && Math.abs(p.x - pl.x) < pl.w / 2 + 8) {
+            p.y = pl.y; p.vy = 0; p.onGround = true; p.standPlat = pl;
+            break;
+          }
+        }
+      }
+      if (!p.onGround && p.y >= GROUND_Y) { p.y = GROUND_Y; p.vy = 0; p.onGround = true; p.standPlat = null; }
+    }
     if (wasAirborne && p.onGround) p.landT = 0.11; // landing squash
     if (p.landT > 0) p.landT -= dt;
 
@@ -624,6 +719,14 @@ const Game = (() => {
       a.t += dt;
       if (a.def && a.t >= a.su && a.t < a.su + a.ac) {
         const d = a.def;
+        if (!a.slashed) {
+          a.slashed = true;
+          slashes.push({
+            x: p.x + p.facing * ((d.range || 90) * 0.5), y: p.y - 52,
+            facing: p.facing, t: 0.16, max: 0.16,
+            size: (d.range || 100) * 0.7, color: p.cdef.accent, up: a.key === 'B',
+          });
+        }
         for (const e of [...enemies]) {
           if (a.hits.has(e)) continue;
           let hit = false;
@@ -637,7 +740,7 @@ const Game = (() => {
           if (hit) {
             a.hits.add(e);
             const dir = d.radius ? (e.x >= p.x ? 1 : -1) : p.facing;
-            hitEnemy(e, d.dmg * st.dmg * (p.buffT > 0 ? p.buffDmg : 1) * (p.pwGiantT > 0 ? 1.5 : 1), dir * d.kb, d.kbY, a.key !== 'X');
+            hitEnemy(e, d.dmg * st.dmg * (p.buffT > 0 ? p.buffDmg : 1) * (p.pwGiantT > 0 ? 1.5 : 1), dir * d.kb, d.kbY, a.key === 'X3' || a.key === 'B');
             const wb = p.cdef.weaponBurn;
             if (wb && p.upg.weapon >= wb.tier && enemies.includes(e) && e.state !== 'pile') e.burnT = wb.dur;
           }
@@ -673,7 +776,9 @@ const Game = (() => {
     // knockback physics always applies
     e.vy += GRAV * dt;
     e.y += e.vy * dt;
-    if (e.y >= GROUND_Y) { e.y = GROUND_Y; e.vy = 0; e.onGround = true; }
+    const eFloor = (e.plat && Math.abs(e.x - e.plat.x) < e.plat.w / 2 + 12) ? e.plat.y : GROUND_Y;
+    if (e.plat && eFloor === GROUND_Y) e.plat = null; // knocked off the ledge
+    if (e.y >= eFloor) { e.y = eFloor; e.vy = 0; e.onGround = true; }
     e.vx *= Math.pow(0.0015, dt); // friction on knockback impulse
     // cameos are allowed to leave the stage — that's their whole exit strategy
     e.x = e.def.cameo ? e.x + e.vx * dt : clamp(e.x + e.vx * dt, 40, STAGE_W - 40);
@@ -893,7 +998,7 @@ const Game = (() => {
       m.x = clamp(m.x + Math.sign(dx) * 240 * dt, 40, STAGE_W - 40);
       m.walkCyc += dt * 11;
     } else if (target) m.facing = Math.sign(target.x - m.x) || 1;
-    if (target && best < 70 && m.cd <= 0) {
+    if (target && best < 70 && Math.abs(target.y - m.y) < 70 && m.cd <= 0) {
       m.cd = rand(1.2, 2.4);
       m.strikeT = 0.22;
       hitEnemy(target, 8 * player.stats.dmg, m.facing * 140, -100, false);
@@ -917,6 +1022,7 @@ const Game = (() => {
     for (const pr of [...projectiles]) {
       if (pr.bounce) pr.vy += 1500 * dt;
       if (pr.grenade) pr.vy += 1300 * dt;
+      if (pr.arcGrav) pr.vy += 1300 * dt;
       if (pr.flap) {
         pr.vy += 1100 * dt;
         pr.flapT = (pr.flapT || 0) - dt;
@@ -1003,7 +1109,8 @@ const Game = (() => {
       pk.t += dt; pk.life -= dt;
       pk.vy = (pk.vy || 0) + GRAV * 0.7 * dt;
       pk.y += pk.vy * dt;
-      if (pk.y > GROUND_Y - 22) { pk.y = GROUND_Y - 22; pk.vy = 0; }
+      const pkFloor = floorAt(pk.x, pk.y - 16);
+      if (pk.y > pkFloor - 22) { pk.y = pkFloor - 22; pk.vy = 0; }
       if (pk.life <= 0) { pickups.splice(pickups.indexOf(pk), 1); continue; }
       if (mode === 'playing' && Math.hypot(player.x - pk.x, (player.y - 45) - pk.y) < 46) {
         if (pk.type === 'heart') {
@@ -1043,7 +1150,8 @@ const Game = (() => {
         c.vy += GRAV * 0.8 * dt;
       }
       c.x += c.vx * dt; c.y += c.vy * dt;
-      if (c.y > GROUND_Y - 6 && !c.magnet) { c.y = GROUND_Y - 6; c.vy *= -0.45; c.vx *= 0.8; }
+      const cFloor = floorAt(c.x, c.y - 10);
+      if (c.y > cFloor - 6 && !c.magnet) { c.y = cFloor - 6; c.vy *= -0.45; c.vx *= 0.8; }
       if (dist < 42) {
         Save.data.money += c.v; earned += c.v;
         addFloat(player.x, player.y - player.h - 10, '+$' + c.v, '#ffd977');
@@ -1067,6 +1175,10 @@ const Game = (() => {
     for (const b of [...beams]) {
       b.t -= dt;
       if (b.t <= 0) beams.splice(beams.indexOf(b), 1);
+    }
+    for (const s of [...slashes]) {
+      s.t -= dt;
+      if (s.t <= 0) slashes.splice(slashes.indexOf(s), 1);
     }
     // per-world ambiance: fireflies, sewer drips, road dust, bats & embers
     if (ambient.length < 40 && Math.random() < 0.3) {
@@ -1238,7 +1350,7 @@ const Game = (() => {
   }
 
   function drawBackground() {
-    const g = ctx;
+    const g = rctx;
     const sky = g.createLinearGradient(0, -worldOffY, 0, GROUND_Y);
     sky.addColorStop(0, theme.sky1); sky.addColorStop(1, theme.sky2);
     g.fillStyle = sky; g.fillRect(camX, -worldOffY, viewW, viewH);
@@ -1249,6 +1361,30 @@ const Game = (() => {
     mg.addColorStop(0, theme.glow + 'cc'); mg.addColorStop(0.25, theme.glow + '44'); mg.addColorStop(1, 'transparent');
     g.fillStyle = mg; g.fillRect(mx - 140, my - 140, 280, 280);
     g.fillStyle = theme.glow; g.beginPath(); g.arc(mx, my, 34, 0, 7); g.fill();
+
+    // light shafts from the moon
+    g.globalAlpha = 0.07;
+    g.fillStyle = theme.glow;
+    for (let i = 0; i < 3; i++) {
+      const sx0 = mx - 40 - i * 130;
+      g.beginPath();
+      g.moveTo(sx0, my); g.lineTo(sx0 - 130, GROUND_Y + 40); g.lineTo(sx0 - 60, GROUND_Y + 40); g.lineTo(sx0 + 30, my);
+      g.closePath(); g.fill();
+    }
+    g.globalAlpha = 1;
+
+    // deepest ridge line (parallax 0.1) with aerial haze over it
+    g.fillStyle = hexMix(theme.far, '#000000', 0.4);
+    const r0 = seeded((plan ? plan.level : 1) * 3 + 5);
+    g.beginPath();
+    g.moveTo(camX, VH);
+    for (let i = 0; i <= 10; i++) {
+      const wx0 = (i / 10) * (STAGE_W + viewW) - camX * 0.1;
+      g.lineTo(camX + ((wx0 % (viewW + 600)) + viewW + 600) % (viewW + 600) - 300, 250 - r0() * 120);
+    }
+    g.lineTo(camX + viewW, VH); g.closePath(); g.fill();
+    g.fillStyle = theme.sky1 + '55';
+    g.fillRect(camX, 220, viewW, GROUND_Y - 220);
 
     // far ridge (parallax 0.25)
     const r1 = seeded(plan ? plan.level : 1);
@@ -1314,6 +1450,39 @@ const Game = (() => {
       g.fillRect(camX, GROUND_Y, viewW, groundH);
     }
     g.fillStyle = theme.groundTop; g.fillRect(camX, GROUND_Y, viewW, 5);
+
+    // floating platforms, styled per world
+    if (plan) {
+      for (const pl of platforms) {
+        const x0 = pl.x - pl.w / 2;
+        g.fillStyle = '#14101a';
+        g.fillRect(x0 - 3, pl.y - 3, pl.w + 6, 19); // ink outline
+        g.fillStyle = theme.near;
+        g.fillRect(x0, pl.y, pl.w, 13);
+        g.fillStyle = theme.groundTop;
+        g.fillRect(x0, pl.y, pl.w, 4);
+        const pstyle = plan.world.props;
+        if (pstyle === 'fence') {
+          g.strokeStyle = '#4a6a30'; g.lineWidth = 1.6;
+          for (let gx = x0 + 8; gx < x0 + pl.w - 6; gx += 16) {
+            g.beginPath(); g.moveTo(gx, pl.y); g.lineTo(gx + (gx * 7 % 5) - 2, pl.y - 5); g.stroke();
+          }
+        } else if (pstyle === 'pipes') {
+          g.fillStyle = 'rgba(74,232,178,0.35)';
+          for (let gx = x0 + 10; gx < x0 + pl.w - 8; gx += 24) {
+            g.beginPath(); g.arc(gx, pl.y + 8, 1.6, 0, 7); g.fill();
+          }
+        } else if (pstyle === 'road') {
+          g.fillStyle = '#e8742a';
+          for (let gx = x0 + 4; gx < x0 + pl.w - 10; gx += 26) g.fillRect(gx, pl.y + 6, 13, 4);
+        } else {
+          g.strokeStyle = 'rgba(10,6,20,0.6)'; g.lineWidth = 1.4;
+          for (let gx = x0 + 20; gx < x0 + pl.w - 6; gx += 28) {
+            g.beginPath(); g.moveTo(gx, pl.y + 4); g.lineTo(gx, pl.y + 13); g.stroke();
+          }
+        }
+      }
+    }
     // stage edge glow markers
     g.fillStyle = theme.glow + '55';
     g.fillRect(30, GROUND_Y - 60, 6, 60); g.fillRect(STAGE_W - 36, GROUND_Y - 60, 6, 60);
@@ -1383,14 +1552,24 @@ const Game = (() => {
     if (o.crouch) { backFoot = [-13, 0]; frontFoot = [13, 0]; }
 
     const ext = o.attackExt || 0; // 0..1 pose extension
-    if (o.attackKey === 'X' || o.attackKey === 'A') {
+    // normalize combo-chain keys into poses
+    const ak = (o.attackKey === 'X1' || o.attackKey === 'X' || o.attackKey === 'A') ? 'punch'
+      : o.attackKey === 'X2' ? 'cross'
+      : (o.attackKey === 'X3' || o.attackKey === 'Y') ? 'kick'
+      : o.attackKey;
+    if (ak === 'punch') {
       frontHand = [14 + 26 * ext, (-56 + 4 * ext) * cf];
       lean = 3 * ext;
-    } else if (o.attackKey === 'Y') {
+    } else if (ak === 'cross') {
+      // rear hand whips across the body
+      backHand = [14 + 30 * ext, (-53 + 3 * ext) * cf];
+      frontHand = [6, -48 * cf];
+      lean = 5 * ext;
+    } else if (ak === 'kick') {
       frontFoot = [10 + 34 * ext, -40 * ext * cf];
       lean = -5 * ext;
       backHand = [-10 - 6 * ext, -50 * cf];
-    } else if (o.attackKey === 'B') {
+    } else if (ak === 'B') {
       frontHand = [12, -50 - 34 * ext];
       backHand = [4, -46 - 22 * ext];
       lean = -2 * ext;
@@ -1405,7 +1584,7 @@ const Game = (() => {
       hip = [0, -13]; sh = [0, -56];
       backHand = [-21, -46]; frontHand = [21, -46];
       const pExt = o.attackExt || 0;
-      if (o.attackKey === 'X' || o.attackKey === 'A') frontHand = [22 + 24 * pExt, -48];
+      if (o.attackKey && o.attackKey !== 'B') frontHand = [22 + 24 * pExt, -48];
       else if (o.attackKey === 'B') { frontHand = [16, -60 - 26 * pExt]; backHand = [-16, -60 - 26 * pExt]; }
     } else if (look.chicken) {
       hip = [0, -24]; // drumstick legs under the body
@@ -1416,9 +1595,9 @@ const Game = (() => {
       backFoot = [-20 + cw, 0]; frontFoot = [-4 - cw, 0];
       backHand = [4 - cw, 0]; frontHand = [14 + cw, 0];
       const cExt = o.attackExt || 0;
-      if (o.attackKey === 'X' || o.attackKey === 'A') frontHand = [18 + 22 * cExt, -12];
-      else if (o.attackKey === 'Y') frontFoot = [-8, -6 - 22 * cExt];
+      if (o.attackKey === 'X3') frontFoot = [-8, -6 - 22 * cExt];
       else if (o.attackKey === 'B') frontHand = [12, -24 - 20 * cExt];
+      else if (o.attackKey) frontHand = [18 + 22 * cExt, -12];
     }
     if (look.wobble) lean += Math.sin((o.animT || 0) * 6) * 5; // toddler balance
     const legCol = look.chicken ? '#e8a020' : o.color;
@@ -2043,8 +2222,36 @@ const Game = (() => {
     return Math.max(0, 1 - (a.t - a.su - a.ac) / a.rec);
   }
 
+  // fast-parallax foreground silhouettes: the depth seller
+  function drawForeground() {
+    if (!plan) return;
+    const g = rctx;
+    g.setTransform(lowW / viewW, 0, 0, lowW / viewW, 0, 0);
+    const period = 320;
+    const off = ((camX * 1.35) % period + period) % period;
+    const yb = viewH;
+    g.fillStyle = 'rgba(8,6,12,0.85)';
+    const props = plan.world.props;
+    for (let sx = -period; sx < viewW + period; sx += period) {
+      const x = sx - off + period;
+      if (props === 'fence') {
+        g.beginPath(); g.arc(x, yb + 28, 62, Math.PI, 0); g.fill();
+      } else if (props === 'pipes') {
+        g.fillRect(x - 16, yb - 46, 32, 46);
+        g.fillRect(x - 24, yb - 54, 48, 12);
+      } else if (props === 'road') {
+        g.fillRect(x - 5, yb - 42, 10, 42);
+        g.fillRect(x - 70, yb - 34, 140, 8);
+      } else {
+        g.fillRect(x - 42, yb - 30, 84, 30);
+        g.fillRect(x - 42, yb - 44, 18, 16);
+        g.fillRect(x + 24, yb - 44, 18, 16);
+      }
+    }
+  }
+
   function drawEntities() {
-    const g = ctx;
+    const g = rctx;
     for (const e of enemies) {
       let key = null;
       if (e.state === 'windup') key = 'windup';
@@ -2178,6 +2385,24 @@ const Game = (() => {
       }
     }
 
+    // melee slash arcs
+    for (const s of slashes) {
+      g.globalAlpha = Math.max(0, s.t / s.max) * 0.85;
+      g.save();
+      g.translate(s.x, s.y);
+      g.scale(s.facing, 1);
+      const grow = 0.6 + (1 - s.t / s.max) * 0.5;
+      g.strokeStyle = s.color; g.lineWidth = 4.5;
+      g.beginPath();
+      if (s.up) g.arc(0, 6, s.size * grow, -Math.PI * 0.85, -Math.PI * 0.15);
+      else g.arc(-s.size * 0.25, 0, s.size * grow, -Math.PI * 0.4, Math.PI * 0.32);
+      g.stroke();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 2;
+      g.stroke();
+      g.restore();
+    }
+    g.globalAlpha = 1;
+
     // laser beams
     for (const b of beams) {
       g.globalAlpha = Math.max(0, b.t / b.max);
@@ -2247,6 +2472,27 @@ const Game = (() => {
         g.fillStyle = '#55555f';
         g.beginPath(); g.arc(-20, 8, 3, 0, 7); g.fill();
         g.beginPath(); g.arc(20, 8, 3, 0, 7); g.fill();
+        g.restore();
+      } else if (pr.shape === 'plane') {
+        g.save();
+        g.translate(pr.x, pr.y);
+        g.scale(Math.sign(pr.vx) || 1, 1);
+        g.fillStyle = '#f2f4f8';
+        g.beginPath(); g.moveTo(9, 0); g.lineTo(-7, -5); g.lineTo(-3, 0); g.lineTo(-7, 5); g.closePath(); g.fill();
+        g.strokeStyle = '#8d8d96'; g.lineWidth = 1; g.stroke();
+        g.restore();
+      } else if (pr.shape === 'star') {
+        g.save();
+        g.translate(pr.x, pr.y);
+        g.rotate(pr.life * 18);
+        g.fillStyle = pr.color;
+        g.beginPath();
+        for (let i2 = 0; i2 < 8; i2++) {
+          const a2 = i2 * Math.PI / 4, r2 = i2 % 2 === 0 ? pr.r + 3 : pr.r * 0.45;
+          if (i2 === 0) g.moveTo(Math.cos(a2) * r2, Math.sin(a2) * r2);
+          else g.lineTo(Math.cos(a2) * r2, Math.sin(a2) * r2);
+        }
+        g.closePath(); g.fill();
         g.restore();
       } else if (pr.shape === 'brooks') {
         g.save();
@@ -2500,19 +2746,32 @@ const Game = (() => {
   }
 
   function render() {
-    ctx.setTransform(DPR * scale, 0, 0, DPR * scale, 0, 0);
+    // --- world pass: render at pixel resolution ---
+    rctx = lctx;
+    const k = lowW / viewW;
+    lctx.setTransform(1, 0, 0, 1, 0, 0);
+    lctx.clearRect(0, 0, lowW, lowH);
+    lctx.imageSmoothingEnabled = false;
     let ox = 0, oy = 0;
     if (shakeT > 0) { ox = rand(-1, 1) * shakeMag * shakeT * 4; oy = rand(-1, 1) * shakeMag * shakeT * 4; }
-    ctx.translate(-camX + ox, worldOffY + oy);
+    lctx.setTransform(k, 0, 0, k, 0, 0);
+    lctx.translate(-camX + ox, worldOffY + oy);
     drawBackground();
     if (mode !== 'idle') drawEntities();
     if (mode !== 'idle' && plan && plan.event === 'fog' && player) {
-      const fg = ctx.createRadialGradient(player.x, player.y - 50, 240, player.x, player.y - 50, 430);
+      const fg = lctx.createRadialGradient(player.x, player.y - 50, 240, player.x, player.y - 50, 430);
       fg.addColorStop(0, 'rgba(6,6,12,0)');
       fg.addColorStop(1, 'rgba(6,6,12,0.88)');
-      ctx.fillStyle = fg;
-      ctx.fillRect(camX - 20, -worldOffY - 20, viewW + 40, viewH + 40);
+      lctx.fillStyle = fg;
+      lctx.fillRect(camX - 20, -worldOffY - 20, viewW + 40, viewH + 40);
     }
+    drawForeground();
+    rctx = ctx;
+
+    // --- upscale with hard pixels, then crisp UI on top ---
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(lowCvs, 0, 0, lowW, lowH, 0, 0, cvs.width, cvs.height);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     // vignette
     const w = SW, h = SH;
