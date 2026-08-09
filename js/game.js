@@ -150,6 +150,9 @@ const Game = (() => {
 
   function winLevel() {
     mode = 'victory'; timeScale = 0.55; endTimer = 2.0; endFired = false;
+    // advance + bank immediately so quitting during the slow-mo can't
+    // farm bounties or replay the cleared level
+    Save.data.level += 1;
     let sub = '+$' + earned + ' earned';
     // bounty: win any level as the wanted fighter
     const b = Save.data.bounty;
@@ -219,6 +222,7 @@ const Game = (() => {
         e.state = 'pile';
         e.pileT = 2.5;
         e.hp = 0.1;
+        e.burnT = 0; // bones don't burn; the pile must get its comeback chance
         burst(e.x, e.y - 20, '#d8d4c8', 14, 220);
         addFloat(e.x, e.y - 40, 'rattle rattle...', '#d8d4c8');
         return;
@@ -237,7 +241,7 @@ const Game = (() => {
   function killEnemy(e) {
     const comboMult = 1 + Math.min(player ? player.combo : 0, 50) * 0.02;
     let v = Math.max(2, Math.round(e.def.value * plan.valueMult * (e.valueMult || 1) * comboMult));
-    if (e.stolen) v += e.stolen * 2; // trash pandas pay back double
+    if (e.stolen) v += e.stolen * (e.def.cameo ? 1 : 2); // pandas pay double; the goose just gives it back
     if (e.def.cameo) addFloat(e.x, e.y - e.h, 'GOOSE BOUNTY!', '#ffd24a', true);
     if (e.elite) addFloat(e.x, e.y - e.h - 26, 'ELITE DOWN! ×5', '#ffd24a', true);
     // clog blobs split into two minis
@@ -635,7 +639,7 @@ const Game = (() => {
             const dir = d.radius ? (e.x >= p.x ? 1 : -1) : p.facing;
             hitEnemy(e, d.dmg * st.dmg * (p.buffT > 0 ? p.buffDmg : 1) * (p.pwGiantT > 0 ? 1.5 : 1), dir * d.kb, d.kbY, a.key !== 'X');
             const wb = p.cdef.weaponBurn;
-            if (wb && p.upg.weapon >= wb.tier && enemies.includes(e)) e.burnT = wb.dur;
+            if (wb && p.upg.weapon >= wb.tier && enemies.includes(e) && e.state !== 'pile') e.burnT = wb.dur;
           }
         }
       }
@@ -648,7 +652,7 @@ const Game = (() => {
     e.animT += dt;
     if (e.flash > 0) e.flash -= dt * 5;
     if (e.dousedT > 0) e.dousedT -= dt;
-    if (e.burnT > 0) {
+    if (e.burnT > 0 && e.state !== 'pile') {
       e.burnT -= dt;
       e.hp -= 8 * dt;
       if (Math.random() < 0.3) {
@@ -671,7 +675,8 @@ const Game = (() => {
     e.y += e.vy * dt;
     if (e.y >= GROUND_Y) { e.y = GROUND_Y; e.vy = 0; e.onGround = true; }
     e.vx *= Math.pow(0.0015, dt); // friction on knockback impulse
-    e.x = clamp(e.x + e.vx * dt, 40, STAGE_W - 40);
+    // cameos are allowed to leave the stage — that's their whole exit strategy
+    e.x = e.def.cameo ? e.x + e.vx * dt : clamp(e.x + e.vx * dt, 40, STAGE_W - 40);
 
     if (e.frozenT > 0) { e.frozenT -= dt; return; }
     if (e.hurtT > 0) { e.hurtT -= dt; return; }
@@ -1143,7 +1148,6 @@ const Game = (() => {
         endFired = true;
         timeScale = 1;
         if (mode === 'victory') {
-          Save.data.level += 1;
           Save.write();
           mode = 'idle';
           UI.toShop('LEVEL ' + plan.level + ' CLEARED  —  +$' + earned + ' earned this run', lastCharId);
@@ -1599,13 +1603,13 @@ const Game = (() => {
     if (at >= 3) {
       g.fillStyle = hexMix(o.color, '#000000', 0.35);
       g.strokeStyle = INK; g.lineWidth = 1.5;
-      g.beginPath(); g.roundRect(sh[0] + lean * 0.5 - 11, sh[1] - 5, 8, 7, 2); g.fill(); g.stroke();
-      g.beginPath(); g.roundRect(sh[0] + lean * 0.5 + 3, sh[1] - 5, 8, 7, 2); g.fill(); g.stroke();
+      g.fillRect(sh[0] + lean * 0.5 - 11, sh[1] - 5, 8, 7); g.strokeRect(sh[0] + lean * 0.5 - 11, sh[1] - 5, 8, 7);
+      g.fillRect(sh[0] + lean * 0.5 + 3, sh[1] - 5, 8, 7); g.strokeRect(sh[0] + lean * 0.5 + 3, sh[1] - 5, 8, 7);
     }
     if (at >= 4 && !look.shirtless) {
       g.fillStyle = hexMix(o.color, '#ffffff', 0.18);
       g.strokeStyle = INK; g.lineWidth = 1.5;
-      g.beginPath(); g.roundRect(-6 + lean * 0.4, sh[1] + 3, 14, 14, 3); g.fill(); g.stroke();
+      g.fillRect(-6 + lean * 0.4, sh[1] + 3, 14, 14); g.strokeRect(-6 + lean * 0.4, sh[1] + 3, 14, 14);
     }
     }
     // front leg
@@ -2107,7 +2111,7 @@ const Game = (() => {
         g.moveTo(e.x - 8, cy2); g.lineTo(e.x - 8, cy2 - 8); g.lineTo(e.x - 4, cy2 - 4);
         g.lineTo(e.x, cy2 - 10); g.lineTo(e.x + 4, cy2 - 4); g.lineTo(e.x + 8, cy2 - 8); g.lineTo(e.x + 8, cy2);
         g.closePath(); g.fill();
-        if (Math.random() < 0.15) particles.push({ x: e.x + rand(-14, 14), y: e.y - rand(20, e.h), vx: 0, vy: -40, life: 0.4, max: 0.4, r: 1.5, color: '#ffd24a', grav: false });
+        if (!paused && !hitstop && particles.length < 300 && Math.random() < 0.15) particles.push({ x: e.x + rand(-14, 14), y: e.y - rand(20, e.h), vx: 0, vy: -40, life: 0.4, max: 0.4, r: 1.5, color: '#ffd24a', grav: false });
       }
       // burning overlay for Tim's enemies and Fire Sword victims
       if ((player && player.cdef.enemiesOnFire && !(e.dousedT > 0)) || e.burnT > 0) {
