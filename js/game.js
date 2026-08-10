@@ -109,15 +109,13 @@ const Game = (() => {
       ascended: upg.ascended, size: upg.ascended ? (cdef.finalForm.sizeMult || 1.12) : (cdef.baseSize || 1),
     };
     enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = []; beams = []; pickups = []; slashes = [];
-    // floating one-way platforms, spread across the stage at two heights
+    // floating one-way platforms: two low, one high placed a short hop
+    // from the left low platform so every fighter can climb the tier
     platforms = [];
-    for (let i = 0; i < 3; i++) {
-      platforms.push({
-        x: 300 + i * ((STAGE_W - 600) / 2) + rand(-90, 90),
-        y: GROUND_Y - (i % 2 === 0 ? 128 : 208) + rand(-12, 12),
-        w: rand(140, 210),
-      });
-    }
+    const px1 = 380 + rand(-60, 60);
+    platforms.push({ x: px1, y: GROUND_Y - 126 + rand(-8, 8), w: rand(150, 200) });
+    platforms.push({ x: px1 + rand(195, 240), y: GROUND_Y - 190 + rand(-8, 8), w: rand(140, 180) });
+    platforms.push({ x: STAGE_W - 380 + rand(-60, 60), y: GROUND_Y - 126 + rand(-8, 8), w: rand(150, 200) });
     coinrainT = 2; gooseSpawned = false;
     if (upg.ascended && cdef.finalForm.minions) {
       cdef.finalForm.minions.forEach((mid, i) => {
@@ -850,7 +848,7 @@ const Game = (() => {
         e.x = clamp(e.x + e.chargeDir * 640 * dt, 40, STAGE_W - 40);
         e.walkCyc += dt * 30;
         if (Math.random() < 0.4) particles.push({ x: e.x - e.chargeDir * 40, y: e.y - rand(4, 20), vx: -e.chargeDir * 80, vy: -rand(20, 60), life: 0.4, max: 0.4, r: rand(2, 5), color: '#8d8574', grav: false });
-        if (!e.chargeHit && Math.abs(e.x - player.x) < 70) {
+        if (!e.chargeHit && Math.abs(e.x - player.x) < 70 && player.y > e.y - 100) {
           damagePlayer(e.dmg * 1.2, e.x);
           e.chargeHit = true;
         }
@@ -924,7 +922,7 @@ const Game = (() => {
       if (kind === 'goose') {
         addFloat(e.x, e.y - e.h - 28, 'HONK!', '#ffffff', true);
         burst(e.x, e.y - 60, '#e8f0ff', 18, 340, false);
-        if (Math.abs(player.x - e.x) < 280) damagePlayer(e.dmg * 0.9, e.x);
+        if (Math.abs(player.x - e.x) < 280 && Math.abs(player.y - e.y) < 120) damagePlayer(e.dmg * 0.9, e.x);
         if (player) player.vx += Math.sign(player.x - e.x || 1) * -500;
         shakeT = 0.35; shakeMag = 9; Sfx.heavy();
       } else if (kind === 'heater') {
@@ -957,11 +955,15 @@ const Game = (() => {
     }
     if (e.def.ranged) {
       const dir = Math.sign(player.x - e.x) || 1;
-      projectiles.push({ type: 'bolt', hostile: true, x: e.x + dir * 24, y: e.y - 70, vx: dir * 360, vy: 0, dmg: e.dmg, r: 6, life: 2.4, color: '#c89aff' });
+      const by = e.y - 70;
+      // elevated snipers aim down at the player instead of firing level
+      const tFly = Math.max(0.25, Math.abs(player.x - (e.x + dir * 24)) / 360);
+      const bvy = e.plat ? clamp(((player.y - 50) - by) / tFly, -160, 340) : 0;
+      projectiles.push({ type: 'bolt', hostile: true, x: e.x + dir * 24, y: by, vx: dir * 360, vy: bvy, dmg: e.dmg, r: 6, life: 2.4, color: '#c89aff' });
       Sfx.hit();
     } else {
       const dxp = Math.abs(player.x - e.x);
-      if (dxp <= e.def.reach + 24 && player.y > e.y - e.h - 40) {
+      if (dxp <= e.def.reach + 24 && player.y > e.y - e.h - 40 && player.y - e.y > -60) {
         damagePlayer(e.dmg, e.x);
         // the goose also steals
         if (e.def.bossKind === 'goose' && Save.data.money > 0) {
@@ -2293,7 +2295,7 @@ const Game = (() => {
           color: e.def.color, color2: e.def.color2, accent: e.def.color2, skin: e.def.color,
           hood: true, boss: !!e.def.boss, accessory: e.def.accessory, eyeColor: e.def.boss ? '#ff4a3a' : '#ffd34a',
           moving: e.state === 'approach' && e.frozenT <= 0, walkCyc: e.walkCyc, animT: e.animT,
-          onGround: e.y >= GROUND_Y - 1, attackKey: key,
+          onGround: e.onGround !== false, attackKey: key,
           hurt: e.hurtT > 0, flash: e.flash, frozen: e.frozenT > 0,
           weaponTier: 0, crouch: false, ascended: false,
         });

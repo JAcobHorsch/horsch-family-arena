@@ -161,7 +161,7 @@ const UI = (() => {
       });
     } else {
       asc.innerHTML = `<h3>★ ASCENSION ★</h3>
-        <div class="shop-desc">Max out all three upgrade tracks for ${c.name} to reveal their FINAL FORM.</div>
+        <div class="shop-desc">Max out all four upgrade tracks for ${c.name} to reveal their FINAL FORM.</div>
         <button class="buybtn" disabled>LOCKED</button>`;
     }
     cards.appendChild(asc);
@@ -184,7 +184,7 @@ const UI = (() => {
   function init() {
     Save.load();
     const dirty = Save.data.money > 0 || Save.data.level > 1 ||
-      CHARACTERS.some(c => { const u = Save.upg(c.id); return u.weapon + u.armor + u.ability > 0; });
+      CHARACTERS.some(c => { const u = Save.upg(c.id); return u.weapon + u.ranged + u.armor + u.ability > 0 || u.ascended; });
     $('titleReset').classList.toggle('hidden', !dirty);
     $('titleStart').addEventListener('click', () => { Sfx.unlock(); Sfx.buy(); toSelect(); });
     $('titleReset').addEventListener('click', () => {
