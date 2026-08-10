@@ -7,8 +7,11 @@ const Game = (() => {
   // everything becomes cohesive chunky pixel art (2 world units per pixel)
   const lowCvs = document.createElement('canvas');
   const lctx = lowCvs.getContext('2d');
+  // far layers render even smaller and upscale WITH smoothing = tilt-shift blur
+  const bgCvs = document.createElement('canvas');
+  const bctx = bgCvs.getContext('2d');
   let rctx = ctx; // active render target for world-pass drawing
-  let lowW = 1, lowH = 1;
+  let lowW = 1, lowH = 1, bgW = 1, bgH = 1;
 
   // Logical viewport: fixed height, variable width
   const VH = 540;
@@ -48,6 +51,10 @@ const Game = (() => {
     lowH = Math.max(120, Math.ceil(viewH / 2));
     lowCvs.width = lowW;
     lowCvs.height = lowH;
+    bgW = Math.max(80, Math.ceil(lowW / 2));
+    bgH = Math.max(60, Math.ceil(lowH / 2));
+    bgCvs.width = bgW;
+    bgCvs.height = bgH;
   }
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => { resize(); setTimeout(resize, 300); });
@@ -58,7 +65,12 @@ const Game = (() => {
   let mode = 'idle';        // idle | playing | victory | defeat
   let paused = false;
   let plan = null, theme = themeFor(1);
-  let player = null, enemies = [], projectiles = [], coins = [], particles = [], floats = [], minions = [], beams = [], pickups = [], slashes = [], platforms = [];
+  let player = null, enemies = [], projectiles = [], coins = [], particles = [], floats = [], minions = [], beams = [], pickups = [], slashes = [], platforms = [], lights = [];
+
+  // additive light splash (impacts, kills, specials)
+  function spawnLight(x, y, r, color, a) {
+    if (lights.length < 24) lights.push({ x, y, r, color, a: a || 0.4, t: 0.3, max: 0.3 });
+  }
 
   // nearest standable surface at or below y for a given x
   function floorAt(x, y) {
@@ -108,7 +120,7 @@ const Game = (() => {
       attack: null, hurtT: 0, invulnT: 0, walkCyc: 0, animT: 0, flash: 0,
       ascended: upg.ascended, size: upg.ascended ? (cdef.finalForm.sizeMult || 1.12) : (cdef.baseSize || 1),
     };
-    enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = []; beams = []; pickups = []; slashes = [];
+    enemies = []; projectiles = []; coins = []; particles = []; floats = []; minions = []; beams = []; pickups = []; slashes = []; lights = [];
     // floating one-way platforms: two low, one high placed a short hop
     // from the left low platform so every fighter can climb the tier
     platforms = [];
@@ -241,6 +253,7 @@ const Game = (() => {
     addFloat(e.x, e.y - e.h - 14, Math.round(dmg), '#ffd977');
     burst(e.x, e.y - e.h * 0.55, '#ffcf7a', heavy ? 10 : 5, heavy ? 320 : 200);
     if (heavy && Math.random() < 0.35) impactWord(e.x + rand(-10, 10), e.y - e.h * 0.6, IMPACT_WORDS[Math.floor(Math.random() * IMPACT_WORDS.length)]);
+    spawnLight(e.x, e.y - e.h * 0.55, heavy ? 95 : 55, '#ffcf7a', heavy ? 0.5 : 0.3);
     player.energy = Math.min(100, player.energy + 6);
     // combo: consecutive hits without taking damage multiply coin drops
     player.combo++;
@@ -309,6 +322,7 @@ const Game = (() => {
       });
     }
     burst(e.x, e.y - e.h * 0.5, e.def.color, e.def.boss ? 40 : 16, e.def.boss ? 420 : 280);
+    spawnLight(e.x, e.y - 44, e.def.boss ? 220 : 120, '#ffd24a', 0.55);
     Sfx.die();
     enemies.splice(enemies.indexOf(e), 1);
   }
@@ -364,6 +378,7 @@ const Game = (() => {
     if (p.energy < st.energyCost) { addFloat(p.x, p.y - p.h - 18, 'NO ENERGY', '#7fb8ff'); Sfx.denied(); return; }
     p.energy -= st.energyCost;
     Sfx.special();
+    spawnLight(p.x, p.y - 50, 150, (p.cdef.special && p.cdef.special.color) || p.cdef.color, 0.6);
     const asc = p.ascended;
     const S = st.specialMult;
     const size = asc ? 1.45 : 1;
@@ -1182,6 +1197,10 @@ const Game = (() => {
       s.t -= dt;
       if (s.t <= 0) slashes.splice(slashes.indexOf(s), 1);
     }
+    for (const li of [...lights]) {
+      li.t -= dt;
+      if (li.t <= 0) lights.splice(lights.indexOf(li), 1);
+    }
     // per-world ambiance: fireflies, sewer drips, road dust, bats & embers
     if (ambient.length < 40 && Math.random() < 0.3) {
       const props = plan ? plan.world.props : 'castle';
@@ -1351,18 +1370,67 @@ const Game = (() => {
     return grainPattern;
   }
 
-  function drawBackground() {
-    const g = rctx;
-    const sky = g.createLinearGradient(0, -worldOffY, 0, GROUND_Y);
-    sky.addColorStop(0, theme.sky1); sky.addColorStop(1, theme.sky2);
-    g.fillStyle = sky; g.fillRect(camX, -worldOffY, viewW, viewH);
+  // tinted checkerboard pattern for dither bands, cached per color
+  const tintPats = {};
+  function checkerPat(color) {
+    if (tintPats[color]) return tintPats[color];
+    const pc = document.createElement('canvas');
+    pc.width = 8; pc.height = 8;
+    const q = pc.getContext('2d');
+    q.fillStyle = color;
+    q.fillRect(0, 0, 4, 4); q.fillRect(4, 4, 4, 4);
+    return tintPats[color] = ctx.createPattern(pc, 'repeat');
+  }
 
-    // glow moon
+  // the FAR pass: everything here is rendered soft (tilt-shift) behind the action
+  function drawBackgroundFar() {
+    const g = rctx;
+    // dithered band sky
+    const skyTop = -worldOffY, skyH = viewH;
+    const BANDS = 5;
+    for (let b = 0; b < BANDS; b++) {
+      const c = hexMix(theme.sky1, theme.sky2, b / (BANDS - 1));
+      const y0 = skyTop + (skyH * b) / BANDS;
+      g.fillStyle = c;
+      g.fillRect(camX, y0, viewW, skyH / BANDS + 1);
+      if (b > 0) {
+        g.fillStyle = checkerPat(c);
+        g.fillRect(camX, y0 - 8, viewW, 8);
+      }
+    }
+
+    // stepped moon with craters
     const mx = camX + viewW * 0.72, my = 120;
-    const mg = g.createRadialGradient(mx, my, 6, mx, my, 130);
-    mg.addColorStop(0, theme.glow + 'cc'); mg.addColorStop(0.25, theme.glow + '44'); mg.addColorStop(1, 'transparent');
-    g.fillStyle = mg; g.fillRect(mx - 140, my - 140, 280, 280);
+    g.fillStyle = theme.glow + '1e'; g.beginPath(); g.arc(mx, my, 112, 0, 7); g.fill();
+    g.fillStyle = theme.glow + '38'; g.beginPath(); g.arc(mx, my, 76, 0, 7); g.fill();
+    g.fillStyle = theme.glow + '60'; g.beginPath(); g.arc(mx, my, 52, 0, 7); g.fill();
     g.fillStyle = theme.glow; g.beginPath(); g.arc(mx, my, 34, 0, 7); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.12)';
+    g.beginPath(); g.arc(mx - 9, my - 5, 6, 0, 7); g.fill();
+    g.beginPath(); g.arc(mx + 10, my + 9, 4.5, 0, 7); g.fill();
+    g.beginPath(); g.arc(mx + 4, my - 13, 3, 0, 7); g.fill();
+
+    // cloud banks (three-shade puffs, slow drift)
+    const rc = seeded((plan ? plan.level : 1) * 7 + 31);
+    const drift = performance.now() * 0.003;
+    for (let i = 0; i < 5; i++) {
+      const cw = 150 + rc() * 170;
+      const baseX = rc() * (STAGE_W + 900);
+      const cy = -worldOffY + 70 + rc() * 170;
+      const wrap = viewW + 900;
+      const x = camX + ((((baseX + drift * (8 + i * 3) - camX * 0.18) % wrap) + wrap) % wrap) - 450;
+      const dark = hexMix(theme.sky1, '#000000', 0.16);
+      const mid = hexMix(theme.sky1, '#ffffff', 0.12);
+      const lite = hexMix(theme.sky1, '#ffffff', 0.26);
+      for (const layer of [[dark, 6, 1], [mid, 0, 0.9], [lite, -6, 0.76]]) {
+        g.fillStyle = layer[0];
+        for (let bl = 0; bl < 4; bl++) {
+          const bx = x + (bl - 1.5) * cw * 0.22;
+          const br = cw * 0.16 * (1 - Math.abs(bl - 1.5) * 0.16) * layer[2];
+          g.beginPath(); g.arc(bx, cy + layer[1], br, 0, 7); g.fill();
+        }
+      }
+    }
 
     // light shafts from the moon
     g.globalAlpha = 0.07;
@@ -1375,18 +1443,35 @@ const Game = (() => {
     }
     g.globalAlpha = 1;
 
-    // deepest ridge line (parallax 0.1) with aerial haze over it
-    g.fillStyle = hexMix(theme.far, '#000000', 0.4);
+    // deepest ridge (parallax 0.1) — or the Kansas City skyline on the road
     const r0 = seeded((plan ? plan.level : 1) * 3 + 5);
-    g.beginPath();
-    g.moveTo(camX, VH);
-    for (let i = 0; i <= 10; i++) {
-      const wx0 = (i / 10) * (STAGE_W + viewW) - camX * 0.1;
-      g.lineTo(camX + ((wx0 % (viewW + 600)) + viewW + 600) % (viewW + 600) - 300, 250 - r0() * 120);
+    if (plan && plan.world.props === 'road') {
+      for (let i = 0; i < 9; i++) {
+        const tw = 44 + r0() * 40, th = 110 + r0() * 150;
+        const wx0 = i * 260 + r0() * 100 - camX * 0.1;
+        const sx = camX + ((wx0 % (viewW + 500)) + viewW + 500) % (viewW + 500) - 250;
+        g.fillStyle = hexMix(theme.far, '#000000', 0.35);
+        g.fillRect(sx, GROUND_Y - th, tw, th);
+        g.fillStyle = '#ffd24a';
+        for (let wy = GROUND_Y - th + 12; wy < GROUND_Y - 14; wy += 16) {
+          for (let wx2 = sx + 6; wx2 < sx + tw - 6; wx2 += 12) {
+            if (r0() < 0.42) { g.globalAlpha = 0.7; g.fillRect(wx2, wy, 4, 5); }
+          }
+        }
+        g.globalAlpha = 1;
+      }
+    } else {
+      g.fillStyle = hexMix(theme.far, '#000000', 0.4);
+      g.beginPath();
+      g.moveTo(camX, VH);
+      for (let i = 0; i <= 10; i++) {
+        const wx0 = (i / 10) * (STAGE_W + viewW) - camX * 0.1;
+        g.lineTo(camX + ((wx0 % (viewW + 600)) + viewW + 600) % (viewW + 600) - 300, 250 - r0() * 120);
+      }
+      g.lineTo(camX + viewW, VH); g.closePath(); g.fill();
     }
-    g.lineTo(camX + viewW, VH); g.closePath(); g.fill();
     g.fillStyle = theme.sky1 + '55';
-    g.fillRect(camX, 220, viewW, GROUND_Y - 220);
+    g.fillRect(camX, 220, viewW, Math.max(0, GROUND_Y - 220));
 
     // far ridge (parallax 0.25)
     const r1 = seeded(plan ? plan.level : 1);
@@ -1398,6 +1483,94 @@ const Game = (() => {
       g.lineTo(camX + ((wx % (viewW + 400)) + viewW + 400) % (viewW + 400) - 200, 300 - r1() * 160);
     }
     g.lineTo(camX + viewW, VH); g.closePath(); g.fill();
+
+    // world scene layer (parallax 0.38): the lived-in middle distance
+    if (plan) drawScene(g);
+  }
+
+  function drawScene(g) {
+    const props = plan.world.props;
+    const rs = seeded(plan.level * 11 + 3);
+    const par = 0.38;
+    const wrap = viewW + 700;
+    const wx2 = (bx2) => camX + (((bx2 - camX * par) % wrap) + wrap) % wrap - 350;
+    if (props === 'fence') {
+      // neighborhood houses with warm lit windows
+      for (let i = 0; i < 4; i++) {
+        const hw2 = 120 + rs() * 60, hh2 = 85 + rs() * 45;
+        const x = wx2(i * 460 + rs() * 160);
+        const yb = GROUND_Y;
+        g.fillStyle = hexMix(theme.far, '#ffffff', 0.1);
+        g.fillRect(x, yb - hh2, hw2, hh2);
+        g.fillStyle = hexMix(theme.far, '#000000', 0.25);
+        g.beginPath(); g.moveTo(x - 10, yb - hh2); g.lineTo(x + hw2 / 2, yb - hh2 - 46); g.lineTo(x + hw2 + 10, yb - hh2); g.closePath(); g.fill();
+        g.fillRect(x + hw2 * 0.72, yb - hh2 - 62, 14, 30); // chimney
+        for (let wxx = x + 14; wxx < x + hw2 - 20; wxx += 34) {
+          const lit = rs() < 0.62;
+          g.fillStyle = lit ? '#ffd24a' : hexMix(theme.far, '#000000', 0.35);
+          g.fillRect(wxx, yb - hh2 + 18, 16, 20);
+          if (lit) {
+            g.globalAlpha = 0.22; g.fillStyle = '#ffd24a';
+            g.fillRect(wxx - 4, yb - hh2 + 14, 24, 28);
+            g.globalAlpha = 1;
+          }
+        }
+      }
+    } else if (props === 'pipes') {
+      // background pipe network with glowing valves
+      g.strokeStyle = hexMix(theme.far, '#ffffff', 0.12); g.lineWidth = 12;
+      const py = 320 + rs() * 20;
+      g.beginPath(); g.moveTo(camX - 20, py); g.lineTo(camX + viewW + 20, py); g.stroke();
+      for (let i = 0; i < 4; i++) {
+        const x = wx2(i * 430 + rs() * 140);
+        g.beginPath(); g.moveTo(x, py); g.lineTo(x, GROUND_Y); g.stroke();
+        g.fillStyle = '#4ae8b2';
+        g.globalAlpha = 0.25; g.beginPath(); g.arc(x, py, 16, 0, 7); g.fill();
+        g.globalAlpha = 0.9; g.beginPath(); g.arc(x, py, 6, 0, 7); g.fill();
+        g.globalAlpha = 1;
+      }
+    } else if (props === 'road') {
+      // billboards catching the sunset
+      for (let i = 0; i < 3; i++) {
+        const x = wx2(i * 620 + rs() * 200);
+        g.fillStyle = hexMix(theme.far, '#000000', 0.2);
+        g.fillRect(x + 28, GROUND_Y - 120, 10, 120);
+        g.fillStyle = hexMix(theme.far, '#ffffff', 0.16);
+        g.fillRect(x - 20, GROUND_Y - 175, 106, 60);
+        g.fillStyle = theme.glow;
+        g.globalAlpha = 0.35;
+        g.fillRect(x - 14, GROUND_Y - 169, 94, 48);
+        g.globalAlpha = 1;
+      }
+    } else {
+      // torch-lit castle wall
+      const flick = 1 + Math.sin(performance.now() * 0.02) * 0.15;
+      for (let i = 0; i < 4; i++) {
+        const x = wx2(i * 440 + rs() * 130);
+        g.fillStyle = hexMix(theme.far, '#ffffff', 0.08);
+        g.fillRect(x, GROUND_Y - 140, 150, 140);
+        for (let cxx = x; cxx < x + 150; cxx += 30) g.fillRect(cxx, GROUND_Y - 154, 16, 16);
+        // arrow-slit windows
+        g.fillStyle = '#ffb04a';
+        g.globalAlpha = 0.85;
+        g.fillRect(x + 38, GROUND_Y - 104, 6, 20);
+        g.fillRect(x + 104, GROUND_Y - 96, 6, 20);
+        g.globalAlpha = 1;
+        // torch
+        const tx = x + 74, ty = GROUND_Y - 118;
+        g.fillStyle = '#6a4a2a'; g.fillRect(tx - 2, ty, 5, 22);
+        g.fillStyle = '#ffb04a';
+        g.globalAlpha = 0.18; g.beginPath(); g.arc(tx, ty - 4, 26 * flick, 0, 7); g.fill();
+        g.globalAlpha = 0.45; g.beginPath(); g.arc(tx, ty - 4, 12 * flick, 0, 7); g.fill();
+        g.globalAlpha = 1;
+        g.fillStyle = '#ffd24a';
+        g.beginPath(); g.arc(tx, ty - 4, 5 * flick, 0, 7); g.fill();
+      }
+    }
+  }
+
+  function drawBackground() {
+    const g = rctx;
 
     // near props (parallax 0.55) — styled per world
     g.fillStyle = theme.near;
@@ -1617,14 +1790,14 @@ const Game = (() => {
 
     // final-form look overrides (bald / beard / shirtless / muscle / fat)
     const muscleW = look.fat ? 1.9 : (look.muscle || 1);
-    let armW = 6 * (1 + (muscleW - 1) * 0.7);
+    let armW = 7 * (1 + (muscleW - 1) * 0.7);
     if (o.weaponStyle === 'muscles' && o.weaponTier > 0) armW *= 1 + o.weaponTier * 0.32; // the arms ARE the weapon
     const torsoCol = look.shirtless ? o.skin : o.color;
     const backArmCol = look.shirtless ? hexMix(o.skin, '#000000', 0.3) : o.color2;
     const frontArmCol = look.shirtless ? o.skin : o.color;
 
     // back limbs
-    if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], backFoot, 7.5, legCol2);
+    if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], backFoot, 8.5, legCol2);
     if (!look.chicken && !look.firetruck) limb([sh[0] + lean * 0.5, sh[1]], backHand, armW, backArmCol);
     if (look.printer) {
       // he IS the machine: gantry frame body
@@ -1740,8 +1913,13 @@ const Game = (() => {
       g.beginPath(); g.arc(-16, -12, 3.5, 0, 7); g.fill();
       g.beginPath(); g.arc(16, -12, 3.5, 0, 7); g.fill();
     } else {
-    // torso
-    limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 13 * muscleW, torsoCol);
+    // torso, with a two-tone back shade
+    limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 15 * muscleW, torsoCol);
+    g.strokeStyle = hexMix(torsoCol, '#000000', 0.25); g.lineWidth = 4.5 * muscleW;
+    g.beginPath();
+    g.moveTo(hip[0] + lean * 0.3 - 4.5, hip[1]);
+    g.lineTo(sh[0] + lean * 0.5 - 4.5, sh[1]);
+    g.stroke();
     if (look.mecha) {
       // armored chest plate + shoulder pads + core light
       g.fillStyle = '#8a92a8';
@@ -1794,7 +1972,7 @@ const Game = (() => {
     }
     }
     // front leg
-    if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 7.5, legCol);
+    if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 8.5, legCol);
     if ((o.armorTier || 0) >= 1 && !look.firetruck && !look.chicken) {
       // kneepad
       g.fillStyle = '#3a3444';
@@ -1811,12 +1989,43 @@ const Game = (() => {
       g.globalAlpha = 1;
     }
     if (!look.printer && !look.wrench && !look.chicken && !look.sandwich && !look.firetruck) {
-    // head
+    // head — chibi-scaled as a group so every accessory scales with it
     const hx = (look.crawl ? 17 : 3) + lean * 0.6;
     const hy = look.crawl ? -26 : headY - 7;
+    g.save();
+    g.translate(hx, hy); g.scale(1.32, 1.32); g.translate(-hx, -hy);
     g.fillStyle = o.hood ? o.color2 : o.skin;
     g.beginPath(); g.arc(hx, hy, 9, 0, 7); g.fill();
     g.strokeStyle = INK; g.lineWidth = 2; g.stroke();
+    if (!o.hood) {
+      // back-of-head shading crescent
+      g.save();
+      g.beginPath(); g.arc(hx, hy, 8.6, 0, 7); g.clip();
+      g.fillStyle = 'rgba(20,16,26,0.16)';
+      g.fillRect(hx - 10, hy - 10, 5.5, 20);
+      g.restore();
+    }
+    // stylized hair (skipped under helmets, crowns, caps, and special looks)
+    if (!o.hood && !look.bald && !look.baby && !look.mecha && !look.helmet && !look.crown && !look.cap && !look.hair && o.hairStyle && o.hairStyle !== 'none') {
+      g.fillStyle = o.hairColor || '#2a2230';
+      if (o.hairStyle === 'pony') {
+        g.beginPath(); g.ellipse(hx - 9, hy + 3, 3.4, 7, 0.5, 0, 7); g.fill();
+      } else if (o.hairStyle === 'long') {
+        g.beginPath(); g.ellipse(hx - 7.5, hy + 4, 3, 8, 0.25, 0, 7); g.fill();
+        g.beginPath(); g.ellipse(hx + 8.5, hy + 4, 2.6, 7, -0.2, 0, 7); g.fill();
+      }
+      g.beginPath(); g.arc(hx, hy - 1.5, 9.2, Math.PI * 1.02, Math.PI * 1.98); g.fill();
+      if (o.hairStyle === 'spiky') {
+        for (let hs2 = 0; hs2 < 3; hs2++) {
+          const hxx = hx - 5 + hs2 * 5;
+          g.beginPath(); g.moveTo(hxx - 2.2, hy - 8); g.lineTo(hxx, hy - 13.5); g.lineTo(hxx + 2.2, hy - 8); g.fill();
+        }
+      } else if (o.hairStyle === 'shaggy') {
+        for (let hs2 = 0; hs2 < 4; hs2++) {
+          g.beginPath(); g.arc(hx - 6 + hs2 * 4, hy - 7.5, 2.7, 0, 7); g.fill();
+        }
+      }
+    }
     if (look.mecha) {
       g.fillStyle = '#8a92a8';
       g.beginPath(); g.roundRect(hx - 8.5, hy - 8, 17, 15, 3); g.fill();
@@ -1980,6 +2189,7 @@ const Game = (() => {
         g.beginPath(); g.moveTo(ex2 + 2.5, ey2 - 4.2); g.lineTo(ex2 - 1, ey2 - 2.6); g.stroke();
       }
     }
+    g.restore(); // end chibi head group
     }
     if (o.boss) { // horns
       g.fillStyle = '#e8d9b0';
@@ -2346,6 +2556,7 @@ const Game = (() => {
       drawFighter(g, {
         x: m.x, y: m.y, facing: m.facing, size: m.size,
         color: m.cdef.color, color2: m.cdef.color2, accent: m.cdef.accent, skin: m.cdef.skin,
+        hairStyle: m.cdef.hairStyle, hairColor: m.cdef.hairColor,
         moving: m.strikeT <= 0, walkCyc: m.walkCyc, animT: m.animT,
         onGround: m.y >= GROUND_Y - 1, attackKey: m.strikeT > 0 ? 'strike' : null,
         hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: 'none', crouch: false, ascended: false,
@@ -2364,6 +2575,7 @@ const Game = (() => {
           attackKey: p.attack ? p.attack.key : null, attackExt: attackExt(p.attack),
           hurt: p.hurtT > 0, flash: p.flash, frozen: false,
           armorTier: p.upg.armor,
+          hairStyle: p.cdef.hairStyle, hairColor: p.cdef.hairColor,
           stretchY: p.landT > 0 ? 0.9 : (!p.onGround && p.vy < -160 ? 1.07 : 1),
           weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, weaponColors: p.cdef.weaponColors,
           weaponWord: p.upg.weapon > 0 ? trackMeta(p.cdef, 'weapon').tiers[p.upg.weapon - 1].split(' ')[0] : '',
@@ -2607,6 +2819,20 @@ const Game = (() => {
     }
     g.globalAlpha = 1;
 
+    // additive light splashes
+    g.globalCompositeOperation = 'lighter';
+    for (const li of lights) {
+      const la = Math.max(0, li.t / li.max) * li.a;
+      const lg2 = g.createRadialGradient(li.x, li.y, 3, li.x, li.y, li.r);
+      lg2.addColorStop(0, li.color);
+      lg2.addColorStop(1, li.color + '00');
+      g.globalAlpha = la;
+      g.fillStyle = lg2;
+      g.beginPath(); g.arc(li.x, li.y, li.r, 0, 7); g.fill();
+    }
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
+
     // float texts
     for (const f of floats) {
       g.globalAlpha = Math.min(1, f.t * 2);
@@ -2748,14 +2974,24 @@ const Game = (() => {
   }
 
   function render() {
-    // --- world pass: render at pixel resolution ---
+    // --- far pass: soft (tilt-shift) background layers ---
+    let ox = 0, oy = 0;
+    if (shakeT > 0) { ox = rand(-1, 1) * shakeMag * shakeT * 4; oy = rand(-1, 1) * shakeMag * shakeT * 4; }
+    rctx = bctx;
+    const k2 = bgW / viewW;
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    bctx.clearRect(0, 0, bgW, bgH);
+    bctx.setTransform(k2, 0, 0, k2, 0, 0);
+    bctx.translate(-camX + ox * 0.5, worldOffY + oy * 0.5);
+    drawBackgroundFar();
+
+    // --- near pass: sharp pixel world ---
     rctx = lctx;
     const k = lowW / viewW;
     lctx.setTransform(1, 0, 0, 1, 0, 0);
-    lctx.clearRect(0, 0, lowW, lowH);
+    lctx.imageSmoothingEnabled = true;
+    lctx.drawImage(bgCvs, 0, 0, bgW, bgH, 0, 0, lowW, lowH);
     lctx.imageSmoothingEnabled = false;
-    let ox = 0, oy = 0;
-    if (shakeT > 0) { ox = rand(-1, 1) * shakeMag * shakeT * 4; oy = rand(-1, 1) * shakeMag * shakeT * 4; }
     lctx.setTransform(k, 0, 0, k, 0, 0);
     lctx.translate(-camX + ox, worldOffY + oy);
     drawBackground();
@@ -2821,6 +3057,7 @@ const Game = (() => {
       moving: false, walkCyc: 0, animT: 2, onGround: true,
       crouch: false, attackKey: null, attackExt: 0,
       hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: cdef.weaponStyle, weaponColors: cdef.weaponColors, ascended,
+      hairStyle: cdef.hairStyle, hairColor: cdef.hairColor,
       look: ascended ? cdef.finalForm.look : cdef.baseLook,
     });
   }

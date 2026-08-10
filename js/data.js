@@ -726,6 +726,18 @@ for (const c of CHARACTERS) {
   c.tracks.ranged = { icon: c.rangedWeapon.icon, label: c.rangedWeapon.label, tiers: c.rangedWeapon.tiers, blurb: '+35% ranged damage per tier (Y button).' };
 }
 
+// stylized hair per fighter (drawn under headbands, skipped under helmets/crowns)
+const HAIR_STYLES = {
+  todd: 'short', sonya: 'pony', jordan: 'spiky', jerod: 'short', jacob: 'spiky',
+  samantha: 'pony', cassandra: 'long', erika: 'pony', levi: 'shaggy', ronathon: 'short',
+  tim: 'short', myah: 'long', isla: 'none', hayes: 'spiky', addi: 'pony',
+  brooks: 'shaggy', dayne: 'short',
+};
+for (const c of CHARACTERS) {
+  c.hairStyle = HAIR_STYLES[c.id] || 'short';
+  c.hairColor = hexMix(c.color2, '#14101a', 0.35);
+}
+
 // Base combat roles — per-world enemy skins override name/colors/accessory,
 // the numbers stay role-based so balance is uniform everywhere.
 const ENEMY_ROLES = {
