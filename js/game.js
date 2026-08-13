@@ -1205,7 +1205,8 @@ const Game = (() => {
     if (ambient.length < 40 && Math.random() < 0.3) {
       const props = plan ? plan.world.props : 'castle';
       if (props === 'fence') {
-        ambient.push({ kind: 'fly', x: camX + Math.random() * viewW, y: GROUND_Y - rand(20, 220), vy: rand(-12, 12), drift: rand(-24, 24), r: rand(1.4, 2.4), a: rand(0.4, 0.85), color: '#d8e86a', blink: true, t: rand(0, 9) });
+        // blossom petals and leaves drifting down from the trees (sparse)
+        if (Math.random() < 0.55) ambient.push({ kind: 'petal', x: camX + Math.random() * viewW, y: -worldOffY - 8, vy: rand(24, 48), drift: rand(-30, 10), r: rand(1.4, 2.2), a: rand(0.4, 0.75), color: Math.random() < 0.6 ? '#ffd6e8' : '#8fd06a', t: rand(0, 9) });
       } else if (props === 'pipes') {
         ambient.push({ kind: 'drip', x: camX + Math.random() * viewW, y: -worldOffY - 8, vy: rand(200, 300), drift: 0, r: rand(1.5, 2.6), a: rand(0.4, 0.7), color: '#7fe2c0', t: 0 });
       } else if (props === 'road') {
@@ -1305,52 +1306,6 @@ const Game = (() => {
   // ---------- Drawing ----------
   function seeded(n) { let s = n * 2654435761 % 2 ** 32; return () => { s = (s * 1597334677) % 2 ** 32; return (s >>> 8) / 2 ** 24; }; }
 
-  // per-world ground texture, rendered once and repeated as a pattern
-  const groundPatterns = {};
-  function getGroundPattern(world) {
-    if (groundPatterns[world.id]) return groundPatterns[world.id];
-    const pc = document.createElement('canvas');
-    pc.width = 160; pc.height = 80;
-    const q = pc.getContext('2d');
-    if (world.props === 'fence') {
-      for (let i = 0; i < 90; i++) {
-        const x = Math.random() * 160, y2 = Math.random() * 80;
-        q.strokeStyle = Math.random() < 0.5 ? 'rgba(44,58,32,0.9)' : 'rgba(55,74,38,0.9)';
-        q.lineWidth = 1.4;
-        q.beginPath(); q.moveTo(x, y2); q.lineTo(x + (Math.random() * 4 - 2), y2 - 4 - Math.random() * 4); q.stroke();
-      }
-    } else if (world.props === 'pipes') {
-      q.strokeStyle = 'rgba(16,28,22,0.9)'; q.lineWidth = 2;
-      for (let x = 0; x < 161; x += 20) { q.beginPath(); q.moveTo(x, 0); q.lineTo(x, 80); q.stroke(); }
-      for (let y2 = 0; y2 < 81; y2 += 20) { q.beginPath(); q.moveTo(0, y2); q.lineTo(160, y2); q.stroke(); }
-      q.fillStyle = 'rgba(74,232,178,0.1)';
-      for (let x = 10; x < 160; x += 20) for (let y2 = 10; y2 < 80; y2 += 20) { q.beginPath(); q.arc(x, y2, 1.5, 0, 7); q.fill(); }
-    } else if (world.props === 'road') {
-      for (let i = 0; i < 160; i++) {
-        q.fillStyle = 'rgba(255,255,255,' + (Math.random() * 0.05).toFixed(3) + ')';
-        q.fillRect(Math.random() * 160, Math.random() * 80, 2, 2);
-      }
-      q.strokeStyle = 'rgba(10,8,8,0.55)'; q.lineWidth = 1.2;
-      for (let i = 0; i < 4; i++) {
-        let x = Math.random() * 160, y2 = Math.random() * 80;
-        q.beginPath(); q.moveTo(x, y2);
-        for (let s2 = 0; s2 < 4; s2++) { x += Math.random() * 18 - 9; y2 += Math.random() * 12 - 6; q.lineTo(x, y2); }
-        q.stroke();
-      }
-    } else {
-      for (let row = 0; row < 4; row++) {
-        for (let col2 = 0; col2 < 6; col2++) {
-          const ox2 = (row % 2) * 16;
-          q.fillStyle = 'rgba(56,40,74,' + (0.35 + Math.random() * 0.3).toFixed(2) + ')';
-          q.strokeStyle = 'rgba(10,6,20,0.7)'; q.lineWidth = 1.4;
-          q.beginPath(); q.roundRect(col2 * 32 + ox2 - 16, row * 20 + 2, 28, 16, 5); q.fill(); q.stroke();
-        }
-      }
-    }
-    groundPatterns[world.id] = ctx.createPattern(pc, 'repeat');
-    return groundPatterns[world.id];
-  }
-
   // subtle print-grain overlay, built once
   let grainPattern = null;
   function getGrain() {
@@ -1383,17 +1338,63 @@ const Game = (() => {
     return tintPats[color] = ctx.createPattern(pc, 'repeat');
   }
 
+  // per-world environment palettes — the Owlboy overhaul's single source of truth.
+  // Hand-tuned ramps from the art-direction pass: hue-shifted shadows (cool),
+  // warm keys, outlines as darkened hues (never black).
+  const ENV_TABLES = {
+    home: {
+      bands: ['#2f86d9', '#4aa1e6', '#6cbbf0', '#9ad6f6', '#cfeef7'],
+      cumulus: ['#fff8e6', '#f6faff', '#c6dcf0', '#8fb2d8'],
+      seaBack: '#c6dcf0', seaFront: '#e9f2fb', mist: '#f6faff', mistA: 0.35,
+      cliffLite: '#a5865a', cliffMid: '#7d5f42', cliffDark: '#5a4630', cliffInk: '#3d2f20',
+      soil: '#6b4a30', soilDark: '#4c3320',
+      grassDark: '#2e6b28', grass: '#4e9a3c', grassLite: '#78c850', grassRim: '#a8e070',
+      rock: '#8d8d96', rockLite: '#b5b5c0',
+      vine: '#3a7a30', vineInk: '#245020', leaf: '#5aae44',
+    },
+    pipes: {
+      bands: ['#0c1a2c', '#11333a', '#175247', '#20705a', '#2c8f70'],
+      cumulus: ['#bfeee0', '#9fd8c8', '#5a9a8a', '#2f6a5c'],
+      seaBack: '#051512', seaFront: '#051512', mist: '#4ae8b2', mistA: 0.2,
+      cliffLite: '#2e6e5c', cliffMid: '#1d4a40', cliffDark: '#12332c', cliffInk: '#0a201b',
+      soil: '#274238', soilDark: '#182c24',
+      grassDark: '#155a44', grass: '#2a8a64', grassLite: '#3fae86', grassRim: '#7fe2c0',
+      rock: '#4a6a60', rockLite: '#7a9a8e',
+      vine: '#7a5a38', vineInk: '#4c3820', leaf: '#3ad4a4',
+    },
+    road: {
+      bands: ['#6a4a8e', '#9a5a86', '#d4707a', '#f09a62', '#ffc76a'],
+      cumulus: ['#ffe0b0', '#ff9a80', '#a05a78', '#5f3a60'],
+      seaBack: '#8a5568', seaFront: '#b87a70', mist: '#ffd8a0', mistA: 0.3,
+      cliffLite: '#9a7a58', cliffMid: '#6e523c', cliffDark: '#4c3828', cliffInk: '#33251a',
+      soil: '#5f4a38', soilDark: '#443428',
+      grassDark: '#7a5828', grass: '#a87c3c', grassLite: '#c9a05a', grassRim: '#e8cf8a',
+      rock: '#6e6258', rockLite: '#948678',
+      vine: '#c9a86a', vineInk: '#7a5c34', leaf: '#c9a86a',
+    },
+    fantasy: {
+      bands: ['#201a4e', '#2e2668', '#443684', '#6a4a9e', '#9a6ab4'],
+      cumulus: ['#cabcf0', '#9a8ad0', '#5f4c96', '#352a60'],
+      seaBack: '#4a3a78', seaFront: '#372a60', mist: '#8a6ae8', mistA: 0.18,
+      cliffLite: '#5a4680', cliffMid: '#40305c', cliffDark: '#2c2044', cliffInk: '#1a1030',
+      soil: '#38284a', soilDark: '#281c38',
+      grassDark: '#3f2a70', grass: '#5a3f96', grassLite: '#7a5ac0', grassRim: '#a88ae8',
+      rock: '#4a3f68', rockLite: '#7a6aa0',
+      vine: '#7a4ae8', vineInk: '#3a2470', leaf: '#e8b8ff',
+    },
+  };
+  const WORLD_SEED = { home: 1, pipes: 2, road: 3, fantasy: 4 };
+
   // theme-derived colors, computed once per world instead of per frame
   let shadeCache = null, shadeCacheKey = '';
   function themeShades() {
-    const key2 = plan ? plan.world.id : 'idle';
+    const key2 = plan ? plan.world.id : 'home';
     if (shadeCacheKey === key2 && shadeCache) return shadeCache;
     shadeCacheKey = key2;
+    const E = ENV_TABLES[key2] || ENV_TABLES.home;
     shadeCache = {
-      bands: [0, 1, 2, 3, 4].map(b => hexMix(theme.sky1, theme.sky2, b / 4)),
-      cloudDark: hexMix(theme.sky1, '#000000', 0.16),
-      cloudMid: hexMix(theme.sky1, '#ffffff', 0.12),
-      cloudLite: hexMix(theme.sky1, '#ffffff', 0.26),
+      E,
+      bands: E.bands,
       farDeep: hexMix(theme.far, '#000000', 0.4),
       towerCol: hexMix(theme.far, '#000000', 0.35),
       houseBody: hexMix(theme.far, '#ffffff', 0.1),
@@ -1405,6 +1406,325 @@ const Game = (() => {
       billBoard: hexMix(theme.far, '#ffffff', 0.16),
     };
     return shadeCache;
+  }
+
+  // ---- tree construction kit (Owlboy canopy-blob style) ----
+  const OAK_P = { trunk: '#7a5230', trunkDark: '#57381e', c1: '#2e6b28', c2: '#4e9a3c', c3: '#78c850', rim: '#a8e070' };
+  const BLOSSOM_P = { trunk: '#6e4a3a', trunkDark: '#4c3128', c1: '#b06090', c2: '#d888b8', c3: '#f0aed0', rim: '#ffd6e8' };
+  const OAK_B = [[-14, -40, 13], [13, -42, 12], [0, -52, 15], [-7, -50, 11], [8, -49, 10]];
+  function drawOak(g, x, baseY, s, P) {
+    g.fillStyle = P.trunkDark; g.fillRect(x - 3.5 * s, baseY - 34 * s, 7 * s, 34 * s);
+    g.fillStyle = P.trunk; g.fillRect(x - 3.5 * s, baseY - 34 * s, 4.5 * s, 34 * s);
+    g.strokeStyle = P.trunkDark; g.lineWidth = 3 * s; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(x, baseY - 26 * s); g.lineTo(x - 10 * s, baseY - 40 * s); g.stroke();
+    g.beginPath(); g.moveTo(x, baseY - 28 * s); g.lineTo(x + 9 * s, baseY - 42 * s); g.stroke();
+    g.fillStyle = P.c1;
+    for (let i = 0; i < 3; i++) {
+      g.beginPath(); g.arc(x + OAK_B[i][0] * s, baseY + OAK_B[i][1] * s, (OAK_B[i][2] + 2.5) * s, 0, 7); g.fill();
+    }
+    g.fillStyle = P.c2;
+    for (const b of OAK_B) { g.beginPath(); g.arc(x + (b[0] - 1) * s, baseY + (b[1] - 1.5) * s, b[2] * s, 0, 7); g.fill(); }
+    g.fillStyle = P.c3;
+    for (const b of OAK_B) {
+      g.beginPath(); g.arc(x + b[0] * s - b[2] * s * 0.35, baseY + b[1] * s - b[2] * s * 0.35, b[2] * s * 0.55, 0, 7); g.fill();
+    }
+    g.fillStyle = P.rim;
+    for (const b of [OAK_B[2], OAK_B[3], OAK_B[1]]) {
+      g.beginPath(); g.arc(x + b[0] * s - b[2] * s * 0.4, baseY + b[1] * s - b[2] * s * 0.62, 3 * s, 0, 7); g.fill();
+    }
+    g.fillStyle = P.c1; g.globalAlpha = 0.5;
+    for (let i = 0; i < 4; i++) {
+      g.beginPath(); g.arc(x + (4 + i * 5) * s, baseY + (-38 - (i % 2) * 6) * s, 2 * s, 0, 7); g.fill();
+    }
+    g.globalAlpha = 1;
+  }
+  const PETAL_SPOTS = [[-22, -58], [18, -62], [-8, -66], [24, -46], [-26, -44]];
+  function drawBlossom(g, x, baseY, s) {
+    drawOak(g, x, baseY, s, BLOSSOM_P);
+    g.fillStyle = '#ffd6e8';
+    for (const p of PETAL_SPOTS) { g.beginPath(); g.arc(x + p[0] * s, baseY + p[1] * s, 1.5 * s, 0, 7); g.fill(); }
+  }
+  function drawPipeCoral(g, x, baseY, s) {
+    g.fillStyle = '#7a4520'; g.fillRect(x - 4 * s, baseY - 30 * s, 8 * s, 30 * s);
+    g.fillStyle = '#b06a32'; g.fillRect(x - 4 * s, baseY - 30 * s, 5 * s, 30 * s);
+    g.fillStyle = '#7a4520';
+    g.fillRect(x - 6.5 * s, baseY - 30 * s, 13 * s, 4 * s);
+    g.fillRect(x - 6.5 * s, baseY - 16 * s, 13 * s, 4 * s);
+    g.fillStyle = '#e8c84a';
+    g.beginPath(); g.arc(x - 2 * s, baseY - 22 * s, 1.2 * s, 0, 7); g.fill();
+    g.beginPath(); g.arc(x + 2 * s, baseY - 8 * s, 1.2 * s, 0, 7); g.fill();
+    g.fillStyle = '#1c6a58';
+    for (let i = 0; i < 3; i++) {
+      g.beginPath(); g.arc(x + OAK_B[i][0] * s * 0.8, baseY + (OAK_B[i][1] * 0.9 - 8) * s, (OAK_B[i][2] + 2.5) * s * 0.8, 0, 7); g.fill();
+    }
+    g.fillStyle = '#2fae9a';
+    for (const b of OAK_B) { g.beginPath(); g.arc(x + (b[0] - 1) * s * 0.8, baseY + ((b[1] - 1.5) * 0.9 - 8) * s, b[2] * s * 0.8, 0, 7); g.fill(); }
+    g.fillStyle = '#4ae8c8';
+    for (const b of OAK_B) {
+      g.beginPath(); g.arc(x + (b[0] - b[2] * 0.35) * s * 0.8, baseY + ((b[1] - b[2] * 0.35) * 0.9 - 8) * s, b[2] * s * 0.44, 0, 7); g.fill();
+    }
+    g.fillStyle = '#3ad4a4';
+    for (const b of [OAK_B[2], OAK_B[3], OAK_B[1]]) {
+      const gx = x + b[0] * s * 0.8, gy = baseY + ((b[1] - b[2] * 0.5) * 0.9 - 8) * s;
+      g.globalAlpha = 0.25; g.beginPath(); g.arc(gx, gy, 5 * s, 0, 7); g.fill();
+      g.globalAlpha = 0.9; g.beginPath(); g.arc(gx, gy, 1.6 * s, 0, 7); g.fill();
+    }
+    g.globalAlpha = 1;
+  }
+  function drawDeadTree(g, x, baseY, s) {
+    g.fillStyle = '#3a2820';
+    g.beginPath();
+    g.moveTo(x - 4 * s, baseY);
+    g.quadraticCurveTo(x - 2 * s, baseY - 20 * s, x - 1 * s, baseY - 34 * s);
+    g.lineTo(x + 1.5 * s, baseY - 34 * s);
+    g.quadraticCurveTo(x + 3 * s, baseY - 18 * s, x + 5 * s, baseY);
+    g.closePath(); g.fill();
+    g.strokeStyle = '#3a2820'; g.lineWidth = 3.5 * s; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(x, baseY - 30 * s); g.lineTo(x - 9 * s, baseY - 42 * s); g.lineTo(x - 14 * s, baseY - 40 * s); g.stroke();
+    g.beginPath(); g.moveTo(x, baseY - 32 * s); g.lineTo(x + 8 * s, baseY - 44 * s); g.lineTo(x + 11 * s, baseY - 50 * s); g.stroke();
+    g.lineWidth = 1.5 * s;
+    g.beginPath(); g.moveTo(x - 9 * s, baseY - 42 * s); g.lineTo(x - 11 * s, baseY - 48 * s); g.stroke();
+    g.beginPath(); g.moveTo(x + 8 * s, baseY - 44 * s); g.lineTo(x + 13 * s, baseY - 45 * s); g.stroke();
+    g.strokeStyle = '#5f4330'; g.lineWidth = 1.5 * s;
+    g.beginPath(); g.moveTo(x - 4 * s, baseY); g.quadraticCurveTo(x - 2 * s, baseY - 20 * s, x - 1 * s, baseY - 34 * s); g.stroke();
+    g.fillStyle = '#ffca6a';
+    g.beginPath(); g.arc(x - 11 * s, baseY - 45 * s, 2 * s, 0, 7); g.fill();
+    g.beginPath(); g.arc(x + 10 * s, baseY - 47 * s, 2 * s, 0, 7); g.fill();
+  }
+  const CRYSTAL_SHARDS = [[-6, 26, 5], [0, 40, 7], [7, 22, 4.5]];
+  function drawCrystalTree(g, x, baseY, s) {
+    g.fillStyle = '#c24ae8'; g.globalAlpha = 0.2;
+    g.beginPath(); g.arc(x, baseY - 22 * s, 20 * s, 0, 7); g.fill();
+    g.globalAlpha = 1;
+    g.fillStyle = '#38284a';
+    g.beginPath(); g.arc(x, baseY - 4 * s, 9 * s, 0, 7); g.fill();
+    for (const [dx0, h, w2] of CRYSTAL_SHARDS) {
+      g.fillStyle = '#6a3aa8';
+      g.beginPath();
+      g.moveTo(x + (dx0 - w2) * s, baseY - 4 * s); g.lineTo(x + dx0 * s, baseY - (4 + h) * s); g.lineTo(x + dx0 * s, baseY - 4 * s);
+      g.closePath(); g.fill();
+      g.fillStyle = '#c24ae8';
+      g.beginPath();
+      g.moveTo(x + dx0 * s, baseY - (4 + h) * s); g.lineTo(x + (dx0 + w2) * s, baseY - 4 * s); g.lineTo(x + dx0 * s, baseY - 4 * s);
+      g.closePath(); g.fill();
+    }
+    g.strokeStyle = '#e8b8ff'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(x - CRYSTAL_SHARDS[1][2] * s * 0.5, baseY - 24 * s); g.lineTo(x, baseY - 44 * s); g.stroke();
+    g.fillStyle = '#ffffff';
+    g.beginPath(); g.arc(x + 1 * s, baseY - 42 * s, 1.5, 0, 7); g.fill();
+  }
+
+  // starfield pattern for the fantasy sky, built once
+  let starPattern = null;
+  function getStars() {
+    if (starPattern) return starPattern;
+    const pc = document.createElement('canvas');
+    pc.width = 200; pc.height = 200;
+    const q = pc.getContext('2d');
+    const r = seeded(97);
+    q.fillStyle = '#e8e4ff';
+    for (let i = 0; i < 30; i++) {
+      q.globalAlpha = 0.3 + r() * 0.5;
+      q.beginPath(); q.arc(r() * 200, r() * 200, 0.5 + r() * 0.7, 0, 7); q.fill();
+    }
+    return starPattern = ctx.createPattern(pc, 'repeat');
+  }
+
+  // ---- the floating island: cliff strip baked once per world ----
+  // canvas px = 2 world units = 1 low-buffer px, so it blits pixel-crisp.
+  const cliffStrips = {};
+  function getCliffStrip(world) {
+    if (cliffStrips[world.id]) return cliffStrips[world.id];
+    const E = ENV_TABLES[world.id] || ENV_TABLES.home;
+    const W = STAGE_W + 320;
+    const pc = document.createElement('canvas');
+    pc.width = Math.ceil(W / 2); pc.height = 156;
+    const q = pc.getContext('2d');
+    q.setTransform(0.5, 0, 0, 0.5, 80, 12); // world x -160.., world y -24..288
+    const r = seeded(WORLD_SEED[world.id] * 97 + 13);
+    // underside silhouette: 3 keels tapering into the sky
+    const kx = [0.18 * STAGE_W, 0.5 * STAGE_W, 0.82 * STAGE_W];
+    const kd = [190 + r() * 50, 240 + r() * 40, 190 + r() * 50];
+    const kw = STAGE_W * 0.24;
+    const depthAt = (x) => {
+      let d = 60;
+      for (let i = 0; i < 3; i++) d += kd[i] * Math.pow(Math.max(0, 1 - Math.abs(x - kx[i]) / kw), 1.7);
+      return Math.min(278, Math.max(40, d));
+    };
+    const xs = [], ys = [];
+    for (let x = STAGE_W + 160; x >= -160; x -= 70) { xs.push(x); ys.push(Math.min(278, Math.max(40, depthAt(x) + (r() - 0.5) * 26))); }
+    q.beginPath();
+    q.moveTo(-160, 0); q.lineTo(STAGE_W + 160, 0); q.lineTo(STAGE_W + 160, 44);
+    for (let i = 0; i < xs.length; i++) q.lineTo(xs[i], ys[i]);
+    q.closePath();
+    q.fillStyle = E.cliffMid; q.fill();
+    q.save(); q.clip();
+    // strata: sunlit band up top, cool depths below, dithered seams
+    q.fillStyle = E.cliffLite; q.fillRect(-160, 4, W, 26);
+    q.fillStyle = E.cliffDark; q.fillRect(-160, 120, W, 168);
+    q.fillStyle = checkerPat(E.cliffLite); q.fillRect(-160, 26, W, 12);
+    q.fillStyle = checkerPat(E.cliffDark); q.fillRect(-160, 112, W, 12);
+    q.strokeStyle = E.cliffInk; q.globalAlpha = 0.5; q.lineWidth = 2;
+    for (const yb of [36, 80, 130]) {
+      q.beginPath();
+      for (let x = -160; x <= STAGE_W + 160; x += 90) {
+        const yy = yb + (r() - 0.5) * 10;
+        if (x === -160) q.moveTo(x, yy); else q.lineTo(x, yy);
+      }
+      q.stroke();
+    }
+    q.globalAlpha = 1;
+    // stepped ledges with cast shadows
+    for (let i = 0; i < 6; i++) {
+      const lx = r() * STAGE_W, lyy = 40 + r() * 90, lw2 = 40 + r() * 50;
+      q.fillStyle = E.cliffLite; q.fillRect(lx, lyy, lw2, 5);
+      q.fillStyle = E.cliffInk; q.fillRect(lx, lyy + 5, lw2, 2);
+    }
+    // embedded rocks with a lit chip
+    for (let i = 0; i < 26; i++) {
+      const rx = -140 + r() * (STAGE_W + 280), ry = 20 + r() * 180;
+      q.fillStyle = E.cliffDark;
+      q.beginPath(); q.roundRect(rx, ry, 10 + r() * 16, 8 + r() * 10, 3); q.fill();
+      q.fillStyle = E.rockLite; q.fillRect(rx + 2, ry + 2, 5, 3);
+    }
+    if (world.id === 'pipes') {
+      // slime drools off the ledges
+      q.fillStyle = '#6a8a3a';
+      q.beginPath(); q.roundRect(STAGE_W * 0.3, 60, 10, 12, 4); q.fill();
+      q.beginPath(); q.roundRect(STAGE_W * 0.3 + 14, 60, 8, 20, 4); q.fill();
+      q.beginPath(); q.roundRect(STAGE_W * 0.72, 90, 10, 16, 4); q.fill();
+      q.fillStyle = '#8fae4a';
+      q.fillRect(STAGE_W * 0.3 + 1, 61, 3, 8); q.fillRect(STAGE_W * 0.72 + 1, 91, 3, 8);
+    } else if (world.id === 'fantasy') {
+      // glowing runes carved in the rock
+      for (const rx of [STAGE_W * 0.22, STAGE_W * 0.5, STAGE_W * 0.78]) {
+        const ry = 66 + r() * 40;
+        q.fillStyle = '#c24ae8'; q.globalAlpha = 0.2;
+        q.beginPath(); q.arc(rx + 3, ry + 4, 7, 0, 7); q.fill();
+        q.globalAlpha = 0.9; q.strokeStyle = '#c24ae8'; q.lineWidth = 1.6;
+        q.beginPath();
+        q.moveTo(rx, ry); q.lineTo(rx + 6, ry + 3); q.lineTo(rx, ry + 8);
+        q.moveTo(rx + 3, ry - 2); q.lineTo(rx + 3, ry + 10);
+        q.stroke();
+        q.globalAlpha = 1;
+      }
+    }
+    q.restore();
+    // chunky under-edge: ink rim with a lighter inner band
+    q.strokeStyle = E.cliffInk; q.lineWidth = 4; q.lineJoin = 'round';
+    q.beginPath();
+    for (let i = 0; i < xs.length; i++) { if (i === 0) q.moveTo(xs[i], ys[i]); else q.lineTo(xs[i], ys[i]); }
+    q.stroke();
+    q.strokeStyle = E.cliffDark; q.lineWidth = 7;
+    q.beginPath();
+    for (let i = 0; i < xs.length; i++) { if (i === 0) q.moveTo(xs[i], ys[i] - 3); else q.lineTo(xs[i], ys[i] - 3); }
+    q.stroke();
+    // baked dangles: pipe stubs in the underworld, roots elsewhere
+    q.lineCap = 'round';
+    if (world.id === 'pipes') {
+      for (let i = 0; i < 5; i++) {
+        const x = 100 + r() * (STAGE_W - 200), d0 = depthAt(x) - 8;
+        q.fillStyle = '#b06a32'; q.fillRect(x - 3, d0 - 2, 6, 14);
+        q.fillStyle = '#7a4520'; q.fillRect(x - 4, d0 + 10, 8, 3);
+        q.fillStyle = '#3ad4a4'; q.beginPath(); q.arc(x, d0 + 16, 1.6, 0, 7); q.fill();
+      }
+    } else {
+      const rootCol = world.id === 'road' ? '#7a5c3c' : world.id === 'fantasy' ? '#4a3a68' : E.soilDark;
+      q.strokeStyle = rootCol;
+      for (let i = 0; i < 8; i++) {
+        const x = 60 + r() * (STAGE_W - 120), d0 = depthAt(x) - 8;
+        const kx2 = (r() - 0.5) * 20, L1 = 10 + r() * 20, L2 = 10 + r() * 20;
+        q.lineWidth = 3; q.beginPath(); q.moveTo(x, d0); q.lineTo(x + kx2 * 0.4, d0 + L1); q.stroke();
+        q.lineWidth = 1.5; q.beginPath(); q.moveTo(x + kx2 * 0.4, d0 + L1); q.lineTo(x + kx2, d0 + L1 + L2); q.stroke();
+      }
+    }
+    // soil band + grass lip with sun rim
+    q.fillStyle = E.soil; q.fillRect(-160, 0, W, 14);
+    q.fillStyle = E.soilDark; q.fillRect(-160, 12, W, 3);
+    q.fillStyle = E.grassDark; q.fillRect(-160, -2, W, 6);
+    q.fillStyle = E.grass; q.fillRect(-160, -6, W, 6);
+    q.fillStyle = E.grassLite; q.fillRect(-160, -8, W, 3);
+    q.fillStyle = E.grass;
+    for (let x = -160; x < STAGE_W + 160; x += 22) { q.beginPath(); q.arc(x, 2, 5 + r() * 4, 0, Math.PI); q.fill(); }
+    const tuftH = world.id === 'road' ? 9 : 5; // prairie grass grows taller
+    for (let x = -150; x < STAGE_W + 150; x += 30 + r() * 30) {
+      const n = 2 + Math.floor(r() * 3);
+      for (let b = 0; b < n; b++) {
+        q.strokeStyle = b % 2 ? E.grassLite : E.grassDark; q.lineWidth = 2;
+        q.beginPath(); q.moveTo(x + b * 2, -4); q.lineTo(x + b * 2 + (r() * 6 - 3), -12 - r() * tuftH); q.stroke();
+      }
+    }
+    cliffStrips[world.id] = pc;
+    return pc;
+  }
+
+  // platforms as small floating islands, baked per platform per level
+  function buildPlatformIsland(w, world) {
+    const E = ENV_TABLES[world.id] || ENV_TABLES.home;
+    const pc = document.createElement('canvas');
+    pc.width = w + 36; pc.height = 76;
+    const q = pc.getContext('2d');
+    const cx = w / 2 + 18;
+    const keelY = 44 + Math.min(14, w * 0.06);
+    q.beginPath();
+    q.moveTo(18, 15); q.lineTo(w + 18, 15);
+    q.lineTo(w * 0.82 + 18, 34);
+    q.lineTo(cx + 6, keelY); q.lineTo(cx - 6, keelY);
+    q.lineTo(w * 0.18 + 18, 34); q.closePath();
+    q.fillStyle = E.cliffMid; q.fill();
+    q.strokeStyle = E.cliffInk; q.lineWidth = 3; q.lineJoin = 'round'; q.stroke();
+    q.fillStyle = E.cliffDark;
+    q.beginPath(); q.moveTo(w * 0.2 + 18, 31); q.lineTo(w * 0.8 + 18, 31); q.lineTo(cx, keelY - 3); q.closePath(); q.fill();
+    q.strokeStyle = E.cliffLite; q.lineWidth = 2;
+    q.beginPath(); q.moveTo(w * 0.18 + 18, 33); q.lineTo(18, 16); q.stroke();
+    q.fillStyle = E.rock;
+    q.beginPath(); q.roundRect(cx - w * 0.22, 22, 9, 7, 2); q.fill();
+    q.beginPath(); q.roundRect(cx + w * 0.14, 27, 7, 5, 2); q.fill();
+    if (w > 170) { q.beginPath(); q.roundRect(cx + w * 0.3, 20, 8, 6, 2); q.fill(); }
+    q.fillStyle = E.rockLite;
+    q.fillRect(cx - w * 0.22 + 1.5, 23.5, 4, 2); q.fillRect(cx + w * 0.14 + 1.5, 28.5, 4, 2);
+    q.fillStyle = E.grassDark; q.fillRect(16, 15, w + 4, 5);
+    q.fillStyle = E.grass; q.fillRect(16, 12, w + 4, 4);
+    q.fillStyle = E.grassLite; q.fillRect(16, 11, w + 4, 2);
+    q.fillStyle = E.grass;
+    for (let x = 20; x < w + 16; x += 18) { q.beginPath(); q.arc(x, 17, 4, 0, Math.PI); q.fill(); }
+    q.beginPath(); q.arc(17, 18, 6, 0, Math.PI); q.fill();
+    q.beginPath(); q.arc(w + 19, 18, 6, 0, Math.PI); q.fill();
+    for (let x = 22; x < w + 14; x += 26) {
+      q.strokeStyle = E.grassLite; q.lineWidth = 1.8; q.lineCap = 'round';
+      q.beginPath(); q.moveTo(x, 11); q.lineTo(x + 2, 5); q.stroke();
+      q.strokeStyle = E.grassDark;
+      q.beginPath(); q.moveTo(x + 3, 11); q.lineTo(x + 1, 4); q.stroke();
+    }
+    q.strokeStyle = E.grassDark; q.lineWidth = 1.6;
+    q.beginPath(); q.moveTo(19, 17); q.lineTo(21, 24); q.stroke();
+    q.beginPath(); q.moveTo(24, 17); q.lineTo(25, 22); q.stroke();
+    q.beginPath(); q.moveTo(w + 12, 17); q.lineTo(w + 10, 24); q.stroke();
+    q.beginPath(); q.moveTo(w + 6, 17); q.lineTo(w + 7, 22); q.stroke();
+    // per-world garnish
+    if (world.id === 'home') {
+      q.fillStyle = '#ffffff';
+      q.beginPath(); q.arc(cx - 12, 8, 2, 0, 7); q.fill();
+      q.beginPath(); q.arc(cx + 15, 9, 2, 0, 7); q.fill();
+      q.fillStyle = '#ffca3a';
+      q.beginPath(); q.arc(cx - 12, 8, 0.9, 0, 7); q.fill();
+      q.beginPath(); q.arc(cx + 15, 9, 0.9, 0, 7); q.fill();
+    } else if (world.id === 'pipes') {
+      q.fillStyle = '#3ad4a4';
+      q.globalAlpha = 0.9; q.beginPath(); q.arc(cx - w * 0.22 + 4, 21, 1.6, 0, 7); q.fill();
+      q.globalAlpha = 0.4; q.fillRect(cx - w * 0.22 + 3, 22, 2, 8);
+      q.globalAlpha = 1;
+    } else if (world.id === 'road') {
+      q.fillStyle = '#e8742a'; q.fillRect(w * 0.24 + 18, 27, 6, 3);
+    } else {
+      q.fillStyle = '#c24ae8'; q.globalAlpha = 0.25;
+      q.beginPath(); q.arc(cx + w * 0.24, 24, 6, 0, 7); q.fill();
+      q.globalAlpha = 1;
+      q.beginPath(); q.moveTo(cx + w * 0.24 - 3, 27); q.lineTo(cx + w * 0.24, 20); q.lineTo(cx + w * 0.24 + 3, 27); q.closePath(); q.fill();
+      q.strokeStyle = '#e8b8ff'; q.lineWidth = 1;
+      q.beginPath(); q.moveTo(cx + w * 0.24 - 3, 27); q.lineTo(cx + w * 0.24, 20); q.stroke();
+    }
+    return pc;
   }
 
   // the FAR pass: everything here is rendered soft (tilt-shift) behind the action
@@ -1424,38 +1744,75 @@ const Game = (() => {
       }
     }
 
-    // stepped moon with craters
-    const mx = camX + viewW * 0.72, my = 120;
+    const wid = plan ? plan.world.id : 'home';
+    const E = sh2.E;
+
+    // starfield over the twilight realms
+    if (wid === 'fantasy') {
+      g.globalAlpha = 0.8;
+      g.fillStyle = getStars();
+      g.fillRect(camX, skyTop, viewW, viewH * 0.6);
+      g.globalAlpha = 1;
+    }
+
+    // the key light: high sun / cavern glow bloom / low dusk sun / cratered moon
+    const mx = camX + viewW * 0.72, my = wid === 'road' ? 300 : 120;
+    const core = wid === 'home' ? '#fff8d8' : wid === 'road' ? '#fff0c0' : theme.glow;
     g.fillStyle = theme.glow + '1e'; g.beginPath(); g.arc(mx, my, 112, 0, 7); g.fill();
     g.fillStyle = theme.glow + '38'; g.beginPath(); g.arc(mx, my, 76, 0, 7); g.fill();
     g.fillStyle = theme.glow + '60'; g.beginPath(); g.arc(mx, my, 52, 0, 7); g.fill();
-    g.fillStyle = theme.glow; g.beginPath(); g.arc(mx, my, 34, 0, 7); g.fill();
-    g.fillStyle = 'rgba(0,0,0,0.12)';
-    g.beginPath(); g.arc(mx - 9, my - 5, 6, 0, 7); g.fill();
-    g.beginPath(); g.arc(mx + 10, my + 9, 4.5, 0, 7); g.fill();
-    g.beginPath(); g.arc(mx + 4, my - 13, 3, 0, 7); g.fill();
+    g.fillStyle = core; g.beginPath(); g.arc(mx, my, wid === 'road' ? 30 : 34, 0, 7); g.fill();
+    if (wid === 'fantasy') {
+      g.fillStyle = 'rgba(0,0,0,0.12)';
+      g.beginPath(); g.arc(mx - 9, my - 5, 6, 0, 7); g.fill();
+      g.beginPath(); g.arc(mx + 10, my + 9, 4.5, 0, 7); g.fill();
+      g.beginPath(); g.arc(mx + 4, my - 13, 3, 0, 7); g.fill();
+    }
 
-    // cloud banks (three-shade puffs, slow drift)
+    // cumulus banks: 4-shade Owlboy puffs with flat bottoms, slow drift
     const rc = seeded((plan ? plan.level : 1) * 7 + 31);
     const drift = performance.now() * 0.003;
-    for (let i = 0; i < 5; i++) {
-      const cw = 150 + rc() * 170;
+    const C = E.cumulus;
+    const flat = wid === 'road'; // long sunset clouds lit from beneath
+    const nClouds = (wid === 'pipes' || wid === 'fantasy') ? 4 : 5;
+    const cloudA = wid === 'pipes' ? 0.8 : wid === 'fantasy' ? 0.85 : 1;
+    g.globalAlpha = cloudA;
+    for (let i = 0; i < nClouds; i++) {
+      let cw = 150 + rc() * 170;
       const baseX = rc() * (STAGE_W + 900);
       const cy = -worldOffY + 70 + rc() * 170;
       const wrap = viewW + 900;
       const x = camX + ((((baseX + drift * (8 + i * 3) - camX * 0.18) % wrap) + wrap) % wrap) - 450;
-      for (const layer of [[sh2.cloudDark, 6, 1], [sh2.cloudMid, 0, 0.9], [sh2.cloudLite, -6, 0.76]]) {
-        g.fillStyle = layer[0];
-        for (let bl = 0; bl < 4; bl++) {
-          const bx = x + (bl - 1.5) * cw * 0.22;
-          const br = cw * 0.16 * (1 - Math.abs(bl - 1.5) * 0.16) * layer[2];
-          g.beginPath(); g.arc(bx, cy + layer[1], br, 0, 7); g.fill();
+      if (flat) cw *= 1.6;
+      const prMul = flat ? 0.55 : 1;
+      const baseY = cy + cw * (flat ? 0.1 : 0.18);
+      g.fillStyle = C[3];
+      g.fillRect(x - cw * 0.42, baseY - 9, cw * 0.84, 9);
+      for (let pass = 0; pass < 3; pass++) {
+        g.fillStyle = pass === 0 ? C[2] : pass === 1 ? C[1] : C[0];
+        for (let p = 0; p < 5; p++) {
+          const u = (p - 2) / 2;
+          const px = x + u * cw * 0.36;
+          const pr = cw * (0.16 + 0.1 * (1 - Math.abs(u) * 0.72)) * prMul;
+          const py = baseY - pr * 0.9 - (1 - Math.abs(u)) * cw * 0.1 * prMul;
+          if (pass === 0) { g.beginPath(); g.arc(px + 2, py + 3, pr, 0, 7); g.fill(); }
+          else if (pass === 1) { g.beginPath(); g.arc(px - 1, py - 2, pr * 0.94, 0, 7); g.fill(); }
+          else if (!flat) { g.beginPath(); g.arc(px - pr * 0.32, py - pr * 0.34, pr * 0.5, 0, 7); g.fill(); }
+          else {
+            // underlight instead of a top highlight: the low sun catches the belly
+            g.fillStyle = '#ffca6a'; g.globalAlpha = 0.8 * cloudA;
+            g.fillRect(px - pr * 0.7, py + pr * 0.45, pr * 1.4, 2.5);
+            g.globalAlpha = cloudA; g.fillStyle = C[0];
+          }
         }
       }
+      g.fillStyle = C[3]; g.fillRect(x - cw * 0.44, baseY - 6, cw * 0.88, 6);
+      g.fillStyle = C[2]; g.fillRect(x - cw * 0.44, baseY - 8, cw * 0.88, 2);
     }
+    g.globalAlpha = 1;
 
-    // light shafts from the moon
-    g.globalAlpha = 0.07;
+    // light shafts from the key
+    g.globalAlpha = wid === 'home' ? 0.1 : wid === 'road' ? 0.09 : 0.07;
     g.fillStyle = theme.glow;
     for (let i = 0; i < 3; i++) {
       const sx0 = mx - 40 - i * 130;
@@ -1482,6 +1839,29 @@ const Game = (() => {
         }
         g.globalAlpha = 1;
       }
+    } else if (wid === 'home') {
+      // far floating islands drifting in the daylight
+      for (let i = 0; i < 3; i++) {
+        const iw = 90 + r0() * 70, iy = 180 + r0() * 120;
+        const wx0 = i * 620 + r0() * 200 - camX * 0.1;
+        const sx = camX + ((wx0 % (viewW + 500)) + viewW + 500) % (viewW + 500) - 250;
+        g.fillStyle = '#9fd08a'; g.fillRect(sx, iy, iw, 6);
+        g.fillStyle = '#7f9aa8';
+        g.beginPath(); g.moveTo(sx, iy + 6); g.lineTo(sx + iw, iy + 6); g.lineTo(sx + iw * 0.5, iy + 34); g.closePath(); g.fill();
+        g.fillStyle = '#647f9a';
+        g.beginPath(); g.moveTo(sx + iw * 0.5, iy + 6); g.lineTo(sx + iw, iy + 6); g.lineTo(sx + iw * 0.5, iy + 34); g.closePath(); g.fill();
+      }
+    } else if (wid === 'fantasy') {
+      // floating castle spires against the stars
+      for (let i = 0; i < 3; i++) {
+        const sy = 140 + r0() * 110;
+        const wx0 = i * 600 + r0() * 220 - camX * 0.1;
+        const sx = camX + ((wx0 % (viewW + 500)) + viewW + 500) % (viewW + 500) - 250;
+        g.fillStyle = sh2.towerCol; g.fillRect(sx, sy, 22, 90);
+        g.fillStyle = '#241640';
+        g.beginPath(); g.moveTo(sx - 4, sy); g.lineTo(sx + 11, sy - 26); g.lineTo(sx + 26, sy); g.closePath(); g.fill();
+        g.fillStyle = '#ffb04a'; g.fillRect(sx + 9, sy + 20, 2, 3);
+      }
     } else {
       g.fillStyle = sh2.farDeep;
       g.beginPath();
@@ -1495,19 +1875,71 @@ const Game = (() => {
     g.fillStyle = theme.sky1 + '55';
     g.fillRect(camX, 220, viewW, Math.max(0, GROUND_Y - 220));
 
-    // far ridge (parallax 0.25)
+    // far ridge (parallax 0.25) — gentle low hills in daylight, big masses elsewhere
     const r1 = seeded(plan ? plan.level : 1);
+    const ridgeY = wid === 'home' ? 420 : 300, ridgeAmp = wid === 'home' ? 60 : 160;
     g.fillStyle = theme.far;
     g.beginPath();
     g.moveTo(camX, VH);
     for (let i = 0; i <= 14; i++) {
       const wx = (i / 14) * (STAGE_W + viewW) - camX * 0.25;
-      g.lineTo(camX + ((wx % (viewW + 400)) + viewW + 400) % (viewW + 400) - 200, 300 - r1() * 160);
+      g.lineTo(camX + ((wx % (viewW + 400)) + viewW + 400) % (viewW + 400) - 200, ridgeY - r1() * ridgeAmp);
     }
     g.lineTo(camX + viewW, VH); g.closePath(); g.fill();
 
     // world scene layer (parallax 0.38): the lived-in middle distance
     if (plan) drawScene(g);
+
+    // below-island layer, drawn last so it caps the ridge bottoms:
+    // cloud sea (day/dusk), glowing abyss (underworld), violet mist (twilight)
+    const botY = viewH - worldOffY;
+    if (botY >= 560) {
+      const dxD = performance.now() * 0.006;
+      if (wid === 'home' || wid === 'road') {
+        const seaTop = 512, par = 0.12;
+        const wrapS = viewW + 112;
+        g.fillStyle = E.seaBack;
+        for (let sx2 = 0; sx2 < wrapS; sx2 += 56) {
+          const x = camX + (((sx2 - camX * par + dxD * 8) % wrapS) + wrapS) % wrapS - 56;
+          g.beginPath(); g.arc(x, seaTop + 6, 34, Math.PI, 0); g.fill();
+        }
+        const wrap2 = viewW + 148;
+        g.fillStyle = E.seaFront;
+        for (let sx2 = 0; sx2 < wrap2; sx2 += 74) {
+          const x = camX + ((((sx2 - camX * par - dxD * 13) % wrap2) + wrap2) % wrap2) - 74;
+          g.beginPath(); g.arc(x, seaTop + 22, 46, Math.PI, 0); g.fill();
+        }
+        g.fillRect(camX, seaTop + 24, viewW, Math.max(0, botY - (seaTop + 24)));
+        g.fillStyle = C[0]; g.globalAlpha = 0.5;
+        for (let sx2 = 0; sx2 < wrapS; sx2 += 224) {
+          const x = camX + (((sx2 - camX * par + dxD * 8) % wrapS) + wrapS) % wrapS - 56;
+          g.fillRect(x - 7, seaTop + 2, 14, 2);
+        }
+        g.globalAlpha = 1;
+      } else if (wid === 'pipes') {
+        g.fillStyle = '#051512';
+        g.fillRect(camX, 520, viewW, Math.max(0, botY - 520));
+        g.fillStyle = '#3ad4a4'; g.globalAlpha = 0.15;
+        g.beginPath(); g.ellipse(camX + viewW * 0.3, 585, 130, 26, 0, 0, 7); g.fill();
+        g.beginPath(); g.ellipse(camX + viewW * 0.75, 600, 100, 20, 0, 0, 7); g.fill();
+        g.globalAlpha = 1;
+      } else {
+        const seaTop = 512, par = 0.12;
+        const wrapS = viewW + 112;
+        g.fillStyle = E.seaBack;
+        for (let sx2 = 0; sx2 < wrapS; sx2 += 56) {
+          const x = camX + (((sx2 - camX * par + dxD * 8) % wrapS) + wrapS) % wrapS - 56;
+          g.beginPath(); g.arc(x, seaTop + 6, 34, Math.PI, 0); g.fill();
+        }
+        const wrap2 = viewW + 148;
+        g.fillStyle = E.seaFront;
+        for (let sx2 = 0; sx2 < wrap2; sx2 += 74) {
+          const x = camX + ((((sx2 - camX * par - dxD * 13) % wrap2) + wrap2) % wrap2) - 74;
+          g.beginPath(); g.arc(x, seaTop + 22, 46, Math.PI, 0); g.fill();
+        }
+        g.fillRect(camX, seaTop + 24, viewW, Math.max(0, botY - (seaTop + 24)));
+      }
+    }
   }
 
   function drawScene(g) {
@@ -1518,14 +1950,14 @@ const Game = (() => {
     const wrap = viewW + 700;
     const wx2 = (bx2) => camX + (((bx2 - camX * par) % wrap) + wrap) % wrap - 350;
     if (props === 'fence') {
-      // neighborhood houses with warm lit windows
+      // neighborhood houses with warm lit windows, oaks between them
       for (let i = 0; i < 4; i++) {
         const hw2 = 120 + rs() * 60, hh2 = 85 + rs() * 45;
         const x = wx2(i * 460 + rs() * 160);
         const yb = GROUND_Y;
         g.fillStyle = sh3.houseBody;
         g.fillRect(x, yb - hh2, hw2, hh2);
-        g.fillStyle = sh3.houseRoof;
+        g.fillStyle = '#b05a48'; // terracotta
         g.beginPath(); g.moveTo(x - 10, yb - hh2); g.lineTo(x + hw2 / 2, yb - hh2 - 46); g.lineTo(x + hw2 + 10, yb - hh2); g.closePath(); g.fill();
         g.fillRect(x + hw2 * 0.72, yb - hh2 - 62, 14, 30); // chimney
         for (let wxx = x + 14; wxx < x + hw2 - 20; wxx += 34) {
@@ -1539,6 +1971,8 @@ const Game = (() => {
           }
         }
       }
+      drawOak(g, wx2(260), GROUND_Y, 0.8, OAK_P);
+      drawOak(g, wx2(780), GROUND_Y, 0.8, OAK_P);
     } else if (props === 'pipes') {
       // background pipe network with glowing valves
       g.strokeStyle = sh3.pipeCol; g.lineWidth = 12;
@@ -1547,11 +1981,16 @@ const Game = (() => {
       for (let i = 0; i < 4; i++) {
         const x = wx2(i * 430 + rs() * 140);
         g.beginPath(); g.moveTo(x, py); g.lineTo(x, GROUND_Y); g.stroke();
-        g.fillStyle = '#4ae8b2';
+        g.fillStyle = '#3ad4a4';
         g.globalAlpha = 0.25; g.beginPath(); g.arc(x, py, 16, 0, 7); g.fill();
         g.globalAlpha = 0.9; g.beginPath(); g.arc(x, py, 6, 0, 7); g.fill();
         g.globalAlpha = 1;
+        // hanging chain from the trunk line
+        g.strokeStyle = '#4c3820'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(x + 46, py + 6); g.lineTo(x + 46, py + 40 + (i % 2) * 14); g.stroke();
       }
+      drawPipeCoral(g, wx2(200), GROUND_Y, 0.8);
+      drawPipeCoral(g, wx2(760), GROUND_Y, 0.8);
     } else if (props === 'road') {
       // billboards catching the sunset
       for (let i = 0; i < 3; i++) {
@@ -1561,10 +2000,12 @@ const Game = (() => {
         g.fillStyle = sh3.billBoard;
         g.fillRect(x - 20, GROUND_Y - 175, 106, 60);
         g.fillStyle = theme.glow;
-        g.globalAlpha = 0.35;
+        g.globalAlpha = 0.4;
         g.fillRect(x - 14, GROUND_Y - 169, 94, 48);
         g.globalAlpha = 1;
       }
+      drawDeadTree(g, wx2(320), GROUND_Y, 0.9);
+      drawDeadTree(g, wx2(960), GROUND_Y, 0.9);
     } else {
       // torch-lit castle wall
       const flick = 1 + Math.sin(performance.now() * 0.02) * 0.15;
@@ -1589,14 +2030,18 @@ const Game = (() => {
         g.fillStyle = '#ffd24a';
         g.beginPath(); g.arc(tx, ty - 4, 5 * flick, 0, 7); g.fill();
       }
+      drawCrystalTree(g, wx2(300), GROUND_Y, 0.9);
     }
   }
 
+  const LEAF_US = [0.45, 0.8];
   function drawBackground() {
     const g = rctx;
+    const E = themeShades().E;
+    const wid = plan ? plan.world.id : 'home';
+    const tS = performance.now() * 0.001; // shared sway clock
 
-    // near props (parallax 0.55) — styled per world
-    g.fillStyle = theme.near;
+    // near props (parallax 0.55) — painted per world
     const r2 = seeded((plan ? plan.level : 1) + 77);
     const propStyle = plan ? plan.world.props : 'castle';
     for (let i = 0; i < 10; i++) {
@@ -1604,80 +2049,151 @@ const Game = (() => {
       const sx = ((px % (viewW + 300)) + viewW + 300) % (viewW + 300) - 150 + camX;
       const h = 150 + r2() * 130, w = 26 + r2() * 22;
       if (propStyle === 'fence') {
-        // picket fence run + a bush
+        // painted picket run, an oak every other slot, and a sunflower
         for (let f = 0; f < 4; f++) {
+          g.fillStyle = '#e8e4d8';
           g.fillRect(sx + f * 16, GROUND_Y - 46, 9, 46);
           g.beginPath(); g.moveTo(sx + f * 16, GROUND_Y - 46); g.lineTo(sx + f * 16 + 4.5, GROUND_Y - 56); g.lineTo(sx + f * 16 + 9, GROUND_Y - 46); g.fill();
+          g.fillStyle = '#b0aca0';
+          g.fillRect(sx + f * 16 + 7, GROUND_Y - 46, 2, 46);
         }
-        g.fillRect(sx - 6, GROUND_Y - 36, 76, 7);
-        g.beginPath(); g.arc(sx + 88, GROUND_Y - 14, 16, 0, 7); g.fill();
+        g.fillStyle = '#e8e4d8'; g.fillRect(sx - 6, GROUND_Y - 36, 76, 7);
+        g.fillStyle = '#b0aca0'; g.fillRect(sx - 6, GROUND_Y - 31, 76, 2);
+        if (i % 2 === 0) drawOak(g, sx + 96, GROUND_Y + 2, 1.05, OAK_P);
+        const fx = sx + 70;
+        g.strokeStyle = '#3f6b34'; g.lineWidth = 2; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(fx, GROUND_Y); g.lineTo(fx, GROUND_Y - 26); g.stroke();
+        g.fillStyle = '#3f6b34';
+        g.beginPath(); g.ellipse(fx - 4, GROUND_Y - 12, 4, 2, -0.6, 0, 7); g.fill();
+        g.beginPath(); g.ellipse(fx + 4, GROUND_Y - 16, 4, 2, 0.6, 0, 7); g.fill();
+        g.fillStyle = '#ffca3a'; g.beginPath(); g.arc(fx, GROUND_Y - 29, 5, 0, 7); g.fill();
+        g.fillStyle = '#7a4a20'; g.beginPath(); g.arc(fx, GROUND_Y - 29, 2.5, 0, 7); g.fill();
       } else if (propStyle === 'pipes') {
-        // vertical pipe with elbow and valve wheel
-        g.fillRect(sx, GROUND_Y - h, 20, h);
+        // painted rust pipe with elbow, bolts, and a glowing valve wheel
+        g.fillStyle = '#b06a32'; g.fillRect(sx, GROUND_Y - h, 20, h);
+        g.fillStyle = '#7a4520'; g.fillRect(sx + 14, GROUND_Y - h, 6, h);
         g.fillRect(sx - 8, GROUND_Y - h, 36, 14);
         g.fillRect(sx - 4, GROUND_Y - h * 0.55, 28, 10);
-        g.beginPath(); g.arc(sx + 10, GROUND_Y - h * 0.55 - 12, 9, 0, 7); g.fill();
+        g.fillStyle = '#e8c84a';
+        g.beginPath(); g.arc(sx + 2, GROUND_Y - h + 7, 1.5, 0, 7); g.fill();
+        g.beginPath(); g.arc(sx + 18, GROUND_Y - h + 7, 1.5, 0, 7); g.fill();
+        g.fillStyle = '#3ad4a4'; g.globalAlpha = 0.25;
+        g.beginPath(); g.arc(sx + 10, GROUND_Y - h * 0.55 - 12, 16, 0, 7); g.fill();
+        g.globalAlpha = 1;
+        g.strokeStyle = '#3ad4a4'; g.lineWidth = 2.5;
+        g.beginPath(); g.arc(sx + 10, GROUND_Y - h * 0.55 - 12, 9, 0, 7); g.stroke();
       } else if (propStyle === 'road') {
-        // highway sign: post + diamond
+        // highway sign catching the last light, a dead tree here and there
+        g.fillStyle = theme.near;
         g.fillRect(sx + 8, GROUND_Y - h * 0.7, 7, h * 0.7);
         g.save();
         g.translate(sx + 11.5, GROUND_Y - h * 0.7 - 4);
         g.rotate(Math.PI / 4);
-        g.fillRect(-16, -16, 32, 32);
+        g.fillStyle = '#e8b84a'; g.fillRect(-16, -16, 32, 32);
+        g.strokeStyle = '#7a5c20'; g.lineWidth = 2; g.strokeRect(-16, -16, 32, 32);
         g.restore();
+        if (i % 3 === 0) drawDeadTree(g, sx + 90, GROUND_Y + 2, 1);
       } else {
-        // castle tower with crenellations
+        // castle tower with crenellations and one lit window
+        g.fillStyle = theme.near;
         g.fillRect(sx, GROUND_Y - h, w, h);
         for (let c = 0; c < 3; c++) g.fillRect(sx - 4 + c * (w + 8) / 3, GROUND_Y - h - 12, (w + 8) / 5, 14);
+        g.fillStyle = '#ffb04a'; g.fillRect(sx + w * 0.4, GROUND_Y - h + 18, 4, 6);
       }
     }
-    if (propStyle === 'road') {
-      // center-line dashes on the asphalt
-      g.fillStyle = 'rgba(232,226,208,0.25)';
-      for (let dx0 = Math.floor(camX / 90) * 90; dx0 < camX + viewW; dx0 += 90) {
-        g.fillRect(dx0, GROUND_Y + 26, 42, 5);
+    if (propStyle === 'fence') drawBlossom(g, STAGE_W * 0.62, GROUND_Y + 2, 1.25); // the landmark tree
+
+    // ---- the floating island ----
+    // mist wisps drifting under the keels (portrait only — invisible on landscape)
+    if (viewH - worldOffY > 620) {
+      g.globalAlpha = E.mistA;
+      g.fillStyle = E.mist;
+      for (let i = 0; i < 4; i++) {
+        const wxm = 130 + i * 520 + Math.sin(tS * 0.11 + i * 2.1) * 40;
+        if (wxm > camX - 160 && wxm < camX + viewW + 160) {
+          const wym = GROUND_Y + 190 + i * 22 + Math.sin(tS * 0.23 + i) * 6;
+          g.beginPath(); g.ellipse(wxm, wym, 70, 12, 0, 0, 7); g.fill();
+          g.beginPath(); g.ellipse(wxm - 46, wym + 6, 46, 9, 0, 0, 7); g.fill();
+          g.beginPath(); g.ellipse(wxm + 52, wym + 5, 40, 8, 0, 0, 7); g.fill();
+        }
       }
+      g.globalAlpha = 1;
     }
-
-    // ground (extends to the bottom of tall portrait screens)
-    const groundH = Math.max(VH - GROUND_Y, viewH - worldOffY - GROUND_Y);
-    g.fillStyle = theme.ground;
-    g.fillRect(camX, GROUND_Y, viewW, groundH);
     if (plan) {
-      g.fillStyle = getGroundPattern(plan.world);
-      g.fillRect(camX, GROUND_Y, viewW, groundH);
-    }
-    g.fillStyle = theme.groundTop; g.fillRect(camX, GROUND_Y, viewW, 5);
-
-    // floating platforms, styled per world
-    if (plan) {
-      for (const pl of platforms) {
-        const x0 = pl.x - pl.w / 2;
-        g.fillStyle = '#14101a';
-        g.fillRect(x0 - 3, pl.y - 3, pl.w + 6, 19); // ink outline
-        g.fillStyle = theme.near;
-        g.fillRect(x0, pl.y, pl.w, 13);
-        g.fillStyle = theme.groundTop;
-        g.fillRect(x0, pl.y, pl.w, 4);
-        const pstyle = plan.world.props;
-        if (pstyle === 'fence') {
-          g.strokeStyle = '#4a6a30'; g.lineWidth = 1.6;
-          for (let gx = x0 + 8; gx < x0 + pl.w - 6; gx += 16) {
-            g.beginPath(); g.moveTo(gx, pl.y); g.lineTo(gx + (gx * 7 % 5) - 2, pl.y - 5); g.stroke();
+      // the cached cliff strip IS the ground now
+      g.drawImage(getCliffStrip(plan.world), -160, GROUND_Y - 24, STAGE_W + 320, 312);
+      if (propStyle === 'road') {
+        // shoulder line along the island's soil band
+        g.fillStyle = 'rgba(255,220,180,0.28)';
+        for (let dx0 = Math.floor(camX / 90) * 90; dx0 < camX + viewW; dx0 += 90) {
+          g.fillRect(dx0, GROUND_Y + 7, 42, 4);
+        }
+      }
+      // live swaying strands off the lip: vines / chains / rope / glowing ivy
+      const rv = seeded(plan.level * 13 + 7);
+      const swayMul = wid === 'pipes' ? 0.5 : wid === 'road' ? 1.3 : 1;
+      g.lineCap = 'round';
+      for (let i = 0; i < 5; i++) {
+        const ax = 140 + i * (STAGE_W - 280) / 4 + (rv() - 0.5) * 120;
+        const L = 34 + rv() * 46;
+        if (ax < camX - 40 || ax > camX + viewW + 40) continue;
+        const sw = Math.sin(tS * 1.4 + ax * 0.031 + i) * (2 + L * 0.05) * swayMul;
+        const ay = GROUND_Y + 2;
+        const cpx = ax + sw * 0.4, cpy = ay + L * 0.55, ex = ax + sw, ey = ay + L;
+        g.strokeStyle = E.vineInk; g.lineWidth = 3.5;
+        g.beginPath(); g.moveTo(ax, ay); g.quadraticCurveTo(cpx, cpy, ex, ey); g.stroke();
+        g.strokeStyle = E.vine; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(ax, ay); g.quadraticCurveTo(cpx, cpy, ex, ey); g.stroke();
+        if (wid === 'home') {
+          g.fillStyle = E.leaf;
+          for (const u of LEAF_US) {
+            const inv = 1 - u;
+            const qx = inv * inv * ax + 2 * u * inv * cpx + u * u * ex;
+            const qy = inv * inv * ay + 2 * u * inv * cpy + u * u * ey;
+            g.beginPath(); g.ellipse(qx - 4, qy, 4, 2, -0.9 + sw * 0.02, 0, 7); g.fill();
+            g.beginPath(); g.ellipse(qx + 4, qy + 1, 4, 2, 0.9 + sw * 0.02, 0, 7); g.fill();
           }
-        } else if (pstyle === 'pipes') {
-          g.fillStyle = 'rgba(74,232,178,0.35)';
-          for (let gx = x0 + 10; gx < x0 + pl.w - 8; gx += 24) {
-            g.beginPath(); g.arc(gx, pl.y + 8, 1.6, 0, 7); g.fill();
-          }
-        } else if (pstyle === 'road') {
-          g.fillStyle = '#e8742a';
-          for (let gx = x0 + 4; gx < x0 + pl.w - 10; gx += 26) g.fillRect(gx, pl.y + 6, 13, 4);
+          g.beginPath(); g.arc(ex, ey, 1.5, 0, 7); g.fill();
+        } else if (wid === 'pipes') {
+          g.fillStyle = '#3ad4a4';
+          g.globalAlpha = 0.3; g.beginPath(); g.arc(ex, ey, 4, 0, 7); g.fill();
+          g.globalAlpha = 1; g.beginPath(); g.arc(ex, ey, 1.6, 0, 7); g.fill();
+        } else if (wid === 'road') {
+          // frayed sub-strand splitting off mid-rope
+          const mqx = 0.25 * ax + 0.5 * cpx + 0.25 * ex, mqy = 0.25 * ay + 0.5 * cpy + 0.25 * ey;
+          g.strokeStyle = E.vine; g.lineWidth = 1.4;
+          g.beginPath(); g.moveTo(mqx, mqy); g.quadraticCurveTo(mqx + sw * 0.3, mqy + L * 0.3, mqx + sw * 0.7, mqy + L * 0.5); g.stroke();
         } else {
-          g.strokeStyle = 'rgba(10,6,20,0.6)'; g.lineWidth = 1.4;
-          for (let gx = x0 + 20; gx < x0 + pl.w - 6; gx += 28) {
-            g.beginPath(); g.moveTo(gx, pl.y + 4); g.lineTo(gx, pl.y + 13); g.stroke();
+          g.fillStyle = '#c24ae8'; g.globalAlpha = 0.25;
+          for (const u of LEAF_US) {
+            const inv = 1 - u;
+            const qx = inv * inv * ax + 2 * u * inv * cpx + u * u * ex;
+            const qy = inv * inv * ay + 2 * u * inv * cpy + u * u * ey;
+            g.beginPath(); g.arc(qx, qy, 4, 0, 7); g.fill();
           }
+          g.globalAlpha = 1; g.fillStyle = '#e8b8ff';
+          for (const u of LEAF_US) {
+            const inv = 1 - u;
+            const qx = inv * inv * ax + 2 * u * inv * cpx + u * u * ex;
+            const qy = inv * inv * ay + 2 * u * inv * cpy + u * u * ey;
+            g.beginPath(); g.arc(qx, qy, 1.3, 0, 7); g.fill();
+          }
+          g.beginPath(); g.arc(ex, ey, 1.8, 0, 7); g.fill();
+        }
+      }
+      // platforms as floating mini-islands with swaying keel roots
+      for (const pl of platforms) {
+        if (!pl.cvs) pl.cvs = buildPlatformIsland(pl.w, plan.world);
+        g.drawImage(pl.cvs, pl.x - pl.w / 2 - 18, pl.y - 14);
+        const keelY0 = pl.y + 30 + Math.min(14, pl.w * 0.06);
+        for (let j = 0; j < 2; j++) {
+          const ax2 = pl.x + (j ? -8 : 6);
+          const L2 = 18 + j * 10;
+          const sw2 = Math.sin(tS * 1.4 + pl.x * 0.05 + j) * (2 + L2 * 0.05) * swayMul;
+          g.strokeStyle = E.cliffInk; g.lineWidth = 2.5;
+          g.beginPath(); g.moveTo(ax2, keelY0); g.quadraticCurveTo(ax2 + sw2 * 0.4, keelY0 + L2 * 0.55, ax2 + sw2, keelY0 + L2); g.stroke();
+          g.strokeStyle = E.vine; g.lineWidth = 1.4;
+          g.beginPath(); g.moveTo(ax2, keelY0); g.quadraticCurveTo(ax2 + sw2 * 0.4, keelY0 + L2 * 0.55, ax2 + sw2, keelY0 + L2); g.stroke();
         }
       }
     }
@@ -2460,8 +2976,8 @@ const Game = (() => {
     const period = 320;
     const off = ((camX * 1.35) % period + period) % period;
     const yb = viewH;
-    g.fillStyle = 'rgba(8,6,12,0.85)';
     const props = plan.world.props;
+    g.fillStyle = props === 'fence' ? 'rgba(18,28,14,0.85)' : props === 'road' ? 'rgba(20,12,10,0.85)' : 'rgba(8,6,12,0.85)';
     for (let sx = -period; sx < viewW + period; sx += period) {
       const x = sx - off + period;
       if (props === 'fence') {
