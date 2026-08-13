@@ -1370,32 +1370,57 @@ const Game = (() => {
     return grainPattern;
   }
 
-  // tinted checkerboard pattern for dither bands, cached per color
+  // tinted checkerboard pattern for dither bands, cached per color.
+  // cells are 8 user units so they survive the quarter-res far pass.
   const tintPats = {};
   function checkerPat(color) {
     if (tintPats[color]) return tintPats[color];
     const pc = document.createElement('canvas');
-    pc.width = 8; pc.height = 8;
+    pc.width = 16; pc.height = 16;
     const q = pc.getContext('2d');
     q.fillStyle = color;
-    q.fillRect(0, 0, 4, 4); q.fillRect(4, 4, 4, 4);
+    q.fillRect(0, 0, 8, 8); q.fillRect(8, 8, 8, 8);
     return tintPats[color] = ctx.createPattern(pc, 'repeat');
+  }
+
+  // theme-derived colors, computed once per world instead of per frame
+  let shadeCache = null, shadeCacheKey = '';
+  function themeShades() {
+    const key2 = plan ? plan.world.id : 'idle';
+    if (shadeCacheKey === key2 && shadeCache) return shadeCache;
+    shadeCacheKey = key2;
+    shadeCache = {
+      bands: [0, 1, 2, 3, 4].map(b => hexMix(theme.sky1, theme.sky2, b / 4)),
+      cloudDark: hexMix(theme.sky1, '#000000', 0.16),
+      cloudMid: hexMix(theme.sky1, '#ffffff', 0.12),
+      cloudLite: hexMix(theme.sky1, '#ffffff', 0.26),
+      farDeep: hexMix(theme.far, '#000000', 0.4),
+      towerCol: hexMix(theme.far, '#000000', 0.35),
+      houseBody: hexMix(theme.far, '#ffffff', 0.1),
+      houseRoof: hexMix(theme.far, '#000000', 0.25),
+      winDark: hexMix(theme.far, '#000000', 0.35),
+      pipeCol: hexMix(theme.far, '#ffffff', 0.12),
+      wallCol: hexMix(theme.far, '#ffffff', 0.08),
+      billPost: hexMix(theme.far, '#000000', 0.2),
+      billBoard: hexMix(theme.far, '#ffffff', 0.16),
+    };
+    return shadeCache;
   }
 
   // the FAR pass: everything here is rendered soft (tilt-shift) behind the action
   function drawBackgroundFar() {
     const g = rctx;
-    // dithered band sky
+    const sh2 = themeShades();
+    // dithered band sky (big-cell checker so the dither survives the soft pass)
     const skyTop = -worldOffY, skyH = viewH;
     const BANDS = 5;
     for (let b = 0; b < BANDS; b++) {
-      const c = hexMix(theme.sky1, theme.sky2, b / (BANDS - 1));
       const y0 = skyTop + (skyH * b) / BANDS;
-      g.fillStyle = c;
+      g.fillStyle = sh2.bands[b];
       g.fillRect(camX, y0, viewW, skyH / BANDS + 1);
       if (b > 0) {
-        g.fillStyle = checkerPat(c);
-        g.fillRect(camX, y0 - 8, viewW, 8);
+        g.fillStyle = checkerPat(sh2.bands[b]);
+        g.fillRect(camX, y0 - 12, viewW, 12);
       }
     }
 
@@ -1419,10 +1444,7 @@ const Game = (() => {
       const cy = -worldOffY + 70 + rc() * 170;
       const wrap = viewW + 900;
       const x = camX + ((((baseX + drift * (8 + i * 3) - camX * 0.18) % wrap) + wrap) % wrap) - 450;
-      const dark = hexMix(theme.sky1, '#000000', 0.16);
-      const mid = hexMix(theme.sky1, '#ffffff', 0.12);
-      const lite = hexMix(theme.sky1, '#ffffff', 0.26);
-      for (const layer of [[dark, 6, 1], [mid, 0, 0.9], [lite, -6, 0.76]]) {
+      for (const layer of [[sh2.cloudDark, 6, 1], [sh2.cloudMid, 0, 0.9], [sh2.cloudLite, -6, 0.76]]) {
         g.fillStyle = layer[0];
         for (let bl = 0; bl < 4; bl++) {
           const bx = x + (bl - 1.5) * cw * 0.22;
@@ -1450,7 +1472,7 @@ const Game = (() => {
         const tw = 44 + r0() * 40, th = 110 + r0() * 150;
         const wx0 = i * 260 + r0() * 100 - camX * 0.1;
         const sx = camX + ((wx0 % (viewW + 500)) + viewW + 500) % (viewW + 500) - 250;
-        g.fillStyle = hexMix(theme.far, '#000000', 0.35);
+        g.fillStyle = sh2.towerCol;
         g.fillRect(sx, GROUND_Y - th, tw, th);
         g.fillStyle = '#ffd24a';
         for (let wy = GROUND_Y - th + 12; wy < GROUND_Y - 14; wy += 16) {
@@ -1461,7 +1483,7 @@ const Game = (() => {
         g.globalAlpha = 1;
       }
     } else {
-      g.fillStyle = hexMix(theme.far, '#000000', 0.4);
+      g.fillStyle = sh2.farDeep;
       g.beginPath();
       g.moveTo(camX, VH);
       for (let i = 0; i <= 10; i++) {
@@ -1490,6 +1512,7 @@ const Game = (() => {
 
   function drawScene(g) {
     const props = plan.world.props;
+    const sh3 = themeShades();
     const rs = seeded(plan.level * 11 + 3);
     const par = 0.38;
     const wrap = viewW + 700;
@@ -1500,14 +1523,14 @@ const Game = (() => {
         const hw2 = 120 + rs() * 60, hh2 = 85 + rs() * 45;
         const x = wx2(i * 460 + rs() * 160);
         const yb = GROUND_Y;
-        g.fillStyle = hexMix(theme.far, '#ffffff', 0.1);
+        g.fillStyle = sh3.houseBody;
         g.fillRect(x, yb - hh2, hw2, hh2);
-        g.fillStyle = hexMix(theme.far, '#000000', 0.25);
+        g.fillStyle = sh3.houseRoof;
         g.beginPath(); g.moveTo(x - 10, yb - hh2); g.lineTo(x + hw2 / 2, yb - hh2 - 46); g.lineTo(x + hw2 + 10, yb - hh2); g.closePath(); g.fill();
         g.fillRect(x + hw2 * 0.72, yb - hh2 - 62, 14, 30); // chimney
         for (let wxx = x + 14; wxx < x + hw2 - 20; wxx += 34) {
           const lit = rs() < 0.62;
-          g.fillStyle = lit ? '#ffd24a' : hexMix(theme.far, '#000000', 0.35);
+          g.fillStyle = lit ? '#ffd24a' : sh3.winDark;
           g.fillRect(wxx, yb - hh2 + 18, 16, 20);
           if (lit) {
             g.globalAlpha = 0.22; g.fillStyle = '#ffd24a';
@@ -1518,7 +1541,7 @@ const Game = (() => {
       }
     } else if (props === 'pipes') {
       // background pipe network with glowing valves
-      g.strokeStyle = hexMix(theme.far, '#ffffff', 0.12); g.lineWidth = 12;
+      g.strokeStyle = sh3.pipeCol; g.lineWidth = 12;
       const py = 320 + rs() * 20;
       g.beginPath(); g.moveTo(camX - 20, py); g.lineTo(camX + viewW + 20, py); g.stroke();
       for (let i = 0; i < 4; i++) {
@@ -1533,9 +1556,9 @@ const Game = (() => {
       // billboards catching the sunset
       for (let i = 0; i < 3; i++) {
         const x = wx2(i * 620 + rs() * 200);
-        g.fillStyle = hexMix(theme.far, '#000000', 0.2);
+        g.fillStyle = sh3.billPost;
         g.fillRect(x + 28, GROUND_Y - 120, 10, 120);
-        g.fillStyle = hexMix(theme.far, '#ffffff', 0.16);
+        g.fillStyle = sh3.billBoard;
         g.fillRect(x - 20, GROUND_Y - 175, 106, 60);
         g.fillStyle = theme.glow;
         g.globalAlpha = 0.35;
@@ -1547,7 +1570,7 @@ const Game = (() => {
       const flick = 1 + Math.sin(performance.now() * 0.02) * 0.15;
       for (let i = 0; i < 4; i++) {
         const x = wx2(i * 440 + rs() * 130);
-        g.fillStyle = hexMix(theme.far, '#ffffff', 0.08);
+        g.fillStyle = sh3.wallCol;
         g.fillRect(x, GROUND_Y - 140, 150, 140);
         for (let cxx = x; cxx < x + 150; cxx += 30) g.fillRect(cxx, GROUND_Y - 154, 16, 16);
         // arrow-slit windows
@@ -1989,7 +2012,30 @@ const Game = (() => {
       g.globalAlpha = 1;
     }
     if (!look.printer && !look.wrench && !look.chicken && !look.sandwich && !look.firetruck) {
-    // head — chibi-scaled as a group so every accessory scales with it
+    // body-anchored enemy accessories draw UNSCALED, before the chibi head group
+    if (o.hood && o.accessory) {
+      if (o.accessory === 'wings') {
+        const wf2 = Math.sin((o.animT || 0) * 26) * 4;
+        g.fillStyle = 'rgba(232,240,255,0.65)';
+        g.beginPath(); g.ellipse(-10, -58 * cf + wf2, 9, 4.5, -0.5, 0, 7); g.fill();
+        g.beginPath(); g.ellipse(-13, -54 * cf - wf2, 8, 4, -0.9, 0, 7); g.fill();
+      } else if (o.accessory === 'ribs') {
+        g.strokeStyle = 'rgba(240,238,228,0.8)'; g.lineWidth = 1.6;
+        for (let rr2 = 0; rr2 < 3; rr2++) {
+          g.beginPath(); g.moveTo(-5, -58 * cf + rr2 * 6); g.lineTo(7, -58 * cf + rr2 * 6); g.stroke();
+        }
+      } else if (o.accessory === 'bolts') {
+        g.fillStyle = '#e8c84a';
+        g.beginPath(); g.arc(-3, -56 * cf, 1.8, 0, 7); g.fill();
+        g.beginPath(); g.arc(5, -50 * cf, 1.8, 0, 7); g.fill();
+        g.beginPath(); g.arc(-1, -44 * cf, 1.8, 0, 7); g.fill();
+      } else if (o.accessory === 'drip') {
+        g.fillStyle = o.color2;
+        g.beginPath(); g.arc(-4, -30 * cf, 2.4, 0, 7); g.fill();
+        g.beginPath(); g.arc(6, -38 * cf, 2, 0, 7); g.fill();
+      }
+    }
+    // head — chibi-scaled as a group so every head accessory scales with it
     const hx = (look.crawl ? 17 : 3) + lean * 0.6;
     const hy = look.crawl ? -26 : headY - 7;
     g.save();
@@ -2062,13 +2108,6 @@ const Game = (() => {
           g.fillRect(ax - 11, ay - 10, 22, 4);
           g.beginPath(); g.moveTo(ax - 7, ay - 10); g.lineTo(ax + 3, ay - 28); g.lineTo(ax + 7, ay - 10); g.closePath(); g.fill();
           break;
-        case 'wings': {
-          const wf2 = Math.sin((o.animT || 0) * 26) * 4;
-          g.fillStyle = 'rgba(232,240,255,0.65)';
-          g.beginPath(); g.ellipse(-10, -58 * cf + wf2, 9, 4.5, -0.5, 0, 7); g.fill();
-          g.beginPath(); g.ellipse(-13, -54 * cf - wf2, 8, 4, -0.9, 0, 7); g.fill();
-          break;
-        }
         case 'mask':
           g.fillStyle = '#1d1d24';
           g.fillRect(ax - 8, ay - 3.5, 16, 5);
@@ -2090,27 +2129,6 @@ const Game = (() => {
           g.beginPath(); g.moveTo(ax, ay - 9); g.lineTo(ax, ay - 20); g.stroke();
           g.fillStyle = o.eyeColor || '#ffd34a';
           g.beginPath(); g.arc(ax, ay - 22, 2.5, 0, 7); g.fill();
-          break;
-        case 'ribs':
-          g.strokeStyle = 'rgba(240,238,228,0.8)'; g.lineWidth = 1.6;
-          for (let rr2 = 0; rr2 < 3; rr2++) {
-            g.beginPath(); g.moveTo(-5, -58 * cf + rr2 * 6); g.lineTo(7, -58 * cf + rr2 * 6); g.stroke();
-          }
-          break;
-        case 'bolts':
-          g.fillStyle = '#e8c84a';
-          g.beginPath(); g.arc(-3, -56 * cf, 1.8, 0, 7); g.fill();
-          g.beginPath(); g.arc(5, -50 * cf, 1.8, 0, 7); g.fill();
-          g.beginPath(); g.arc(-1, -44 * cf, 1.8, 0, 7); g.fill();
-          break;
-        case 'tire':
-          g.strokeStyle = '#101014'; g.lineWidth = 6;
-          g.beginPath(); g.ellipse(0, -48 * cf, 13, 9, 0.2, 0, 7); g.stroke();
-          break;
-        case 'drip':
-          g.fillStyle = o.color2;
-          g.beginPath(); g.arc(-4, -30 * cf, 2.4, 0, 7); g.fill();
-          g.beginPath(); g.arc(6, -38 * cf, 2, 0, 7); g.fill();
           break;
       }
     } else if (look.helmet) {
