@@ -24,6 +24,10 @@ const Game = (() => {
   // controls, letting sky fill the extra height.
   const MIN_VW = 640;
   let DPR = 1, scale = 1, viewW = 960, viewH = VH, worldOffY = 0, SW = 1, SH = 1;
+  // world-buffer pixels per world unit. Was locked to 0.5 (the chunky pixel-art
+  // look); now tracks device resolution, with a pixel budget so phones keep 60fps.
+  let RES = 1;
+  const IS_TOUCH = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   // Layout-viewport size: stable under iOS pinch-zoom, matches the canvas's
   // fixed inset:0 CSS box (window.innerWidth tracks the visual viewport and lies).
   function measure() {
@@ -47,12 +51,16 @@ const Game = (() => {
     viewW = SW / scale;
     viewH = SH / scale;
     worldOffY = Math.max(0, viewH - GROUND_Y - 380); // keep the fight clear of the touch controls
-    lowW = Math.max(160, Math.ceil(viewW / 2));
-    lowH = Math.max(120, Math.ceil(viewH / 2));
+    const budget = IS_TOUCH ? 1300000 : 2400000; // max world-buffer pixels
+    RES = Math.max(0.5, Math.min(scale * DPR, 3, Math.sqrt(budget / (viewW * viewH))));
+    lowW = Math.max(160, Math.ceil(viewW * RES));
+    lowH = Math.max(120, Math.ceil(viewH * RES));
     lowCvs.width = lowW;
     lowCvs.height = lowH;
-    bgW = Math.max(80, Math.ceil(lowW / 2));
-    bgH = Math.max(60, Math.ceil(lowH / 2));
+    // the far pass stays at quarter-view resolution regardless of RES —
+    // its softness IS the tilt-shift, only the gameplay plane sharpens
+    bgW = Math.max(80, Math.ceil(viewW / 4));
+    bgH = Math.max(60, Math.ceil(viewH / 4));
     bgCvs.width = bgW;
     bgCvs.height = bgH;
   }
@@ -141,7 +149,7 @@ const Game = (() => {
     }
     // bake the level's terrain art up front so the first frame doesn't hitch
     getCliffStrip(plan.world);
-    for (const pl of platforms) pl.cvs = buildPlatformIsland(pl.w, plan.world);
+    for (const pl of platforms) { pl.cvs = buildPlatformIsland(pl.w, plan.world); pl.cvsRes = RES; }
     waveIdx = 0; spawnDelay = 1.2; endTimer = 0; endFired = false;
     camX = clamp(player.x - viewW / 2, 0, Math.max(0, STAGE_W - viewW));
     earned = 0; mode = 'playing'; paused = false; timeScale = 1; hitstop = 0;
@@ -1525,14 +1533,14 @@ const Game = (() => {
   // units, so sprites blit 1:1 onto the half-res buffer with no decimation.
   const floraCache = {};
   function drawFlora(g, kind, s, x, baseY) {
-    const key = kind + s;
+    const key = kind + s + '@' + RES;
     let f = floraCache[key];
     if (!f) {
       const wU = 84 * s, hU = 100 * s;
       const pc = document.createElement('canvas');
-      pc.width = Math.ceil(wU / 2); pc.height = Math.ceil(hU / 2);
+      pc.width = Math.ceil(wU * RES); pc.height = Math.ceil(hU * RES);
       const q = pc.getContext('2d');
-      q.setTransform(0.5, 0, 0, 0.5, wU / 4, hU / 2); // world (0,0) = base center
+      q.setTransform(RES, 0, 0, RES, wU * RES / 2, hU * RES); // world (0,0) = base center
       if (kind === 'oak') drawOak(q, 0, 0, s, OAK_P);
       else if (kind === 'blossom') drawBlossom(q, 0, 0, s);
       else if (kind === 'coral') drawPipeCoral(q, 0, 0, s);
@@ -1561,16 +1569,17 @@ const Game = (() => {
   }
 
   // ---- the floating island: cliff strip baked once per world ----
-  // canvas px = 2 world units = 1 low-buffer px, so it blits pixel-crisp.
+  // baked at RES so it blits 1:1 onto the world buffer at any quality.
   const cliffStrips = {};
   function getCliffStrip(world) {
-    if (cliffStrips[world.id]) return cliffStrips[world.id];
+    const cacheKey = world.id + '@' + RES;
+    if (cliffStrips[cacheKey]) return cliffStrips[cacheKey];
     const E = ENV_TABLES[world.id] || ENV_TABLES.home;
     const W = STAGE_W + 320;
     const pc = document.createElement('canvas');
-    pc.width = Math.ceil(W / 2); pc.height = 156;
+    pc.width = Math.ceil(W * RES); pc.height = Math.ceil(312 * RES);
     const q = pc.getContext('2d');
-    q.setTransform(0.5, 0, 0, 0.5, 80, 12); // world x -160.., world y -24..288
+    q.setTransform(RES, 0, 0, RES, 160 * RES, 24 * RES); // world x -160.., world y -24..288
     const r = seeded(WORLD_SEED[world.id] * 97 + 13);
     // underside silhouette: 3 keels tapering into the sky
     const kx = [0.18 * STAGE_W, 0.5 * STAGE_W, 0.82 * STAGE_W];
@@ -1684,18 +1693,18 @@ const Game = (() => {
         q.beginPath(); q.moveTo(x + b * 2, -4); q.lineTo(x + b * 2 + (r() * 6 - 3), -12 - r() * tuftH); q.stroke();
       }
     }
-    cliffStrips[world.id] = pc;
+    cliffStrips[cacheKey] = pc;
     return pc;
   }
 
-  // platforms as small floating islands, baked per platform per level.
-  // baked at 1 canvas px = 2 world units so the half-res pass blits 1:1.
+  // platforms as small floating islands, baked per platform per level
+  // at RES so they blit 1:1 onto the world buffer.
   function buildPlatformIsland(w, world) {
     const E = ENV_TABLES[world.id] || ENV_TABLES.home;
     const pc = document.createElement('canvas');
-    pc.width = Math.ceil((w + 36) / 2); pc.height = 38;
+    pc.width = Math.ceil((w + 36) * RES); pc.height = Math.ceil(76 * RES);
     const q = pc.getContext('2d');
-    q.setTransform(0.5, 0, 0, 0.5, 0, 0);
+    q.setTransform(RES, 0, 0, RES, 0, 0);
     const cx = w / 2 + 18;
     const keelY = 44 + Math.min(14, w * 0.06);
     q.beginPath();
@@ -1763,17 +1772,13 @@ const Game = (() => {
   function drawBackgroundFar() {
     const g = rctx;
     const sh2 = themeShades();
-    // dithered band sky (big-cell checker so the dither survives the soft pass)
+    // banded sky — the quarter-res soft pass blends the seams on its own
     const skyTop = -worldOffY, skyH = viewH;
     const BANDS = 5;
     for (let b = 0; b < BANDS; b++) {
       const y0 = skyTop + (skyH * b) / BANDS;
       g.fillStyle = sh2.bands[b];
       g.fillRect(camX, y0, viewW, skyH / BANDS + 1);
-      if (b > 0) {
-        g.fillStyle = checkerPat(sh2.bands[b]);
-        g.fillRect(camX, y0 - 12, viewW, 12);
-      }
     }
 
     const wid = plan ? plan.world.id : 'home';
@@ -2221,7 +2226,7 @@ const Game = (() => {
       }
       // platforms as floating mini-islands with swaying keel roots
       for (const pl of platforms) {
-        if (!pl.cvs) pl.cvs = buildPlatformIsland(pl.w, plan.world);
+        if (!pl.cvs || pl.cvsRes !== RES) { pl.cvs = buildPlatformIsland(pl.w, plan.world); pl.cvsRes = RES; }
         g.drawImage(pl.cvs, pl.x - pl.w / 2 - 18, pl.y - 14, pl.w + 36, 76);
         const keelY0 = pl.y + 30 + Math.min(14, pl.w * 0.06);
         for (let j = 0; j < 2; j++) {
@@ -4061,7 +4066,6 @@ const Game = (() => {
     lctx.setTransform(1, 0, 0, 1, 0, 0);
     lctx.imageSmoothingEnabled = true;
     lctx.drawImage(bgCvs, 0, 0, bgW, bgH, 0, 0, lowW, lowH);
-    lctx.imageSmoothingEnabled = false;
     lctx.setTransform(k, 0, 0, k, 0, 0);
     lctx.translate(-camX + ox, worldOffY + oy);
     drawBackground();
@@ -4076,9 +4080,9 @@ const Game = (() => {
     drawForeground();
     rctx = ctx;
 
-    // --- upscale with hard pixels, then crisp UI on top ---
+    // --- composite the world buffer, then crisp UI on top ---
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = true;
     ctx.drawImage(lowCvs, 0, 0, lowW, lowH, 0, 0, cvs.width, cvs.height);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     // vignette
