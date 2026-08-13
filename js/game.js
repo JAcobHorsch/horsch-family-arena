@@ -3294,6 +3294,37 @@ const Game = (() => {
     }
   }
 
+  // unique creature bodies live in js/skins-*.js; this shim owns the
+  // shared transform, shadow, and post overlays so bodies stay pure
+  const skinCtx = { walkCyc: 0, animT: 0, attackKey: null, hurt: false, moving: false, elite: false };
+  function drawEnemySkin(g, e, key) {
+    g.save();
+    g.translate(e.x, e.y);
+    g.fillStyle = 'rgba(0,0,0,0.4)';
+    g.beginPath(); g.ellipse(0, 2, 22 * e.size, 5, 0, 0, 7); g.fill();
+    g.scale(e.facing * e.size, e.size);
+    skinCtx.walkCyc = e.walkCyc || 0;
+    skinCtx.animT = e.animT || 0;
+    skinCtx.attackKey = key;
+    skinCtx.hurt = e.hurtT > 0;
+    skinCtx.moving = e.state === 'approach' && e.frozenT <= 0;
+    skinCtx.elite = e.def.signature === 'revive' && !e.revived;
+    window.ENEMY_BODIES[e.def.body](g, skinCtx);
+    g.restore();
+    if (e.flash > 0) {
+      g.globalAlpha = Math.min(0.7, e.flash);
+      g.fillStyle = '#ffffff';
+      g.beginPath(); g.ellipse(e.x, e.y - 45 * e.size, 20 * e.size, 42 * e.size, 0, 0, 7); g.fill();
+      g.globalAlpha = 1;
+    }
+    if (e.frozenT > 0) {
+      g.globalAlpha = 0.45;
+      g.fillStyle = '#9fdcff';
+      g.beginPath(); g.ellipse(e.x, e.y - 45 * e.size, 22 * e.size, 46 * e.size, 0, 0, 7); g.fill();
+      g.globalAlpha = 1;
+    }
+  }
+
   function drawBoss(g, e) {
     g.save();
     g.translate(e.x, e.y);
@@ -3302,7 +3333,9 @@ const Game = (() => {
     g.scale(e.facing * e.size, e.size);
     const t = e.animT;
     const kind = e.def.bossKind;
-    if (kind === 'goose') {
+    if (window.BOSS_BODIES && window.BOSS_BODIES[kind]) {
+      window.BOSS_BODIES[kind](g, e, t);
+    } else if (kind === 'goose') {
       const wk = Math.sin(e.walkCyc || 0) * 4;
       g.strokeStyle = '#e8a020'; g.lineWidth = 3.5; g.lineCap = 'round';
       g.beginPath(); g.moveTo(-6, -18); g.lineTo(-8 + wk, 0); g.stroke();
@@ -3454,31 +3487,45 @@ const Game = (() => {
         g.save();
         g.translate(e.x, e.y - 22 * e.size);
         g.rotate(e.walkCyc || 0);
-        g.fillStyle = '#1d1d24';
-        g.beginPath(); g.arc(0, 0, 22 * e.size, 0, 7); g.fill();
-        g.strokeStyle = '#0d0d12'; g.lineWidth = 3;
-        for (let ti = 0; ti < 6; ti++) {
-          const ta = ti * Math.PI / 3;
-          g.beginPath();
-          g.moveTo(Math.cos(ta) * 16 * e.size, Math.sin(ta) * 16 * e.size);
-          g.lineTo(Math.cos(ta) * 22 * e.size, Math.sin(ta) * 22 * e.size);
-          g.stroke();
+        if (window.ENEMY_BODIES && window.ENEMY_BODIES.tire) {
+          g.scale(e.size, e.size);
+          skinCtx.walkCyc = e.walkCyc || 0;
+          skinCtx.animT = e.animT || 0;
+          skinCtx.attackKey = e.state === 'windup' ? 'windup' : e.state === 'strike' ? 'strike' : null;
+          skinCtx.hurt = e.hurtT > 0;
+          skinCtx.moving = e.state === 'approach' && e.frozenT <= 0;
+          window.ENEMY_BODIES.tire(g, skinCtx);
+        } else {
+          g.fillStyle = '#1d1d24';
+          g.beginPath(); g.arc(0, 0, 22 * e.size, 0, 7); g.fill();
+          g.strokeStyle = '#0d0d12'; g.lineWidth = 3;
+          for (let ti = 0; ti < 6; ti++) {
+            const ta = ti * Math.PI / 3;
+            g.beginPath();
+            g.moveTo(Math.cos(ta) * 16 * e.size, Math.sin(ta) * 16 * e.size);
+            g.lineTo(Math.cos(ta) * 22 * e.size, Math.sin(ta) * 22 * e.size);
+            g.stroke();
+          }
+          g.fillStyle = '#3a3a42';
+          g.beginPath(); g.arc(0, 0, 11 * e.size, 0, 7); g.fill();
+          g.fillStyle = '#8d8d96';
+          g.beginPath(); g.arc(0, 0, 5 * e.size, 0, 7); g.fill();
         }
-        g.fillStyle = '#3a3a42';
-        g.beginPath(); g.arc(0, 0, 11 * e.size, 0, 7); g.fill();
-        g.fillStyle = '#8d8d96';
-        g.beginPath(); g.arc(0, 0, 5 * e.size, 0, 7); g.fill();
         g.restore();
       } else {
-        drawFighter(g, {
-          x: e.x, y: e.y, facing: e.facing, size: e.size,
-          color: e.def.color, color2: e.def.color2, accent: e.def.color2, skin: e.def.color,
-          hood: true, boss: !!e.def.boss, accessory: e.def.accessory, eyeColor: e.def.boss ? '#ff4a3a' : '#ffd34a',
-          moving: e.state === 'approach' && e.frozenT <= 0, walkCyc: e.walkCyc, animT: e.animT,
-          onGround: e.onGround !== false, attackKey: key,
-          hurt: e.hurtT > 0, flash: e.flash, frozen: e.frozenT > 0,
-          weaponTier: 0, crouch: false, ascended: false,
-        });
+        if (e.def.body && window.ENEMY_BODIES && window.ENEMY_BODIES[e.def.body]) {
+          drawEnemySkin(g, e, key);
+        } else {
+          drawFighter(g, {
+            x: e.x, y: e.y, facing: e.facing, size: e.size,
+            color: e.def.color, color2: e.def.color2, accent: e.def.color2, skin: e.def.color,
+            hood: true, boss: !!e.def.boss, accessory: e.def.accessory, eyeColor: e.def.boss ? '#ff4a3a' : '#ffd34a',
+            moving: e.state === 'approach' && e.frozenT <= 0, walkCyc: e.walkCyc, animT: e.animT,
+            onGround: e.onGround !== false, attackKey: key,
+            hurt: e.hurtT > 0, flash: e.flash, frozen: e.frozenT > 0,
+            weaponTier: 0, crouch: false, ascended: false,
+          });
+        }
       }
       // spawn-modifier overlays
       if (e.frenzy) {
