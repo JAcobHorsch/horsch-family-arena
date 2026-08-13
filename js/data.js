@@ -736,6 +736,7 @@ const HAIR_STYLES = {
 for (const c of CHARACTERS) {
   c.hairStyle = HAIR_STYLES[c.id] || 'short';
   c.hairColor = hexMix(c.color2, '#14101a', 0.35);
+  c.blush = c.id === 'isla' || c.id === 'addi' || c.id === 'brooks' || c.id === 'hayes';
 }
 
 // Base combat roles — per-world enemy skins override name/colors/accessory,

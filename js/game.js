@@ -2222,6 +2222,24 @@ const Game = (() => {
 
   const WEAPON_COLORS = ['#c9ccd8', '#e6ebf5', '#7fb8ff', '#c47fff', '#ff7f4a'];
 
+  // per-color shade ramp, cached forever (bounded by the roster's palette).
+  // Outline is a darkened HUE biased toward violet ink, never pure black;
+  // highlights mix toward warm white for the painterly sun.
+  const SHADE = new Map();
+  function ramp(c) {
+    let r = SHADE.get(c);
+    if (!r) {
+      r = {
+        out: hexMix(c, '#1a1030', 0.62),
+        dk: hexMix(c, '#1a1030', 0.3),
+        lt: hexMix(c, '#fff6dd', 0.28),
+        hi: hexMix(c, '#fff6dd', 0.55),
+      };
+      SHADE.set(c, r);
+    }
+    return r;
+  }
+
   function drawFighter(g, o) {
     // o: x,y feet in world coords; palette + pose fields
     const cf = o.crouch ? 0.6 : 1;
@@ -2320,23 +2338,64 @@ const Game = (() => {
     g.lineCap = 'round'; g.lineJoin = 'round';
     const INK = '#14101a';
     const limb = (from, to, width, color) => {
-      // hand-inked comic outline: every limb gets an ink pass under its color
-      g.strokeStyle = INK; g.lineWidth = width + 3;
+      // shaded capsule: hue-dark outline, shadow base, sun-shifted core, rim thread
+      const r = ramp(color);
+      const dx = to[0] - from[0], dy = to[1] - from[1], len = Math.hypot(dx, dy) || 1;
+      let px = -dy / len, py = dx / len;
+      if (px + py > 0) { px = -px; py = -py; } // perpendicular points up-left, toward the sun
+      g.strokeStyle = r.out; g.lineWidth = width + 3;
       g.beginPath(); g.moveTo(from[0], from[1]); g.lineTo(to[0], to[1]); g.stroke();
-      g.strokeStyle = color; g.lineWidth = width;
+      g.strokeStyle = r.dk; g.lineWidth = width;
       g.beginPath(); g.moveTo(from[0], from[1]); g.lineTo(to[0], to[1]); g.stroke();
+      const s = width * 0.18;
+      g.strokeStyle = color; g.lineWidth = Math.max(2, width - 2.4);
+      g.beginPath(); g.moveTo(from[0] + px * s, from[1] + py * s - 0.4); g.lineTo(to[0] + px * s, to[1] + py * s - 0.4); g.stroke();
+      const e = width * 0.3;
+      g.strokeStyle = r.lt; g.lineWidth = Math.max(1.3, width * 0.24);
+      g.beginPath(); g.moveTo(from[0] + px * e, from[1] + py * e - 0.6); g.lineTo(to[0] + px * e, to[1] + py * e - 0.6); g.stroke();
     };
+    const shoe = (fx, fy) => {
+      const bc = ramp(o.color2);
+      g.fillStyle = bc.out; g.beginPath(); g.roundRect(fx - 5.4, fy - 6.4, 12.2, 7.6, 3); g.fill();
+      g.fillStyle = o.color2; g.beginPath(); g.roundRect(fx - 4.6, fy - 5.7, 10.6, 6.2, 2.6); g.fill();
+      g.fillStyle = bc.lt; g.fillRect(fx - 4.6, fy - 1.1, 10.6, 1.6);
+      g.fillStyle = bc.hi; g.beginPath(); g.arc(fx + 3.6, fy - 4.2, 1.1, 0, 7); g.fill();
+    };
+    const kneepad = (kx, ky, accentStrap) => {
+      const A2 = ramp(o.color2);
+      g.fillStyle = A2.out; g.beginPath(); g.arc(kx, ky, 4.2, 0, 7); g.fill();
+      g.fillStyle = o.color2; g.beginPath(); g.arc(kx, ky, 3.3, 0, 7); g.fill();
+      g.fillStyle = A2.lt; g.beginPath(); g.arc(kx - 1, ky - 1.1, 1.4, 0, 7); g.fill();
+      g.strokeStyle = accentStrap ? o.accent : A2.dk; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(kx - 3.2, ky + 1.6); g.lineTo(kx + 3.2, ky + 1.6); g.stroke();
+    };
+    const thighPlate = (tx, ty) => {
+      const A2 = ramp(o.color2);
+      g.fillStyle = A2.out; g.beginPath(); g.roundRect(tx - 3.6, ty - 2.9, 7.2, 5.8, 1.6); g.fill();
+      g.fillStyle = o.color2; g.beginPath(); g.roundRect(tx - 3, ty - 2.3, 6, 4.6, 1.3); g.fill();
+      g.fillStyle = A2.lt; g.fillRect(tx - 3, ty - 2.3, 6, 1.2);
+    };
+    const wearsShoes = !look.baby && !look.crawl && !look.printer && !look.wrench && !look.sandwich && !look.chicken && !look.firetruck;
 
     // final-form look overrides (bald / beard / shirtless / muscle / fat)
     const muscleW = look.fat ? 1.9 : (look.muscle || 1);
     let armW = 7 * (1 + (muscleW - 1) * 0.7);
     if (o.weaponStyle === 'muscles' && o.weaponTier > 0) armW *= 1 + o.weaponTier * 0.32; // the arms ARE the weapon
     const torsoCol = look.shirtless ? o.skin : o.color;
-    const backArmCol = look.shirtless ? hexMix(o.skin, '#000000', 0.3) : o.color2;
+    const backArmCol = look.shirtless ? ramp(o.skin).dk : o.color2;
     const frontArmCol = look.shirtless ? o.skin : o.color;
 
     // back limbs
-    if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], backFoot, 8.5, legCol2);
+    if (!look.firetruck) {
+      limb([hip[0] + lean * 0.3, hip[1]], backFoot, 8.5, legCol2);
+      if (wearsShoes) shoe(backFoot[0], backFoot[1]);
+      if ((o.armorTier || 0) >= 2 && !look.chicken) {
+        kneepad((hip[0] + backFoot[0]) / 2 + lean * 0.15, (hip[1] + backFoot[1]) / 2, (o.armorTier || 0) >= 5);
+      }
+      if ((o.armorTier || 0) >= 5 && !look.chicken) {
+        thighPlate(hip[0] + (backFoot[0] - hip[0]) * 0.3, hip[1] + (backFoot[1] - hip[1]) * 0.3);
+      }
+    }
     if (!look.chicken && !look.firetruck) limb([sh[0] + lean * 0.5, sh[1]], backHand, armW, backArmCol);
     if (look.printer) {
       // he IS the machine: gantry frame body
@@ -2454,7 +2513,7 @@ const Game = (() => {
     } else {
     // torso, with a two-tone back shade
     limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 15 * muscleW, torsoCol);
-    g.strokeStyle = hexMix(torsoCol, '#000000', 0.25); g.lineWidth = 4.5 * muscleW;
+    g.strokeStyle = ramp(torsoCol).dk; g.lineWidth = 4.5 * muscleW;
     g.beginPath();
     g.moveTo(hip[0] + lean * 0.3 - 4.5, hip[1]);
     g.lineTo(sh[0] + lean * 0.5 - 4.5, sh[1]);
@@ -2477,7 +2536,7 @@ const Game = (() => {
     }
     if (look.shirtless) {
       // ab definition
-      g.strokeStyle = hexMix(o.skin, '#000000', 0.25); g.lineWidth = 1.3;
+      g.strokeStyle = ramp(o.skin).dk; g.lineWidth = 1.3;
       for (let ai = 0; ai < 3; ai++) {
         const ay = hip[1] - 4 - ai * 6;
         g.beginPath(); g.moveTo(-4 + lean * 0.4, ay); g.lineTo(5 + lean * 0.4, ay); g.stroke();
@@ -2491,31 +2550,82 @@ const Game = (() => {
       g.fillStyle = o.accent;
       g.fillRect(-7 + lean * 0.3, hip[1] - 3, 14, 4);
     }
-    // visible armor: your gear shows on your body
+    // identity props on the chest
+    if (o.charId === 'jordan') {
+      // the camera never leaves him
+      const ccx = sh[0] + 3 + lean * 0.4, ccy = sh[1] + 10;
+      g.strokeStyle = '#2a2a35'; g.lineWidth = 1.4;
+      g.beginPath(); g.moveTo(sh[0] - 5, sh[1] - 2); g.lineTo(ccx + 3, ccy - 3); g.stroke();
+      g.fillStyle = ramp('#3a3f4a').out; g.beginPath(); g.roundRect(ccx - 4.7, ccy - 3.7, 9.4, 7.4, 1.6); g.fill();
+      g.fillStyle = '#3a3f4a'; g.beginPath(); g.roundRect(ccx - 4, ccy - 3, 8, 6, 1.2); g.fill();
+      g.fillStyle = '#1d1d24'; g.beginPath(); g.arc(ccx + 0.6, ccy, 2.2, 0, 7); g.fill();
+      g.fillStyle = '#9fdcff'; g.beginPath(); g.arc(ccx + 1.2, ccy - 0.7, 0.8, 0, 7); g.fill();
+      g.fillStyle = o.accent; g.beginPath(); g.arc(ccx - 2.6, ccy - 2.3, 0.8, 0, 7); g.fill();
+    } else if (o.charId === 'ronathon') {
+      // HELLO my name is RONATHON
+      g.fillStyle = '#f2ede0'; g.beginPath(); g.roundRect(sh[0] + 2 + lean * 0.4, sh[1] + 6, 8, 5.2, 1); g.fill();
+      g.fillStyle = '#d43b2f'; g.fillRect(sh[0] + 2 + lean * 0.4, sh[1] + 6, 8, 1.7);
+      g.strokeStyle = INK; g.lineWidth = 0.7;
+      g.beginPath(); g.moveTo(sh[0] + 3.2 + lean * 0.4, sh[1] + 9.6); g.lineTo(sh[0] + 8.6 + lean * 0.4, sh[1] + 9.6); g.stroke();
+    }
+    // visible armor in the fighter's own colors: their gear, never a grey uniform
     const at = o.armorTier || 0;
+    const A2 = ramp(o.color2);
     if (at >= 2) {
-      g.fillStyle = '#3a3444';
-      g.fillRect(-6 + lean * 0.3, hip[1] + 2, 5, 5);
-      g.fillRect(2 + lean * 0.3, hip[1] + 2, 5, 5);
+      // belt pouches
+      for (const px2 of [-6.6 + lean * 0.3, 1.6 + lean * 0.3]) {
+        g.fillStyle = A2.out; g.beginPath(); g.roundRect(px2 - 0.5, hip[1] + 1.5, 6, 6, 1.4); g.fill();
+        g.fillStyle = o.color2; g.beginPath(); g.roundRect(px2, hip[1] + 2, 5, 5, 1.1); g.fill();
+        g.fillStyle = A2.lt; g.fillRect(px2, hip[1] + 2, 5, 1.3);
+      }
     }
     if (at >= 3) {
-      g.fillStyle = hexMix(o.color, '#000000', 0.35);
-      g.strokeStyle = INK; g.lineWidth = 1.5;
-      g.fillRect(sh[0] + lean * 0.5 - 11, sh[1] - 5, 8, 7); g.strokeRect(sh[0] + lean * 0.5 - 11, sh[1] - 5, 8, 7);
-      g.fillRect(sh[0] + lean * 0.5 + 3, sh[1] - 5, 8, 7); g.strokeRect(sh[0] + lean * 0.5 + 3, sh[1] - 5, 8, 7);
+      // pauldron half-domes with a rivet in the character's accent
+      for (const cx2 of [sh[0] + lean * 0.5 - 7, sh[0] + lean * 0.5 + 7]) {
+        const cy2 = sh[1] - 1;
+        g.fillStyle = A2.out; g.beginPath(); g.arc(cx2, cy2, 5.2, Math.PI, 0); g.closePath(); g.fill();
+        g.fillStyle = o.color2; g.beginPath(); g.arc(cx2, cy2, 4.3, Math.PI, 0); g.closePath(); g.fill();
+        g.strokeStyle = A2.lt; g.lineWidth = 1.2;
+        g.beginPath(); g.arc(cx2, cy2, 3.1, Math.PI * 1.05, Math.PI * 1.6); g.stroke();
+        g.fillStyle = o.accent; g.beginPath(); g.arc(cx2, cy2 - 2.3, 0.8, 0, 7); g.fill();
+        if (at >= 5) {
+          g.fillStyle = A2.out;
+          g.beginPath(); g.moveTo(cx2 - 2, cy2 - 4.4); g.lineTo(cx2, cy2 - 9.6); g.lineTo(cx2 + 2, cy2 - 4.4); g.closePath(); g.fill();
+          g.fillStyle = o.color2;
+          g.beginPath(); g.moveTo(cx2 - 1.4, cy2 - 4.8); g.lineTo(cx2, cy2 - 8.8); g.lineTo(cx2 + 1.4, cy2 - 4.8); g.closePath(); g.fill();
+        }
+      }
     }
     if (at >= 4 && !look.shirtless) {
-      g.fillStyle = hexMix(o.color, '#ffffff', 0.18);
-      g.strokeStyle = INK; g.lineWidth = 1.5;
-      g.fillRect(-6 + lean * 0.4, sh[1] + 3, 14, 14); g.strokeRect(-6 + lean * 0.4, sh[1] + 3, 14, 14);
+      // chest plate below the shoulder line, center ridge catching the sun
+      const lx = lean * 0.4, sy = sh[1];
+      g.fillStyle = A2.out;
+      g.beginPath(); g.moveTo(-7.9 + lx, sy + 1.4); g.lineTo(9.9 + lx, sy + 1.4); g.lineTo(7.7 + lx, sy + 16.8); g.lineTo(-5.7 + lx, sy + 16.8); g.closePath(); g.fill();
+      g.fillStyle = o.color2;
+      g.beginPath(); g.moveTo(-7 + lx, sy + 2.2); g.lineTo(9 + lx, sy + 2.2); g.lineTo(7 + lx, sy + 16); g.lineTo(-5 + lx, sy + 16); g.closePath(); g.fill();
+      g.strokeStyle = A2.lt; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(1 + lx, sy + 3.2); g.lineTo(1 + lx, sy + 15); g.stroke();
+      g.fillStyle = o.accent;
+      g.beginPath(); g.arc(-3.8 + lx, sy + 4.6, 0.7, 0, 7); g.fill();
+      g.beginPath(); g.arc(5.8 + lx, sy + 4.6, 0.7, 0, 7); g.fill();
+      if (at >= 5) {
+        g.strokeStyle = o.accent; g.lineWidth = 1.1;
+        g.beginPath(); g.moveTo(-7 + lx, sy + 2.2); g.lineTo(9 + lx, sy + 2.2); g.lineTo(7 + lx, sy + 16); g.lineTo(-5 + lx, sy + 16); g.closePath(); g.stroke();
+        g.fillStyle = o.accent; g.beginPath(); g.arc(1 + lx, sy + 8.5, 1.6, 0, 7); g.fill();
+        g.fillStyle = '#ffffff'; g.beginPath(); g.arc(0.5 + lx, sy + 7.9, 0.6, 0, 7); g.fill();
+      }
     }
     }
     // front leg
-    if (!look.firetruck) limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 8.5, legCol);
-    if ((o.armorTier || 0) >= 1 && !look.firetruck && !look.chicken) {
-      // kneepad
-      g.fillStyle = '#3a3444';
-      g.beginPath(); g.arc((hip[0] + frontFoot[0]) / 2 + lean * 0.15, (hip[1] + frontFoot[1]) / 2, 3.2, 0, 7); g.fill();
+    if (!look.firetruck) {
+      limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 8.5, legCol);
+      if (wearsShoes) shoe(frontFoot[0], frontFoot[1]);
+      if ((o.armorTier || 0) >= 1 && !look.chicken) {
+        kneepad((hip[0] + frontFoot[0]) / 2 + lean * 0.15, (hip[1] + frontFoot[1]) / 2, (o.armorTier || 0) >= 5);
+      }
+      if ((o.armorTier || 0) >= 5 && !look.chicken) {
+        thighPlate(hip[0] + (frontFoot[0] - hip[0]) * 0.3, hip[1] + (frontFoot[1] - hip[1]) * 0.3);
+      }
     }
     if (look.gown) {
       g.fillStyle = o.color2;
@@ -2556,20 +2666,36 @@ const Game = (() => {
     const hy = look.crawl ? -26 : headY - 7;
     g.save();
     g.translate(hx, hy); g.scale(1.32, 1.32); g.translate(-hx, -hy);
-    g.fillStyle = o.hood ? o.color2 : o.skin;
+    const headCol = o.hood ? o.color2 : o.skin;
+    g.fillStyle = headCol;
     g.beginPath(); g.arc(hx, hy, 9, 0, 7); g.fill();
-    g.strokeStyle = INK; g.lineWidth = 2; g.stroke();
+    g.strokeStyle = ramp(headCol).out; g.lineWidth = 2; g.stroke();
     if (!o.hood) {
-      // back-of-head shading crescent
+      // back-of-head shading crescent + a warm sun rim up top-left
       g.save();
       g.beginPath(); g.arc(hx, hy, 8.6, 0, 7); g.clip();
       g.fillStyle = 'rgba(20,16,26,0.16)';
       g.fillRect(hx - 10, hy - 10, 5.5, 20);
+      g.strokeStyle = 'rgba(255,246,221,0.4)'; g.lineWidth = 2.2;
+      g.beginPath(); g.arc(hx - 0.5, hy - 1, 6.9, Math.PI * 1.02, Math.PI * 1.62); g.stroke();
       g.restore();
+      // ear (hair overlaps it where styles hang low)
+      if (!look.mecha && !look.helmet && !look.baby) {
+        g.fillStyle = o.skin;
+        g.beginPath(); g.arc(hx - 8.1, hy + 1, 2.3, 0, 7); g.fill();
+        g.strokeStyle = ramp(o.skin).out; g.lineWidth = 1.2; g.stroke();
+        g.fillStyle = ramp(o.skin).dk;
+        g.beginPath(); g.arc(hx - 8.1, hy + 1.2, 1, 0, 7); g.fill();
+      }
     }
     // stylized hair (skipped under helmets, crowns, caps, and special looks)
     if (!o.hood && !look.bald && !look.baby && !look.mecha && !look.helmet && !look.crown && !look.cap && !look.hair && o.hairStyle && o.hairStyle !== 'none') {
-      g.fillStyle = o.hairColor || '#2a2230';
+      const hc = o.hairColor || '#2a2230';
+      const HR = ramp(hc);
+      // outline halo under the hair mass
+      g.fillStyle = HR.out;
+      g.beginPath(); g.arc(hx, hy - 1.5, 9.9, Math.PI, Math.PI * 2); g.fill();
+      g.fillStyle = hc;
       if (o.hairStyle === 'pony') {
         g.beginPath(); g.ellipse(hx - 9, hy + 3, 3.4, 7, 0.5, 0, 7); g.fill();
       } else if (o.hairStyle === 'long') {
@@ -2586,6 +2712,27 @@ const Game = (() => {
         for (let hs2 = 0; hs2 < 4; hs2++) {
           g.beginPath(); g.arc(hx - 6 + hs2 * 4, hy - 7.5, 2.7, 0, 7); g.fill();
         }
+      }
+      // highlight band on the sun side
+      g.strokeStyle = HR.lt; g.lineWidth = 2;
+      g.beginPath(); g.arc(hx, hy - 1.5, 7.8, Math.PI * 1.08, Math.PI * 1.55); g.stroke();
+      if (o.hairStyle === 'spiky') {
+        g.lineWidth = 1.3;
+        for (let hs2 = 0; hs2 < 3; hs2++) {
+          const hxx = hx - 5 + hs2 * 5;
+          g.beginPath(); g.moveTo(hxx - 2, hy - 8.3); g.lineTo(hxx - 0.4, hy - 12.4); g.stroke();
+        }
+      } else if (o.hairStyle === 'shaggy') {
+        g.fillStyle = HR.lt;
+        g.beginPath(); g.arc(hx - 6.9, hy - 8.3, 1.1, 0, 7); g.fill();
+        g.beginPath(); g.arc(hx - 2.9, hy - 8.6, 1.1, 0, 7); g.fill();
+      } else if (o.hairStyle === 'pony') {
+        g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(hx - 9.9, hy + 0.2); g.lineTo(hx - 8.7, hy + 4.2); g.stroke();
+      } else if (o.hairStyle === 'long') {
+        g.lineWidth = 1.4;
+        g.beginPath(); g.moveTo(hx - 8.2, hy + 1); g.lineTo(hx - 7.6, hy + 6); g.stroke();
+        g.beginPath(); g.moveTo(hx + 8.9, hy + 1.4); g.lineTo(hx + 8.5, hy + 5.4); g.stroke();
       }
     }
     if (look.mecha) {
@@ -2695,6 +2842,11 @@ const Game = (() => {
     if (!o.hood && !look.glasses) {
       const ex1 = hx + 2, ex2 = hx + 6.2, ey2 = hy - 1.5;
       const blinkE = Math.sin((o.animT || 0) * 1.3 + ex1) > 0.985;
+      if (o.blush || look.baby) {
+        g.fillStyle = 'rgba(255,122,122,0.35)';
+        g.beginPath(); g.ellipse(hx + 0.6, hy + 2.2, 1.7, 1.05, 0, 0, 7); g.fill();
+        g.beginPath(); g.ellipse(hx + 6.8, hy + 2, 1.7, 1.05, 0, 0, 7); g.fill();
+      }
       if (o.hurt) {
         g.strokeStyle = INK; g.lineWidth = 1.3;
         for (const exx of [ex1, ex2]) {
@@ -2710,17 +2862,28 @@ const Game = (() => {
         g.moveTo(ex2 - 1.5, ey2); g.lineTo(ex2 + 1.5, ey2);
         g.stroke();
       } else {
+        // almond whites, offset pupil, sparkle, upper lid
         g.fillStyle = '#ffffff';
-        g.beginPath(); g.arc(ex1, ey2, 2, 0, 7); g.fill();
-        g.beginPath(); g.arc(ex2, ey2, 2, 0, 7); g.fill();
+        g.beginPath(); g.ellipse(ex1, ey2, 1.9, 2.35, 0, 0, 7); g.fill();
+        g.beginPath(); g.ellipse(ex2, ey2, 1.9, 2.35, 0, 0, 7); g.fill();
         g.fillStyle = INK;
-        g.beginPath(); g.arc(ex1 + 0.7, ey2, 1, 0, 7); g.fill();
-        g.beginPath(); g.arc(ex2 + 0.7, ey2, 1, 0, 7); g.fill();
+        g.beginPath(); g.arc(ex1 + 0.75, ey2 + 0.15, 1.05, 0, 7); g.fill();
+        g.beginPath(); g.arc(ex2 + 0.75, ey2 + 0.15, 1.05, 0, 7); g.fill();
+        g.fillStyle = '#ffffff';
+        g.beginPath(); g.arc(ex1 + 0.35, ey2 - 0.75, 0.45, 0, 7); g.fill();
+        g.beginPath(); g.arc(ex2 + 0.35, ey2 - 0.75, 0.45, 0, 7); g.fill();
+        g.strokeStyle = INK; g.lineWidth = 1.1;
+        g.beginPath(); g.moveTo(ex1 - 1.9, ey2 - 2); g.lineTo(ex1 + 1.9, ey2 - 2.3); g.stroke();
+        g.beginPath(); g.moveTo(ex2 - 1.9, ey2 - 2); g.lineTo(ex2 + 1.9, ey2 - 2.3); g.stroke();
       }
       if (o.attackKey && !o.hurt) {
         g.strokeStyle = INK; g.lineWidth = 1.4;
         g.beginPath(); g.moveTo(ex1 - 2, ey2 - 4); g.lineTo(ex1 + 1.5, ey2 - 2.6); g.stroke();
         g.beginPath(); g.moveTo(ex2 + 2.5, ey2 - 4.2); g.lineTo(ex2 - 1, ey2 - 2.6); g.stroke();
+      } else if (!o.hurt) {
+        g.strokeStyle = INK; g.lineWidth = 1.3;
+        g.beginPath(); g.moveTo(ex1 - 1.8, ey2 - 4.1); g.lineTo(ex1 + 1.5, ey2 - 4.3); g.stroke();
+        g.beginPath(); g.moveTo(ex2 - 1.5, ey2 - 4.3); g.lineTo(ex2 + 1.8, ey2 - 4.1); g.stroke();
       }
     }
     g.restore(); // end chibi head group
@@ -2733,25 +2896,120 @@ const Game = (() => {
     // front arm + weapon
     if (!look.chicken && !look.firetruck) limb([sh[0] + lean * 0.5, sh[1]], frontHand, armW, frontArmCol);
     if (o.weaponTier > 0 && !look.chicken && !look.firetruck) {
-      const wl = 10 + o.weaponTier * 4.5;
-      const wc = (o.weaponColors && o.weaponColors[o.weaponTier - 1]) || WEAPON_COLORS[o.weaponTier - 1];
-      g.strokeStyle = wc; g.lineWidth = 3.4;
-      if (o.weaponTier >= 5) { g.shadowColor = wc; g.shadowBlur = 8; }
-      if (o.weaponStyle === 'club') {
-        g.lineWidth = 5;
-        g.beginPath(); g.moveTo(frontHand[0], frontHand[1]); g.lineTo(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5); g.stroke();
-        g.fillStyle = wc;
-        g.beginPath(); g.arc(frontHand[0] + wl * 0.7, frontHand[1] - wl * 0.5, 4.5, 0, 7); g.fill();
-      } else if (o.weaponStyle === 'staff') {
-        g.beginPath(); g.moveTo(frontHand[0] - wl * 0.8, frontHand[1] + wl * 0.5); g.lineTo(frontHand[0] + wl, frontHand[1] - wl * 0.6); g.stroke();
-      } else if (o.weaponStyle === 'noodle') {
-        // floppy, wobbling, deeply unthreatening
-        const wob = Math.sin((o.animT || 0) * 9) * 4;
-        g.strokeStyle = wc; g.lineWidth = 5; g.lineCap = 'round';
+      const tier = o.weaponTier;
+      const wl = 9 + tier * 2.6;
+      const wc = (o.weaponColors && o.weaponColors[tier - 1]) || WEAPON_COLORS[tier - 1];
+      const chid = o.charId || '';
+      const F = frontHand;
+      if (o.weaponStyle === 'club' && chid === 'jacob') {
+        // plumbing tools: tier 1 plunger, then pipe wrenches — gold at the top
+        g.save(); g.translate(F[0], F[1]); g.rotate(-0.7 + (o.attackKey ? (o.attackExt || 0) * 1.2 : 0));
+        if (tier === 1) {
+          g.strokeStyle = ramp('#c98d48').out; g.lineWidth = 4.4;
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(8.5, 0); g.stroke();
+          g.strokeStyle = '#c98d48'; g.lineWidth = 2.6;
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(8.5, 0); g.stroke();
+          g.fillStyle = ramp('#b03a2f').out;
+          g.beginPath(); g.arc(9.6, 0, 4.6, -1.75, 1.75); g.closePath(); g.fill();
+          g.fillStyle = '#b03a2f';
+          g.beginPath(); g.arc(9.6, 0, 3.8, -1.7, 1.7); g.closePath(); g.fill();
+          g.strokeStyle = '#e06a5a'; g.lineWidth = 1;
+          g.beginPath(); g.arc(9.6, 0, 3, -1.4, 1.4); g.stroke();
+        } else {
+          g.strokeStyle = ramp(wc).out; g.lineWidth = 5.4;
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 3, 0); g.stroke();
+          g.strokeStyle = wc; g.lineWidth = 3.2;
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 3, 0); g.stroke();
+          g.fillStyle = ramp(wc).out; g.beginPath(); g.roundRect(wl - 5.2, -6.4, 7.6, 7.2, 1.4); g.fill();
+          g.fillStyle = wc; g.beginPath(); g.roundRect(wl - 4.6, -5.8, 6.4, 6, 1.2); g.fill();
+          g.fillStyle = INK; g.fillRect(wl - 1.7, -4.6, 2.5, 2.2);
+          g.fillStyle = ramp(wc).dk; g.beginPath(); g.arc(wl - 6.1, -1.8, 1.9, 0, 7); g.fill();
+          g.strokeStyle = ramp(wc).hi; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(1.5, -0.9); g.lineTo(wl - 5, -0.9); g.stroke();
+        }
+        g.restore();
+      } else if (o.weaponStyle === 'club' && chid === 'samantha') {
+        // foam toy sword with a star sticker
+        g.save(); g.translate(F[0], F[1]); g.rotate(-0.5 + (o.attackKey ? (o.attackExt || 0) * 1.1 : 0));
+        g.fillStyle = ramp(wc).out; g.beginPath(); g.roundRect(-1.2, -3.3, wl + 2.4, 6.6, 3.1); g.fill();
+        g.fillStyle = wc; g.beginPath(); g.roundRect(0, -2.5, wl, 5, 2.5); g.fill();
+        g.fillStyle = tier === 1 ? '#4ab2e8' : '#ffd24a'; g.fillRect(-1.8, -4.1, 2.6, 8.2);
+        g.fillStyle = '#ffffff';
+        const stx = wl * 0.55;
         g.beginPath();
-        g.moveTo(frontHand[0], frontHand[1]);
-        g.quadraticCurveTo(frontHand[0] + wl * 0.6, frontHand[1] - wl * 0.8, frontHand[0] + wl + 2, frontHand[1] - wl * 0.3 + wob);
-        g.stroke();
+        g.moveTo(stx - 2, 0); g.lineTo(stx - 0.5, -0.5); g.lineTo(stx, -2); g.lineTo(stx + 0.5, -0.5);
+        g.lineTo(stx + 2, 0); g.lineTo(stx + 0.5, 0.5); g.lineTo(stx, 2); g.lineTo(stx - 0.5, 0.5);
+        g.closePath(); g.fill();
+        g.strokeStyle = ramp(wc).hi; g.lineWidth = 1.1;
+        g.beginPath(); g.moveTo(1, -1.3); g.lineTo(wl - 2, -1.3); g.stroke();
+        g.restore();
+      } else if (o.weaponStyle === 'club' && chid === 'levi') {
+        // knobby caveman clubs; tier 5 is the carnival clown hammer
+        g.save(); g.translate(F[0], F[1]); g.rotate(-0.75 + (o.attackKey ? (o.attackExt || 0) * 1.25 : 0));
+        if (tier < 5) {
+          g.fillStyle = ramp(wc).out;
+          g.beginPath(); g.moveTo(0, -2.3); g.lineTo(wl, -3.9); g.lineTo(wl + 2.6, 0); g.lineTo(wl, 3.9); g.lineTo(0, 2.3); g.closePath(); g.fill();
+          g.fillStyle = wc;
+          g.beginPath(); g.moveTo(0, -1.5); g.lineTo(wl, -3); g.lineTo(wl + 1.6, 0); g.lineTo(wl, 3); g.lineTo(0, 1.5); g.closePath(); g.fill();
+          g.fillStyle = ramp(wc).dk;
+          g.beginPath(); g.arc(wl * 0.45, -1.2, 1, 0, 7); g.fill();
+          g.beginPath(); g.arc(wl * 0.7, 1.4, 1, 0, 7); g.fill();
+          g.strokeStyle = ramp(wc).dk; g.lineWidth = 1.2;
+          g.beginPath(); g.moveTo(wl * 0.3, -2.2); g.lineTo(wl * 0.3, 2.2); g.stroke();
+          g.strokeStyle = ramp(wc).hi; g.lineWidth = 1.1;
+          g.beginPath(); g.moveTo(1, -1); g.lineTo(wl - 2, -2.2); g.stroke();
+        } else {
+          g.strokeStyle = ramp('#c98d48').out; g.lineWidth = 4.6;
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 4, 0); g.stroke();
+          g.strokeStyle = '#c98d48'; g.lineWidth = 2.8;
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 4, 0); g.stroke();
+          g.fillStyle = ramp(wc).out; g.beginPath(); g.roundRect(wl - 6.5, -6.7, 11, 13.4, 3.4); g.fill();
+          g.fillStyle = wc; g.beginPath(); g.roundRect(wl - 5.8, -6, 9.6, 12, 3); g.fill();
+          g.fillStyle = '#ffffff'; g.fillRect(wl - 5.8, -6, 2, 12); g.fillRect(wl + 1, -6, 1.6, 12);
+          g.strokeStyle = ramp(wc).hi; g.lineWidth = 1.2;
+          g.beginPath(); g.arc(wl - 3.2, -3.4, 2.2, Math.PI * 1.1, Math.PI * 1.7); g.stroke();
+        }
+        g.restore();
+      } else if (o.weaponStyle === 'club') {
+        g.strokeStyle = wc; g.lineWidth = 5;
+        g.beginPath(); g.moveTo(F[0], F[1]); g.lineTo(F[0] + wl * 0.7, F[1] - wl * 0.5); g.stroke();
+        g.fillStyle = wc;
+        g.beginPath(); g.arc(F[0] + wl * 0.7, F[1] - wl * 0.5, 4.5, 0, 7); g.fill();
+      } else if (o.weaponStyle === 'staff') {
+        // Myah's broom, carried near-upright; tier 5 is the sentient robot mop
+        g.save(); g.translate(F[0], F[1]); g.rotate(-1.05 + (o.attackKey ? (o.attackExt || 0) * 0.9 : 0));
+        g.strokeStyle = ramp('#c9a86a').out; g.lineWidth = 3.8;
+        g.beginPath(); g.moveTo(-3, 0); g.lineTo(wl, 0); g.stroke();
+        g.strokeStyle = '#c9a86a'; g.lineWidth = 2.2;
+        g.beginPath(); g.moveTo(-3, 0); g.lineTo(wl, 0); g.stroke();
+        g.fillStyle = ramp(wc).out;
+        g.beginPath(); g.moveTo(wl - 1, -3.6); g.lineTo(wl + 5.8, -4.8); g.lineTo(wl + 6.6, 4.8); g.lineTo(wl - 1, 3.6); g.closePath(); g.fill();
+        g.fillStyle = wc;
+        g.beginPath(); g.moveTo(wl - 0.4, -3); g.lineTo(wl + 5.4, -4); g.lineTo(wl + 6, 4); g.lineTo(wl - 0.4, 3); g.closePath(); g.fill();
+        g.strokeStyle = ramp(wc).dk; g.lineWidth = 0.8;
+        g.beginPath(); g.moveTo(wl + 0.5, -2); g.lineTo(wl + 5.6, -2.6); g.stroke();
+        g.beginPath(); g.moveTo(wl + 0.5, 0); g.lineTo(wl + 5.9, 0); g.stroke();
+        g.beginPath(); g.moveTo(wl + 0.5, 2); g.lineTo(wl + 5.6, 2.6); g.stroke();
+        g.fillStyle = o.accent; g.fillRect(wl - 2.3, -3.3, 2.2, 6.6);
+        if (tier >= 5) {
+          g.fillStyle = '#4adbe8'; g.beginPath(); g.arc(wl + 2.6, 0, 1.4, 0, 7); g.fill();
+          g.strokeStyle = ramp('#4adbe8').hi; g.lineWidth = 0.8;
+          g.beginPath(); g.arc(wl + 2.6, 0, 2.2, 0, 7); g.stroke();
+        }
+        g.restore();
+      } else if (o.weaponStyle === 'noodle') {
+        // pool noodle: outline, core, sun stripe, honest tube end
+        const wob = Math.sin((o.animT || 0) * 9) * 4;
+        const nx = F[0] + wl + 2, ny = F[1] - wl * 0.3 + wob;
+        g.lineCap = 'round';
+        g.strokeStyle = ramp(wc).out; g.lineWidth = 6.6;
+        g.beginPath(); g.moveTo(F[0], F[1]); g.quadraticCurveTo(F[0] + wl * 0.6, F[1] - wl * 0.8, nx, ny); g.stroke();
+        g.strokeStyle = wc; g.lineWidth = 4.6;
+        g.beginPath(); g.moveTo(F[0], F[1]); g.quadraticCurveTo(F[0] + wl * 0.6, F[1] - wl * 0.8, nx, ny); g.stroke();
+        g.strokeStyle = ramp(wc).lt; g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(F[0], F[1] - 1.2); g.quadraticCurveTo(F[0] + wl * 0.6, F[1] - wl * 0.8 - 1.2, nx, ny - 1.2); g.stroke();
+        g.fillStyle = ramp(wc).dk; g.beginPath(); g.arc(nx, ny, 2.3, 0, 7); g.fill();
+        g.fillStyle = INK; g.beginPath(); g.arc(nx, ny, 0.9, 0, 7); g.fill();
       } else if (o.weaponStyle === 'teeth') {
         // the chomp: jaws snap shut at the strike point
         if (o.attackKey && (o.attackExt || 0) > 0.25) {
@@ -2769,63 +3027,137 @@ const Game = (() => {
           }
         }
       } else if (o.weaponStyle === 'muscles') {
-        // bicep definition bumps from tier 2 up
-        if (o.weaponTier >= 2) {
-          g.fillStyle = o.skin;
-          const bx = (sh[0] + frontHand[0]) / 2, by = (sh[1] + frontHand[1]) / 2 - 2;
-          g.beginPath(); g.arc(bx, by, 2.2 + o.weaponTier * 0.9, 0, 7); g.fill();
-          const bx2 = (sh[0] + backHand[0]) / 2, by2 = (sh[1] + backHand[1]) / 2 - 2;
-          g.beginPath(); g.arc(bx2, by2, 2 + o.weaponTier * 0.8, 0, 7); g.fill();
+        // the arms ARE the weapon: shaded bicep bumps from tier 2 up
+        if (tier >= 2) {
+          const RS = ramp(o.skin);
+          const bx = (sh[0] + F[0]) / 2, by = (sh[1] + F[1]) / 2 - 2, br = 2.2 + tier * 0.9;
+          const bx2 = (sh[0] + backHand[0]) / 2, by2 = (sh[1] + backHand[1]) / 2 - 2, br2 = 2 + tier * 0.8;
+          for (const [mx2, my2, mr] of [[bx, by, br], [bx2, by2, br2]]) {
+            g.fillStyle = RS.out; g.beginPath(); g.arc(mx2, my2, mr + 1, 0, 7); g.fill();
+            g.fillStyle = o.skin; g.beginPath(); g.arc(mx2, my2, mr, 0, 7); g.fill();
+            g.fillStyle = RS.lt; g.beginPath(); g.arc(mx2 - mr * 0.3, my2 - mr * 0.35, mr * 0.5, 0, 7); g.fill();
+            g.strokeStyle = RS.dk; g.lineWidth = 0.8;
+            g.beginPath(); g.arc(mx2, my2 + mr * 0.35, mr * 0.55, 0.3, 2.8); g.stroke();
+          }
+          if (tier >= 5) {
+            g.fillStyle = '#ffffff';
+            const px3 = bx + br * 0.5, py3 = by - br * 0.7;
+            g.beginPath();
+            g.moveTo(px3 - 1.3, py3); g.lineTo(px3 - 0.35, py3 - 0.35); g.lineTo(px3, py3 - 1.3); g.lineTo(px3 + 0.35, py3 - 0.35);
+            g.lineTo(px3 + 1.3, py3); g.lineTo(px3 + 0.35, py3 + 0.35); g.lineTo(px3, py3 + 1.3); g.lineTo(px3 - 0.35, py3 + 0.35);
+            g.closePath(); g.fill();
+          }
         }
-      } else if (o.weaponStyle === 'letters') {
-        // his name orbits his fist, spelling doom
-        const word = (o.weaponWord || 'RON').slice(0, 9);
-        g.font = '700 7px "Segoe UI", sans-serif';
-        g.textAlign = 'center'; g.textBaseline = 'middle';
-        g.fillStyle = wc;
-        for (let li = 0; li < word.length; li++) {
-          if (word[li] === ' ') continue;
-          const ang = (o.animT || 0) * 1.3 + li * (Math.PI * 2 / word.length);
-          g.save();
-          g.translate(frontHand[0] + Math.cos(ang) * 13, frontHand[1] + Math.sin(ang) * 8);
-          g.scale(o.facing, 1); // unmirror the glyphs
-          g.fillText(word[li], 0, 0);
-          g.restore();
-        }
-        g.textBaseline = 'alphabetic';
+      } else if (o.weaponStyle === 'letters' || o.weaponStyle === 'sandwich' || o.weaponStyle === 'book' || o.weaponStyle === 'none') {
+        // these ride ON the hands — drawn after the fists block
       } else if (o.weaponStyle === 'swat') {
-        // her weapon is disappointment; there is nothing to draw
-      } else if (o.weaponStyle === 'sandwich') {
-        const sw = 8 + o.weaponTier * 1.7;
-        g.fillStyle = '#e0a860';
-        g.fillRect(frontHand[0] - 2, frontHand[1] - 7.5, sw, 3);
-        g.fillRect(frontHand[0] - 2, frontHand[1] - 1.5, sw, 3);
-        g.fillStyle = '#7dc45f'; g.fillRect(frontHand[0] - 3, frontHand[1] - 4.8, sw + 2, 1.7);
-        g.fillStyle = '#d43b2f'; g.fillRect(frontHand[0] - 1, frontHand[1] - 3.1, sw - 2, 1.7);
+        // her weapon is disappointment; visible only mid-swat
+        if (o.attackKey && (o.attackExt || 0) > 0.3) {
+          g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 2 + tier * 0.3;
+          g.beginPath(); g.arc(F[0] - 2, F[1], 7, -0.9, 0.6); g.stroke();
+          g.fillStyle = 'rgba(255,255,255,0.4)';
+          g.beginPath(); g.arc(F[0] + 6, F[1] - 5, 0.7, 0, 7); g.fill();
+          g.beginPath(); g.arc(F[0] + 7.5, F[1] - 1, 0.7, 0, 7); g.fill();
+        }
       } else if (o.weaponStyle === 'feet') {
-        g.fillStyle = wc; g.globalAlpha = 0.85;
+        // the kicks are the weapon: glow rides the feet, wraps ride the ankles
+        g.fillStyle = wc; g.globalAlpha = 0.5;
         g.beginPath(); g.arc(frontFoot[0], frontFoot[1] - 2, 5, 0, 7); g.fill();
         g.beginPath(); g.arc(backFoot[0], backFoot[1] - 2, 4.6, 0, 7); g.fill();
         g.globalAlpha = 1;
-      } else if (o.weaponStyle === 'book') {
-        const bw = 9 + o.weaponTier * 1.6, bh = 7 + o.weaponTier * 0.8;
+        g.strokeStyle = wc; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(frontFoot[0] - 3.6, frontFoot[1] - 4.8); g.lineTo(frontFoot[0] + 4.6, frontFoot[1] - 4.8); g.stroke();
+        g.beginPath(); g.moveTo(backFoot[0] - 3.6, backFoot[1] - 4.8); g.lineTo(backFoot[0] + 4.6, backFoot[1] - 4.8); g.stroke();
+      } else if (look.mecha) {
+        // Mecha Hayes keeps the cyan energy blade
+        const bl = (10 + tier * 4.5) * 1.5;
+        g.strokeStyle = '#4adbe8'; g.lineWidth = 3.4;
+        g.shadowColor = '#4adbe8'; g.shadowBlur = 9;
+        g.beginPath(); g.moveTo(F[0], F[1]); g.lineTo(F[0] + bl, F[1] - bl * 0.35); g.stroke();
+        g.shadowBlur = 0;
+      } else if (chid === 'jerod') {
+        // 3D-printed sword with layer striations
+        g.save(); g.translate(F[0], F[1]); g.rotate(-0.55 + (o.attackKey ? (o.attackExt || 0) * 1.1 : 0));
+        g.fillStyle = ramp(wc).out;
+        g.beginPath(); g.roundRect(-1.2, -2.9, wl + 2.4, 5.8, 1.5); g.fill();
+        g.beginPath(); g.moveTo(wl + 1, -2.9); g.lineTo(wl + 4.4, 0); g.lineTo(wl + 1, 2.9); g.closePath(); g.fill();
         g.fillStyle = wc;
-        g.fillRect(frontHand[0] - 2, frontHand[1] - bh + 2, bw, bh);
-        g.fillStyle = 'rgba(255,252,235,0.8)';
-        g.fillRect(frontHand[0] - 2, frontHand[1] - bh + 2, 2.4, bh); // spine
-      } else if (o.weaponStyle === 'none') {
-        g.fillStyle = wc; g.globalAlpha = 0.85;
-        g.beginPath(); g.arc(frontHand[0], frontHand[1], 5.5, 0, 7); g.fill();
-        g.beginPath(); g.arc(backHand[0], backHand[1], 5, 0, 7); g.fill();
+        g.beginPath(); g.roundRect(0, -2, wl, 4, 1); g.fill();
+        g.beginPath(); g.moveTo(wl, -2); g.lineTo(wl + 3.2, 0); g.lineTo(wl, 2); g.closePath(); g.fill();
+        g.strokeStyle = ramp(wc).dk; g.lineWidth = 0.8;
+        g.beginPath(); g.moveTo(1, -0.9); g.lineTo(wl - 0.5, -0.9); g.stroke();
+        g.beginPath(); g.moveTo(1, 0.9); g.lineTo(wl - 0.5, 0.9); g.stroke();
+        g.fillStyle = '#4a5060'; g.fillRect(-1.7, -3.5, 2.3, 7);
+        g.strokeStyle = ramp(wc).hi; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(1, -1.5); g.lineTo(wl - 1.5, -1.5); g.stroke();
+        g.restore();
+      } else if (chid === 'tim') {
+        // fire axe; tier 5 is the hi-vis Jaws of Life
+        const headC = tier === 5 ? '#f2ee4a' : '#d43b2f';
+        const edgeC = tier === 5 ? '#ffffff' : '#e6ebf5';
+        g.save(); g.translate(F[0], F[1]); g.rotate(-0.6 + (o.attackKey ? (o.attackExt || 0) * 1.15 : 0));
+        g.strokeStyle = ramp('#c98d48').out; g.lineWidth = 4.8;
+        g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 2, 0); g.stroke();
+        g.strokeStyle = '#c98d48'; g.lineWidth = 2.6;
+        g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 2, 0); g.stroke();
+        g.fillStyle = '#1d1d24'; g.beginPath(); g.arc(0, 0, 1.6, 0, 7); g.fill();
+        const x0 = wl - 2;
+        g.fillStyle = ramp(headC).out;
+        g.beginPath(); g.moveTo(x0 - 2.2, -6.9); g.lineTo(x0 + 4.6, -5.2); g.lineTo(x0 + 5.4, -0.4); g.lineTo(x0 - 4.6, -1.2); g.closePath(); g.fill();
+        g.fillStyle = headC;
+        g.beginPath(); g.moveTo(x0 - 1.8, -6.2); g.lineTo(x0 + 4.2, -4.6); g.lineTo(x0 + 4.8, -0.8); g.lineTo(x0 - 4.2, -1.6); g.closePath(); g.fill();
+        g.fillStyle = edgeC;
+        g.beginPath(); g.moveTo(x0 + 3.4, -4.9); g.lineTo(x0 + 4.8, -0.9); g.lineTo(x0 + 3.6, -1); g.lineTo(x0 + 2.4, -4.4); g.closePath(); g.fill();
+        g.fillStyle = headC;
+        g.beginPath(); g.moveTo(x0 - 3.8, -3.6); g.lineTo(x0 - 6.6, -2.6); g.lineTo(x0 - 3.8, -1.8); g.closePath(); g.fill();
+        g.fillStyle = ramp(headC).hi; g.beginPath(); g.arc(x0 - 0.6, -4.9, 0.9, 0, 7); g.fill();
+        g.restore();
+      } else if (chid === 'addi') {
+        // ice sword: faceted crystal with a twinkle
+        g.save(); g.translate(F[0], F[1]); g.rotate(-0.6 + (o.attackKey ? (o.attackExt || 0) * 1.2 : 0));
+        g.fillStyle = ramp(wc).out;
+        g.beginPath(); g.moveTo(1.4, -3.1); g.lineTo(wl * 0.55, -3.7); g.lineTo(wl + 4.2, 0); g.lineTo(wl * 0.55, 3.7); g.lineTo(1.4, 3.1); g.closePath(); g.fill();
+        g.fillStyle = wc;
+        g.beginPath(); g.moveTo(2, -2.4); g.lineTo(wl * 0.55, -3); g.lineTo(wl + 3.2, 0); g.lineTo(wl * 0.55, 3); g.lineTo(2, 2.4); g.closePath(); g.fill();
+        g.fillStyle = '#e8fbff';
+        g.beginPath(); g.moveTo(wl * 0.3, -2.2); g.lineTo(wl + 2.4, -0.2); g.lineTo(wl * 0.3, -0.2); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 0.9;
+        g.beginPath(); g.moveTo(2.5, 0.5); g.lineTo(wl + 1, 0.5); g.stroke();
+        g.fillStyle = ramp('#9fdcff').out;
+        g.beginPath(); g.moveTo(1, -4.9); g.lineTo(3.9, 0); g.lineTo(1, 4.9); g.lineTo(-1.9, 0); g.closePath(); g.fill();
+        g.fillStyle = '#9fdcff';
+        g.beginPath(); g.moveTo(1, -4.2); g.lineTo(3.2, 0); g.lineTo(1, 4.2); g.lineTo(-1.2, 0); g.closePath(); g.fill();
+        g.globalAlpha = 0.5 + 0.5 * Math.sin((o.animT || 0) * 7);
+        g.fillStyle = '#ffffff';
+        const tx2 = wl * 0.7, ty2 = -2.8;
+        g.beginPath();
+        g.moveTo(tx2 - 1.6, ty2); g.lineTo(tx2 - 0.45, ty2 - 0.45); g.lineTo(tx2, ty2 - 1.6); g.lineTo(tx2 + 0.45, ty2 - 0.45);
+        g.lineTo(tx2 + 1.6, ty2); g.lineTo(tx2 + 0.45, ty2 + 0.45); g.lineTo(tx2, ty2 + 1.6); g.lineTo(tx2 - 0.45, ty2 + 0.45);
+        g.closePath(); g.fill();
         g.globalAlpha = 1;
+        g.restore();
       } else {
-        const bladeCol = look.mecha ? '#4adbe8' : wc;
-        const bl = wl * (look.mecha ? 1.5 : 1);
-        g.strokeStyle = bladeCol;
-        if (look.mecha) { g.shadowColor = bladeCol; g.shadowBlur = 9; }
-        g.beginPath(); g.moveTo(frontHand[0], frontHand[1]); g.lineTo(frontHand[0] + bl, frontHand[1] - bl * 0.35); g.stroke();
+        // knight sword (Hayes and any future blade): gold guard, tier 5 flames
+        g.save(); g.translate(F[0], F[1]); g.rotate(-0.6 + (o.attackKey ? (o.attackExt || 0) * 1.2 : 0));
+        g.fillStyle = ramp(wc).out;
+        g.beginPath(); g.moveTo(1.4, -2.7); g.lineTo(wl + 1.5, -2.7); g.lineTo(wl + 4.8, 0); g.lineTo(wl + 1.5, 2.7); g.lineTo(1.4, 2.7); g.closePath(); g.fill();
+        g.fillStyle = wc;
+        g.beginPath(); g.moveTo(2, -1.9); g.lineTo(wl + 1.2, -1.9); g.lineTo(wl + 3.7, 0); g.lineTo(wl + 1.2, 1.9); g.lineTo(2, 1.9); g.closePath(); g.fill();
+        g.strokeStyle = ramp(wc).dk; g.lineWidth = 0.9;
+        g.beginPath(); g.moveTo(3, 0.3); g.lineTo(wl + 1, 0.3); g.stroke();
+        g.strokeStyle = ramp(wc).hi; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(2.6, -1.1); g.lineTo(wl + 1.6, -1.1); g.stroke();
+        g.fillStyle = ramp('#ffd24a').out; g.fillRect(0.6, -4.8, 3, 9.6);
+        g.fillStyle = '#ffd24a'; g.fillRect(1, -4.4, 2.2, 8.8);
+        g.beginPath(); g.arc(-1.2, 0, 1.7, 0, 7); g.fill();
+        if (tier >= 5 && chid === 'hayes') {
+          g.fillStyle = 'rgba(255,178,58,0.85)';
+          const fl3 = Math.sin((o.animT || 0) * 13) * 1.5;
+          g.beginPath(); g.moveTo(wl * 0.4, -2); g.lineTo(wl * 0.5, -5.6 - fl3); g.lineTo(wl * 0.62, -2); g.closePath(); g.fill();
+          g.beginPath(); g.moveTo(wl * 0.68, -2); g.lineTo(wl * 0.74, -3.8 + fl3 * 0.5); g.lineTo(wl * 0.8, -2); g.closePath(); g.fill();
+        }
+        g.restore();
       }
-      g.shadowBlur = 0;
     }
     if (look.mecha && !o.onGround) {
       // jet thrusters
@@ -2833,12 +3165,116 @@ const Game = (() => {
       g.beginPath(); g.moveTo(backFoot[0] - 3, backFoot[1] + 1); g.lineTo(backFoot[0], backFoot[1] + 10 + Math.random() * 4); g.lineTo(backFoot[0] + 3, backFoot[1] + 1); g.fill();
       g.beginPath(); g.moveTo(frontFoot[0] - 3, frontFoot[1] + 1); g.lineTo(frontFoot[0], frontFoot[1] + 10 + Math.random() * 4); g.lineTo(frontFoot[0] + 3, frontFoot[1] + 1); g.fill();
     }
-    // fists
+    // hands as mitts: outline disk, sun spot, knuckle notch
     if (!look.chicken && !look.firetruck) {
       const fr = look.bigFists ? 8 : 3.6;
-      g.fillStyle = o.hood ? o.color2 : o.skin;
-      g.beginPath(); g.arc(frontHand[0], frontHand[1], fr, 0, 7); g.fill();
-      g.beginPath(); g.arc(backHand[0], backHand[1], fr * 0.94, 0, 7); g.fill();
+      const skinC = o.hood ? o.color2 : o.skin;
+      const rs2 = ramp(skinC);
+      for (const [hx2, hy2, hr] of [[frontHand[0], frontHand[1], fr], [backHand[0], backHand[1], fr * 0.94]]) {
+        g.fillStyle = rs2.out; g.beginPath(); g.arc(hx2, hy2, hr + 1.1, 0, 7); g.fill();
+        g.fillStyle = skinC; g.beginPath(); g.arc(hx2, hy2, hr, 0, 7); g.fill();
+        g.fillStyle = rs2.lt; g.beginPath(); g.arc(hx2 - hr * 0.3, hy2 - hr * 0.32, hr * 0.52, 0, 7); g.fill();
+        g.fillStyle = rs2.dk; g.beginPath(); g.arc(hx2 + hr * 0.55, hy2 + hr * 0.28, hr * 0.32, 0, 7); g.fill();
+      }
+    }
+    // hand-riding weapons draw over the mitts
+    if (o.weaponTier > 0 && !look.chicken && !look.firetruck) {
+      const tier = o.weaponTier;
+      const wc = (o.weaponColors && o.weaponColors[tier - 1]) || WEAPON_COLORS[tier - 1];
+      const chid = o.charId || '';
+      const F = frontHand;
+      if (o.weaponStyle === 'none' && chid === 'todd') {
+        // knuckle wraps over both mitts
+        const fr = look.bigFists ? 8 : 3.6;
+        const WR = ramp('#f2ede0');
+        for (const [hx2, hy2, hr] of [[F[0], F[1], fr], [backHand[0], backHand[1], fr * 0.94]]) {
+          g.fillStyle = WR.out; g.beginPath(); g.roundRect(hx2 - hr - 0.6, hy2 - 3.2, hr * 2 + 1.2, 6, 2.4); g.fill();
+          g.fillStyle = '#f2ede0'; g.beginPath(); g.roundRect(hx2 - hr + 0.2, hy2 - 2.5, hr * 2 - 0.4, 4.6, 2); g.fill();
+          g.strokeStyle = WR.dk; g.lineWidth = 0.9;
+          g.beginPath(); g.moveTo(hx2 - hr + 0.6, hy2 - 0.8); g.lineTo(hx2 + hr - 0.6, hy2 - 0.8); g.stroke();
+          g.beginPath(); g.moveTo(hx2 - hr + 0.6, hy2 + 1); g.lineTo(hx2 + hr - 0.6, hy2 + 1); g.stroke();
+          if (tier >= 3) {
+            g.fillStyle = tier >= 5 ? '#ffd24a' : '#c9ccd8';
+            g.beginPath(); g.arc(hx2 - 2, hy2 - 2.9, 0.7, 0, 7); g.fill();
+            g.beginPath(); g.arc(hx2, hy2 - 2.9, 0.7, 0, 7); g.fill();
+            g.beginPath(); g.arc(hx2 + 2, hy2 - 2.9, 0.7, 0, 7); g.fill();
+          }
+        }
+      } else if (o.weaponStyle === 'none') {
+        g.fillStyle = wc; g.globalAlpha = 0.85;
+        g.beginPath(); g.arc(F[0], F[1], 5.5, 0, 7); g.fill();
+        g.beginPath(); g.arc(backHand[0], backHand[1], 5, 0, 7); g.fill();
+        g.globalAlpha = 1;
+      } else if (o.weaponStyle === 'book') {
+        // hardback held flat on the palm
+        const bw = 9 + tier * 1.4, bh = 7 + tier * 0.8;
+        g.save(); g.translate(F[0], F[1]); g.rotate(-0.15 + (o.attackKey ? (o.attackExt || 0) * 0.5 : 0));
+        g.fillStyle = ramp(wc).out; g.beginPath(); g.roundRect(-1.4, -bh - 1.2, bw + 2.8, bh + 2.4, 1.6); g.fill();
+        g.fillStyle = wc; g.fillRect(0, -bh, bw, bh);
+        g.fillStyle = '#fff8e6'; g.fillRect(bw - 2.2, -bh + 1, 2.2, bh - 2);
+        g.fillStyle = ramp(wc).lt; g.fillRect(0, -bh, 2.2, bh);
+        g.fillStyle = ramp(wc).hi; g.fillRect(3.4, -bh + 2.4, bw - 7, 1.4);
+        g.restore();
+      } else if (o.weaponStyle === 'sandwich') {
+        // the Little Bear Special, fully stacked
+        const sw = 8 + tier * 1.7;
+        g.save(); g.translate(F[0], F[1]); g.rotate(-0.1 + (o.attackKey ? (o.attackExt || 0) * 0.35 : 0));
+        g.fillStyle = ramp('#e0a860').out; g.beginPath(); g.roundRect(-2.8, -8.8, sw + 2.8, 9.8, 2); g.fill();
+        g.fillStyle = '#c98d48'; g.fillRect(-2, -2.2, sw, 2.4);
+        g.fillStyle = '#7dc45f';
+        for (let lx2 = -1; lx2 <= sw - 3; lx2 += 3) { g.beginPath(); g.arc(lx2, -2.8, 1.4, 0, 7); g.fill(); }
+        g.fillStyle = '#d43b2f'; g.fillRect(-1, -4.3, sw - 2, 1.7);
+        g.fillStyle = '#ffd24a';
+        g.beginPath(); g.moveTo(-1.5, -5); g.lineTo(sw - 3, -5); g.lineTo(sw - 5, -6.8); g.closePath(); g.fill();
+        g.fillStyle = '#e0a860'; g.beginPath(); g.roundRect(-2, -8.6, sw, 4.6, 2.4); g.fill();
+        g.fillStyle = '#fff4dd';
+        g.beginPath(); g.ellipse(1.5, -7.3, 0.9, 0.6, 0.4, 0, 7); g.fill();
+        g.beginPath(); g.ellipse(sw * 0.5, -7.9, 0.9, 0.6, -0.3, 0, 7); g.fill();
+        g.beginPath(); g.ellipse(sw - 3.5, -7.1, 0.9, 0.6, 0.5, 0, 7); g.fill();
+        g.strokeStyle = '#f0c084'; g.lineWidth = 1;
+        g.beginPath(); g.arc(1.5, -6.2, 2.6, Math.PI * 1.1, Math.PI * 1.6); g.stroke();
+        g.restore();
+      } else if (o.weaponStyle === 'letters') {
+        // his name orbits his fist, spelling doom — now with ink
+        const word = (o.weaponWord || 'RON').slice(0, 9);
+        g.font = '800 8px Verdana, sans-serif';
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        for (let li = 0; li < word.length; li++) {
+          if (word[li] === ' ') continue;
+          const ang = (o.animT || 0) * 1.3 + li * (Math.PI * 2 / word.length);
+          g.save();
+          g.translate(F[0] + Math.cos(ang) * 13, F[1] + Math.sin(ang) * 8);
+          g.scale(o.facing, 1); // unmirror the glyphs
+          g.fillStyle = ramp(wc).out; g.fillText(word[li], 0.9, 0.9);
+          g.fillStyle = wc; g.fillText(word[li], 0, 0);
+          g.restore();
+        }
+        g.textBaseline = 'alphabetic';
+      } else if (o.weaponStyle === 'teeth') {
+        // chatter-teeth toy riding the fist, always chattering
+        const tw = 7 + tier * 0.8;
+        const chatter = o.attackKey ? (1 - (o.attackExt || 0)) * 3 : 1.4 + 1.2 * Math.sin((o.animT || 0) * 10);
+        g.fillStyle = ramp('#ff8aa0').out;
+        g.beginPath(); g.arc(F[0], F[1] + 1.5, 5.2, 0, Math.PI); g.closePath(); g.fill();
+        g.fillStyle = '#ff8aa0';
+        g.beginPath(); g.arc(F[0], F[1] + 1.5, 4.4, 0, Math.PI); g.closePath(); g.fill();
+        g.fillStyle = '#b8b4a8';
+        g.fillRect(F[0] - tw - 0.7, F[1] - 2.9 - chatter, tw * 2 + 1.4, 3.3);
+        g.fillRect(F[0] - tw - 0.7, F[1] - 0.6 + chatter * 0.4, tw * 2 + 1.4, 2.9);
+        g.fillStyle = '#ffffff';
+        g.fillRect(F[0] - tw, F[1] - 2.4 - chatter, tw * 2, 2.6);
+        g.fillRect(F[0] - tw, F[1] - 0.2 + chatter * 0.4, tw * 2, 2.2);
+        g.strokeStyle = '#d8d4c8'; g.lineWidth = 0.7;
+        for (const gx2 of [F[0] - tw / 2, F[0], F[0] + tw / 2]) {
+          g.beginPath(); g.moveTo(gx2, F[1] - 2.4 - chatter); g.lineTo(gx2, F[1] + 2 + chatter * 0.4); g.stroke();
+        }
+        g.fillStyle = '#ffffff';
+        g.beginPath(); g.arc(F[0] - 1.6, F[1] - 4.6 - chatter, 1.3, 0, 7); g.fill();
+        g.beginPath(); g.arc(F[0] + 1.9, F[1] - 4.8 - chatter, 1.3, 0, 7); g.fill();
+        g.fillStyle = INK;
+        g.beginPath(); g.arc(F[0] - 1.3, F[1] - 4.6 - chatter, 0.6, 0, 7); g.fill();
+        g.beginPath(); g.arc(F[0] + 2.2, F[1] - 4.8 - chatter, 0.6, 0, 7); g.fill();
+      }
     }
 
     g.restore();
@@ -3090,7 +3526,7 @@ const Game = (() => {
       drawFighter(g, {
         x: m.x, y: m.y, facing: m.facing, size: m.size,
         color: m.cdef.color, color2: m.cdef.color2, accent: m.cdef.accent, skin: m.cdef.skin,
-        hairStyle: m.cdef.hairStyle, hairColor: m.cdef.hairColor,
+        hairStyle: m.cdef.hairStyle, hairColor: m.cdef.hairColor, charId: m.cdef.id, blush: m.cdef.blush,
         moving: m.strikeT <= 0, walkCyc: m.walkCyc, animT: m.animT,
         onGround: m.y >= GROUND_Y - 1, attackKey: m.strikeT > 0 ? 'strike' : null,
         hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: 'none', crouch: false, ascended: false,
@@ -3109,7 +3545,7 @@ const Game = (() => {
           attackKey: p.attack ? p.attack.key : null, attackExt: attackExt(p.attack),
           hurt: p.hurtT > 0, flash: p.flash, frozen: false,
           armorTier: p.upg.armor,
-          hairStyle: p.cdef.hairStyle, hairColor: p.cdef.hairColor,
+          hairStyle: p.cdef.hairStyle, hairColor: p.cdef.hairColor, charId: p.cdef.id, blush: p.cdef.blush,
           stretchY: p.landT > 0 ? 0.9 : (!p.onGround && p.vy < -160 ? 1.07 : 1),
           weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, weaponColors: p.cdef.weaponColors,
           weaponWord: p.upg.weapon > 0 ? trackMeta(p.cdef, 'weapon').tiers[p.upg.weapon - 1].split(' ')[0] : '',
@@ -3591,7 +4027,7 @@ const Game = (() => {
       moving: false, walkCyc: 0, animT: 2, onGround: true,
       crouch: false, attackKey: null, attackExt: 0,
       hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: cdef.weaponStyle, weaponColors: cdef.weaponColors, ascended,
-      hairStyle: cdef.hairStyle, hairColor: cdef.hairColor,
+      hairStyle: cdef.hairStyle, hairColor: cdef.hairColor, charId: cdef.id, blush: cdef.blush,
       look: ascended ? cdef.finalForm.look : cdef.baseLook,
     });
   }
