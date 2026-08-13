@@ -155,6 +155,23 @@
   // already rotated by walkCyc (everything drawn here tumbles with the wheel).
   // The hubcap glint sweeps past the viewer once per revolution — free specular.
   // =========================================================================
+  // lug + lettering-tick corner points, rotated once at init (no per-frame save/rotate)
+  const LUG_PTS = (() => {
+    const out = [];
+    for (let i = 0; i < 8; i++) {
+      const a2 = i * Math.PI / 4, c = Math.cos(a2), s = Math.sin(a2);
+      out.push([[-3.6, -25], [3.6, -25], [3.6, -19], [-3.6, -19]].map(p => [p[0] * c - p[1] * s, p[0] * s + p[1] * c]));
+    }
+    return out;
+  })();
+  const TICK_PTS = (() => {
+    const out = [];
+    for (let i = 0; i < 6; i++) {
+      const a2 = i * Math.PI / 3 + 0.26, c = Math.cos(a2), s = Math.sin(a2);
+      out.push([[-1.2, -18.5], [1.2, -18.5], [1.2, -15.5], [-1.2, -15.5]].map(p => [p[0] * c - p[1] * s, p[0] * s + p[1] * c]));
+    }
+    return out;
+  })();
   B.tire = function (g, a) {
     g.lineCap = 'round'; g.lineJoin = 'round';
     // outline disc
@@ -162,11 +179,13 @@
     g.beginPath(); g.arc(0, 0, 23.5, 0, 7); g.fill();
     // 8 chunky tread lugs studding the rim — the new silhouette
     g.fillStyle = TIRE_LUG;
-    for (let ti = 0; ti < 8; ti++) {
-      g.save(); g.rotate(ti * Math.PI / 4);
-      g.fillRect(-3.6, -25, 7.2, 6);
-      g.restore();
+    g.beginPath();
+    for (const q4 of LUG_PTS) {
+      g.moveTo(q4[0][0], q4[0][1]); g.lineTo(q4[1][0], q4[1][1]);
+      g.lineTo(q4[2][0], q4[2][1]); g.lineTo(q4[3][0], q4[3][1]);
+      g.closePath();
     }
+    g.fill();
     // rubber body + tumbling sun sheen
     g.fillStyle = TIRE_RUBBER;
     g.beginPath(); g.arc(0, 0, 21.5, 0, 7); g.fill();
@@ -176,11 +195,13 @@
     g.strokeStyle = TIRE_RING; g.lineWidth = 2.5;
     g.beginPath(); g.arc(0, 0, 15.5, 0, 7); g.stroke();
     g.fillStyle = TIRE_TICK;
-    for (let ti = 0; ti < 6; ti++) {
-      g.save(); g.rotate(ti * Math.PI / 3 + 0.26);
-      g.fillRect(-1.2, -18.5, 2.4, 3);
-      g.restore();
+    g.beginPath();
+    for (const q4 of TICK_PTS) {
+      g.moveTo(q4[0][0], q4[0][1]); g.lineTo(q4[1][0], q4[1][1]);
+      g.lineTo(q4[2][0], q4[2][1]); g.lineTo(q4[3][0], q4[3][1]);
+      g.closePath();
     }
+    g.fill();
     // caked road grime
     g.strokeStyle = TIRE_GRIME; g.globalAlpha = 0.4; g.lineWidth = 3.5;
     g.beginPath(); g.arc(0, 0, 19, 0.2 * Math.PI, 0.75 * Math.PI); g.stroke();

@@ -162,7 +162,7 @@
     g.lineCap = 'round'; g.lineJoin = 'round';
     const t = a.animT;
     const windup = a.attackKey === 'windup', strike = a.attackKey === 'strike';
-    const hov = -46 + Math.sin(t * 4) * 3;
+    const hov = -40 + Math.sin(t * 4) * 3; // centered in the ground-anchored hitbox
     const wf = Math.sin(t * (windup ? 40 : 26)) * 5;
     if (windup) g.translate(-5 + Math.sin(t * 44) * 1.2, 2); // pull-back tremble
     if (strike) { g.translate(0, hov); g.rotate(0.35); g.translate(0, -hov); } // nose-down dive

@@ -139,6 +139,9 @@ const Game = (() => {
         });
       });
     }
+    // bake the level's terrain art up front so the first frame doesn't hitch
+    getCliffStrip(plan.world);
+    for (const pl of platforms) pl.cvs = buildPlatformIsland(pl.w, plan.world);
     waveIdx = 0; spawnDelay = 1.2; endTimer = 0; endFired = false;
     camX = clamp(player.x - viewW / 2, 0, Math.max(0, STAGE_W - viewW));
     earned = 0; mode = 'playing'; paused = false; timeScale = 1; hitstop = 0;
@@ -970,7 +973,10 @@ const Game = (() => {
     }
     if (e.def.ranged) {
       const dir = Math.sign(player.x - e.x) || 1;
-      const by = e.y - 70;
+      // bolts leave each body's actual muzzle: grease spitter's mouth,
+      // camera's lens, mage's thrust hands, sprinkler's rotor nozzle
+      const muzY = e.def.body === 'grease' ? 42 : e.def.body === 'camera' ? 54 : e.def.body === 'mage' ? 55 : 70;
+      const by = e.y - muzY;
       // elevated snipers aim down at the player instead of firing level
       const tFly = Math.max(0.25, Math.abs(player.x - (e.x + dir * 24)) / 360);
       const bvy = e.plat ? clamp(((player.y - 50) - by) / tFly, -160, 340) : 0;
@@ -1514,6 +1520,29 @@ const Game = (() => {
     g.beginPath(); g.arc(x + 1 * s, baseY - 42 * s, 1.5, 0, 7); g.fill();
   }
 
+  // static flora baked once per (kind, scale) — trees were the biggest
+  // recoverable per-frame cost in the near pass. 1 canvas px = 2 world
+  // units, so sprites blit 1:1 onto the half-res buffer with no decimation.
+  const floraCache = {};
+  function drawFlora(g, kind, s, x, baseY) {
+    const key = kind + s;
+    let f = floraCache[key];
+    if (!f) {
+      const wU = 84 * s, hU = 100 * s;
+      const pc = document.createElement('canvas');
+      pc.width = Math.ceil(wU / 2); pc.height = Math.ceil(hU / 2);
+      const q = pc.getContext('2d');
+      q.setTransform(0.5, 0, 0, 0.5, wU / 4, hU / 2); // world (0,0) = base center
+      if (kind === 'oak') drawOak(q, 0, 0, s, OAK_P);
+      else if (kind === 'blossom') drawBlossom(q, 0, 0, s);
+      else if (kind === 'coral') drawPipeCoral(q, 0, 0, s);
+      else if (kind === 'dead') drawDeadTree(q, 0, 0, s);
+      else drawCrystalTree(q, 0, 0, s);
+      f = floraCache[key] = { cvs: pc, wU, hU };
+    }
+    g.drawImage(f.cvs, x - f.wU / 2, baseY - f.hU, f.wU, f.hU);
+  }
+
   // starfield pattern for the fantasy sky, built once
   let starPattern = null;
   function getStars() {
@@ -1524,8 +1553,9 @@ const Game = (() => {
     const r = seeded(97);
     q.fillStyle = '#e8e4ff';
     for (let i = 0; i < 30; i++) {
-      q.globalAlpha = 0.3 + r() * 0.5;
-      q.beginPath(); q.arc(r() * 200, r() * 200, 0.5 + r() * 0.7, 0, 7); q.fill();
+      q.globalAlpha = 0.5 + r() * 0.5;
+      // 1.6-3.4 world units so stars survive the quarter-res far pass
+      q.beginPath(); q.arc(r() * 200, r() * 200, 1.6 + r() * 1.8, 0, 7); q.fill();
     }
     return starPattern = ctx.createPattern(pc, 'repeat');
   }
@@ -1658,12 +1688,14 @@ const Game = (() => {
     return pc;
   }
 
-  // platforms as small floating islands, baked per platform per level
+  // platforms as small floating islands, baked per platform per level.
+  // baked at 1 canvas px = 2 world units so the half-res pass blits 1:1.
   function buildPlatformIsland(w, world) {
     const E = ENV_TABLES[world.id] || ENV_TABLES.home;
     const pc = document.createElement('canvas');
-    pc.width = w + 36; pc.height = 76;
+    pc.width = Math.ceil((w + 36) / 2); pc.height = 38;
     const q = pc.getContext('2d');
+    q.setTransform(0.5, 0, 0, 0.5, 0, 0);
     const cx = w / 2 + 18;
     const keelY = 44 + Math.min(14, w * 0.06);
     q.beginPath();
@@ -1747,11 +1779,15 @@ const Game = (() => {
     const wid = plan ? plan.world.id : 'home';
     const E = sh2.E;
 
-    // starfield over the twilight realms
+    // starfield over the twilight realms — near-screen-anchored so the
+    // deepest layer scrolls slowest (patterns tile in user space)
     if (wid === 'fantasy') {
       g.globalAlpha = 0.8;
       g.fillStyle = getStars();
-      g.fillRect(camX, skyTop, viewW, viewH * 0.6);
+      g.save();
+      g.translate(camX * 0.95, 0);
+      g.fillRect(camX * 0.05, skyTop, viewW, viewH * 0.6);
+      g.restore();
       g.globalAlpha = 1;
     }
 
@@ -1971,8 +2007,8 @@ const Game = (() => {
           }
         }
       }
-      drawOak(g, wx2(260), GROUND_Y, 0.8, OAK_P);
-      drawOak(g, wx2(780), GROUND_Y, 0.8, OAK_P);
+      drawFlora(g, 'oak', 0.8, wx2(260), GROUND_Y);
+      drawFlora(g, 'oak', 0.8, wx2(780), GROUND_Y);
     } else if (props === 'pipes') {
       // background pipe network with glowing valves
       g.strokeStyle = sh3.pipeCol; g.lineWidth = 12;
@@ -1980,6 +2016,8 @@ const Game = (() => {
       g.beginPath(); g.moveTo(camX - 20, py); g.lineTo(camX + viewW + 20, py); g.stroke();
       for (let i = 0; i < 4; i++) {
         const x = wx2(i * 430 + rs() * 140);
+        // re-set each pass: the chain stroke below clobbers this state
+        g.strokeStyle = sh3.pipeCol; g.lineWidth = 12;
         g.beginPath(); g.moveTo(x, py); g.lineTo(x, GROUND_Y); g.stroke();
         g.fillStyle = '#3ad4a4';
         g.globalAlpha = 0.25; g.beginPath(); g.arc(x, py, 16, 0, 7); g.fill();
@@ -1989,8 +2027,8 @@ const Game = (() => {
         g.strokeStyle = '#4c3820'; g.lineWidth = 2;
         g.beginPath(); g.moveTo(x + 46, py + 6); g.lineTo(x + 46, py + 40 + (i % 2) * 14); g.stroke();
       }
-      drawPipeCoral(g, wx2(200), GROUND_Y, 0.8);
-      drawPipeCoral(g, wx2(760), GROUND_Y, 0.8);
+      drawFlora(g, 'coral', 0.8, wx2(200), GROUND_Y);
+      drawFlora(g, 'coral', 0.8, wx2(760), GROUND_Y);
     } else if (props === 'road') {
       // billboards catching the sunset
       for (let i = 0; i < 3; i++) {
@@ -2004,8 +2042,8 @@ const Game = (() => {
         g.fillRect(x - 14, GROUND_Y - 169, 94, 48);
         g.globalAlpha = 1;
       }
-      drawDeadTree(g, wx2(320), GROUND_Y, 0.9);
-      drawDeadTree(g, wx2(960), GROUND_Y, 0.9);
+      drawFlora(g, 'dead', 0.9, wx2(320), GROUND_Y);
+      drawFlora(g, 'dead', 0.9, wx2(960), GROUND_Y);
     } else {
       // torch-lit castle wall
       const flick = 1 + Math.sin(performance.now() * 0.02) * 0.15;
@@ -2030,7 +2068,7 @@ const Game = (() => {
         g.fillStyle = '#ffd24a';
         g.beginPath(); g.arc(tx, ty - 4, 5 * flick, 0, 7); g.fill();
       }
-      drawCrystalTree(g, wx2(300), GROUND_Y, 0.9);
+      drawFlora(g, 'crystal', 0.9, wx2(300), GROUND_Y);
     }
   }
 
@@ -2059,7 +2097,7 @@ const Game = (() => {
         }
         g.fillStyle = '#e8e4d8'; g.fillRect(sx - 6, GROUND_Y - 36, 76, 7);
         g.fillStyle = '#b0aca0'; g.fillRect(sx - 6, GROUND_Y - 31, 76, 2);
-        if (i % 2 === 0) drawOak(g, sx + 96, GROUND_Y + 2, 1.05, OAK_P);
+        if (i % 2 === 0) drawFlora(g, 'oak', 1.05, sx + 96, GROUND_Y + 2);
         const fx = sx + 70;
         g.strokeStyle = '#3f6b34'; g.lineWidth = 2; g.lineCap = 'round';
         g.beginPath(); g.moveTo(fx, GROUND_Y); g.lineTo(fx, GROUND_Y - 26); g.stroke();
@@ -2092,7 +2130,7 @@ const Game = (() => {
         g.fillStyle = '#e8b84a'; g.fillRect(-16, -16, 32, 32);
         g.strokeStyle = '#7a5c20'; g.lineWidth = 2; g.strokeRect(-16, -16, 32, 32);
         g.restore();
-        if (i % 3 === 0) drawDeadTree(g, sx + 90, GROUND_Y + 2, 1);
+        if (i % 3 === 0) drawFlora(g, 'dead', 1, sx + 90, GROUND_Y + 2);
       } else {
         // castle tower with crenellations and one lit window
         g.fillStyle = theme.near;
@@ -2101,7 +2139,7 @@ const Game = (() => {
         g.fillStyle = '#ffb04a'; g.fillRect(sx + w * 0.4, GROUND_Y - h + 18, 4, 6);
       }
     }
-    if (propStyle === 'fence') drawBlossom(g, STAGE_W * 0.62, GROUND_Y + 2, 1.25); // the landmark tree
+    if (propStyle === 'fence') drawFlora(g, 'blossom', 1.25, STAGE_W * 0.62, GROUND_Y + 2); // the landmark tree
 
     // ---- the floating island ----
     // mist wisps drifting under the keels (portrait only — invisible on landscape)
@@ -2184,7 +2222,7 @@ const Game = (() => {
       // platforms as floating mini-islands with swaying keel roots
       for (const pl of platforms) {
         if (!pl.cvs) pl.cvs = buildPlatformIsland(pl.w, plan.world);
-        g.drawImage(pl.cvs, pl.x - pl.w / 2 - 18, pl.y - 14);
+        g.drawImage(pl.cvs, pl.x - pl.w / 2 - 18, pl.y - 14, pl.w + 36, 76);
         const keelY0 = pl.y + 30 + Math.min(14, pl.w * 0.06);
         for (let j = 0; j < 2; j++) {
           const ax2 = pl.x + (j ? -8 : 6);
@@ -2238,6 +2276,62 @@ const Game = (() => {
       SHADE.set(c, r);
     }
     return r;
+  }
+
+  // shared fighter-part painters, hoisted so drawFighter allocates nothing
+  function limbStroke(g, fx, fy, tx, ty, width, color) {
+    // shaded capsule: hue-dark outline, shadow base, sun-shifted core, rim thread
+    const r = ramp(color);
+    const dx = tx - fx, dy = ty - fy, len = Math.hypot(dx, dy) || 1;
+    let px = -dy / len, py = dx / len;
+    if (px + py > 0) { px = -px; py = -py; } // perpendicular points up-left, toward the sun
+    g.strokeStyle = r.out; g.lineWidth = width + 3;
+    g.beginPath(); g.moveTo(fx, fy); g.lineTo(tx, ty); g.stroke();
+    g.strokeStyle = r.dk; g.lineWidth = width;
+    g.beginPath(); g.moveTo(fx, fy); g.lineTo(tx, ty); g.stroke();
+    const s = width * 0.18;
+    g.strokeStyle = color; g.lineWidth = Math.max(2, width - 2.4);
+    g.beginPath(); g.moveTo(fx + px * s, fy + py * s - 0.4); g.lineTo(tx + px * s, ty + py * s - 0.4); g.stroke();
+    const e = width * 0.3;
+    g.strokeStyle = r.lt; g.lineWidth = Math.max(1.3, width * 0.24);
+    g.beginPath(); g.moveTo(fx + px * e, fy + py * e - 0.6); g.lineTo(tx + px * e, ty + py * e - 0.6); g.stroke();
+  }
+  function shoePart(g, col, fx, fy) {
+    const bc = ramp(col);
+    g.fillStyle = bc.out; g.beginPath(); g.roundRect(fx - 5.4, fy - 6.4, 12.2, 7.6, 3); g.fill();
+    g.fillStyle = col; g.beginPath(); g.roundRect(fx - 4.6, fy - 5.7, 10.6, 6.2, 2.6); g.fill();
+    g.fillStyle = bc.lt; g.fillRect(fx - 4.6, fy - 1.1, 10.6, 1.6);
+    g.fillStyle = bc.hi; g.beginPath(); g.arc(fx + 3.6, fy - 4.2, 1.1, 0, 7); g.fill();
+  }
+  function kneepadPart(g, col, accent, kx, ky, accentStrap) {
+    const A2 = ramp(col);
+    g.fillStyle = A2.out; g.beginPath(); g.arc(kx, ky, 4.2, 0, 7); g.fill();
+    g.fillStyle = col; g.beginPath(); g.arc(kx, ky, 3.3, 0, 7); g.fill();
+    g.fillStyle = A2.lt; g.beginPath(); g.arc(kx - 1, ky - 1.1, 1.4, 0, 7); g.fill();
+    g.strokeStyle = accentStrap ? accent : A2.dk; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(kx - 3.2, ky + 1.6); g.lineTo(kx + 3.2, ky + 1.6); g.stroke();
+  }
+  function thighPart(g, col, tx, ty) {
+    const A2 = ramp(col);
+    g.fillStyle = A2.out; g.beginPath(); g.roundRect(tx - 3.6, ty - 2.9, 7.2, 5.8, 1.6); g.fill();
+    g.fillStyle = col; g.beginPath(); g.roundRect(tx - 3, ty - 2.3, 6, 4.6, 1.3); g.fill();
+    g.fillStyle = A2.lt; g.fillRect(tx - 3, ty - 2.3, 6, 1.2);
+  }
+
+  // Ronathon's orbiting glyphs, baked once per letter+tier (fillText is slow)
+  const glyphCache = {};
+  function glyphSprite(ch, wc) {
+    const key = ch + '|' + wc;
+    let s = glyphCache[key];
+    if (s) return s;
+    const pc = document.createElement('canvas');
+    pc.width = 24; pc.height = 28;
+    const q = pc.getContext('2d');
+    q.font = '800 16px Verdana, sans-serif';
+    q.textAlign = 'center'; q.textBaseline = 'middle';
+    q.fillStyle = ramp(wc).out; q.fillText(ch, 13.8, 15.8);
+    q.fillStyle = wc; q.fillText(ch, 12, 14);
+    return glyphCache[key] = pc;
   }
 
   function drawFighter(g, o) {
@@ -2337,44 +2431,6 @@ const Game = (() => {
 
     g.lineCap = 'round'; g.lineJoin = 'round';
     const INK = '#14101a';
-    const limb = (from, to, width, color) => {
-      // shaded capsule: hue-dark outline, shadow base, sun-shifted core, rim thread
-      const r = ramp(color);
-      const dx = to[0] - from[0], dy = to[1] - from[1], len = Math.hypot(dx, dy) || 1;
-      let px = -dy / len, py = dx / len;
-      if (px + py > 0) { px = -px; py = -py; } // perpendicular points up-left, toward the sun
-      g.strokeStyle = r.out; g.lineWidth = width + 3;
-      g.beginPath(); g.moveTo(from[0], from[1]); g.lineTo(to[0], to[1]); g.stroke();
-      g.strokeStyle = r.dk; g.lineWidth = width;
-      g.beginPath(); g.moveTo(from[0], from[1]); g.lineTo(to[0], to[1]); g.stroke();
-      const s = width * 0.18;
-      g.strokeStyle = color; g.lineWidth = Math.max(2, width - 2.4);
-      g.beginPath(); g.moveTo(from[0] + px * s, from[1] + py * s - 0.4); g.lineTo(to[0] + px * s, to[1] + py * s - 0.4); g.stroke();
-      const e = width * 0.3;
-      g.strokeStyle = r.lt; g.lineWidth = Math.max(1.3, width * 0.24);
-      g.beginPath(); g.moveTo(from[0] + px * e, from[1] + py * e - 0.6); g.lineTo(to[0] + px * e, to[1] + py * e - 0.6); g.stroke();
-    };
-    const shoe = (fx, fy) => {
-      const bc = ramp(o.color2);
-      g.fillStyle = bc.out; g.beginPath(); g.roundRect(fx - 5.4, fy - 6.4, 12.2, 7.6, 3); g.fill();
-      g.fillStyle = o.color2; g.beginPath(); g.roundRect(fx - 4.6, fy - 5.7, 10.6, 6.2, 2.6); g.fill();
-      g.fillStyle = bc.lt; g.fillRect(fx - 4.6, fy - 1.1, 10.6, 1.6);
-      g.fillStyle = bc.hi; g.beginPath(); g.arc(fx + 3.6, fy - 4.2, 1.1, 0, 7); g.fill();
-    };
-    const kneepad = (kx, ky, accentStrap) => {
-      const A2 = ramp(o.color2);
-      g.fillStyle = A2.out; g.beginPath(); g.arc(kx, ky, 4.2, 0, 7); g.fill();
-      g.fillStyle = o.color2; g.beginPath(); g.arc(kx, ky, 3.3, 0, 7); g.fill();
-      g.fillStyle = A2.lt; g.beginPath(); g.arc(kx - 1, ky - 1.1, 1.4, 0, 7); g.fill();
-      g.strokeStyle = accentStrap ? o.accent : A2.dk; g.lineWidth = 1;
-      g.beginPath(); g.moveTo(kx - 3.2, ky + 1.6); g.lineTo(kx + 3.2, ky + 1.6); g.stroke();
-    };
-    const thighPlate = (tx, ty) => {
-      const A2 = ramp(o.color2);
-      g.fillStyle = A2.out; g.beginPath(); g.roundRect(tx - 3.6, ty - 2.9, 7.2, 5.8, 1.6); g.fill();
-      g.fillStyle = o.color2; g.beginPath(); g.roundRect(tx - 3, ty - 2.3, 6, 4.6, 1.3); g.fill();
-      g.fillStyle = A2.lt; g.fillRect(tx - 3, ty - 2.3, 6, 1.2);
-    };
     const wearsShoes = !look.baby && !look.crawl && !look.printer && !look.wrench && !look.sandwich && !look.chicken && !look.firetruck;
 
     // final-form look overrides (bald / beard / shirtless / muscle / fat)
@@ -2387,16 +2443,16 @@ const Game = (() => {
 
     // back limbs
     if (!look.firetruck) {
-      limb([hip[0] + lean * 0.3, hip[1]], backFoot, 8.5, legCol2);
-      if (wearsShoes) shoe(backFoot[0], backFoot[1]);
-      if ((o.armorTier || 0) >= 2 && !look.chicken) {
-        kneepad((hip[0] + backFoot[0]) / 2 + lean * 0.15, (hip[1] + backFoot[1]) / 2, (o.armorTier || 0) >= 5);
+      limbStroke(g, hip[0] + lean * 0.3, hip[1], backFoot[0], backFoot[1], 8.5, legCol2);
+      if (wearsShoes) shoePart(g, o.color2, backFoot[0], backFoot[1]);
+      if ((o.armorTier || 0) >= 2 && wearsShoes) {
+        kneepadPart(g, o.color2, o.accent, (hip[0] + backFoot[0]) / 2 + lean * 0.15, (hip[1] + backFoot[1]) / 2, (o.armorTier || 0) >= 5);
       }
-      if ((o.armorTier || 0) >= 5 && !look.chicken) {
-        thighPlate(hip[0] + (backFoot[0] - hip[0]) * 0.3, hip[1] + (backFoot[1] - hip[1]) * 0.3);
+      if ((o.armorTier || 0) >= 5 && wearsShoes) {
+        thighPart(g, o.color2, hip[0] + (backFoot[0] - hip[0]) * 0.3, hip[1] + (backFoot[1] - hip[1]) * 0.3);
       }
     }
-    if (!look.chicken && !look.firetruck) limb([sh[0] + lean * 0.5, sh[1]], backHand, armW, backArmCol);
+    if (!look.chicken && !look.firetruck) limbStroke(g, sh[0] + lean * 0.5, sh[1], backHand[0], backHand[1], armW, backArmCol);
     if (look.printer) {
       // he IS the machine: gantry frame body
       g.strokeStyle = '#3a3f4a'; g.lineWidth = 5; g.lineJoin = 'miter';
@@ -2512,7 +2568,7 @@ const Game = (() => {
       g.beginPath(); g.arc(16, -12, 3.5, 0, 7); g.fill();
     } else {
     // torso, with a two-tone back shade
-    limb([hip[0] + lean * 0.3, hip[1]], [sh[0] + lean * 0.5, sh[1]], 15 * muscleW, torsoCol);
+    limbStroke(g, hip[0] + lean * 0.3, hip[1], sh[0] + lean * 0.5, sh[1], 15 * muscleW, torsoCol);
     g.strokeStyle = ramp(torsoCol).dk; g.lineWidth = 4.5 * muscleW;
     g.beginPath();
     g.moveTo(hip[0] + lean * 0.3 - 4.5, hip[1]);
@@ -2618,13 +2674,13 @@ const Game = (() => {
     }
     // front leg
     if (!look.firetruck) {
-      limb([hip[0] + lean * 0.3, hip[1]], frontFoot, 8.5, legCol);
-      if (wearsShoes) shoe(frontFoot[0], frontFoot[1]);
-      if ((o.armorTier || 0) >= 1 && !look.chicken) {
-        kneepad((hip[0] + frontFoot[0]) / 2 + lean * 0.15, (hip[1] + frontFoot[1]) / 2, (o.armorTier || 0) >= 5);
+      limbStroke(g, hip[0] + lean * 0.3, hip[1], frontFoot[0], frontFoot[1], 8.5, legCol);
+      if (wearsShoes) shoePart(g, o.color2, frontFoot[0], frontFoot[1]);
+      if ((o.armorTier || 0) >= 1 && wearsShoes) {
+        kneepadPart(g, o.color2, o.accent, (hip[0] + frontFoot[0]) / 2 + lean * 0.15, (hip[1] + frontFoot[1]) / 2, (o.armorTier || 0) >= 5);
       }
-      if ((o.armorTier || 0) >= 5 && !look.chicken) {
-        thighPlate(hip[0] + (frontFoot[0] - hip[0]) * 0.3, hip[1] + (frontFoot[1] - hip[1]) * 0.3);
+      if ((o.armorTier || 0) >= 5 && wearsShoes) {
+        thighPart(g, o.color2, hip[0] + (frontFoot[0] - hip[0]) * 0.3, hip[1] + (frontFoot[1] - hip[1]) * 0.3);
       }
     }
     if (look.gown) {
@@ -2838,8 +2894,8 @@ const Game = (() => {
       g.beginPath(); g.arc(7.5 + lean * 0.6, headY - 6.5, 3.1, 0, 7); g.stroke();
       g.beginPath(); g.moveTo(3.6 + lean * 0.6, headY - 6.5); g.lineTo(4.4 + lean * 0.6, headY - 6.5); g.stroke();
     }
-    // the face: everyone in this family has eyes now
-    if (!o.hood && !look.glasses) {
+    // the face: everyone in this family has eyes now (mecha wears a visor)
+    if (!o.hood && !look.glasses && !look.mecha) {
       const ex1 = hx + 2, ex2 = hx + 6.2, ey2 = hy - 1.5;
       const blinkE = Math.sin((o.animT || 0) * 1.3 + ex1) > 0.985;
       if (o.blush || look.baby) {
@@ -2894,7 +2950,7 @@ const Game = (() => {
       g.beginPath(); g.moveTo(9, headY - 14); g.lineTo(14, headY - 26); g.lineTo(6, headY - 16); g.fill();
     }
     // front arm + weapon
-    if (!look.chicken && !look.firetruck) limb([sh[0] + lean * 0.5, sh[1]], frontHand, armW, frontArmCol);
+    if (!look.chicken && !look.firetruck) limbStroke(g, sh[0] + lean * 0.5, sh[1], frontHand[0], frontHand[1], armW, frontArmCol);
     if (o.weaponTier > 0 && !look.chicken && !look.firetruck) {
       const tier = o.weaponTier;
       const wl = 9 + tier * 2.6;
@@ -3235,21 +3291,17 @@ const Game = (() => {
         g.beginPath(); g.arc(1.5, -6.2, 2.6, Math.PI * 1.1, Math.PI * 1.6); g.stroke();
         g.restore();
       } else if (o.weaponStyle === 'letters') {
-        // his name orbits his fist, spelling doom — now with ink
+        // his name orbits his fist, spelling doom — glyphs baked, one unmirror
         const word = (o.weaponWord || 'RON').slice(0, 9);
-        g.font = '800 8px Verdana, sans-serif';
-        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.save();
+        g.scale(o.facing, 1); // unmirror the glyphs
         for (let li = 0; li < word.length; li++) {
           if (word[li] === ' ') continue;
           const ang = (o.animT || 0) * 1.3 + li * (Math.PI * 2 / word.length);
-          g.save();
-          g.translate(F[0] + Math.cos(ang) * 13, F[1] + Math.sin(ang) * 8);
-          g.scale(o.facing, 1); // unmirror the glyphs
-          g.fillStyle = ramp(wc).out; g.fillText(word[li], 0.9, 0.9);
-          g.fillStyle = wc; g.fillText(word[li], 0, 0);
-          g.restore();
+          const gx = F[0] + Math.cos(ang) * 13, gy = F[1] + Math.sin(ang) * 8;
+          g.drawImage(glyphSprite(word[li], wc), o.facing * gx - 6, gy - 7, 12, 14);
         }
-        g.textBaseline = 'alphabetic';
+        g.restore();
       } else if (o.weaponStyle === 'teeth') {
         // chatter-teeth toy riding the fist, always chattering
         const tw = 7 + tier * 0.8;
@@ -3308,7 +3360,6 @@ const Game = (() => {
     skinCtx.attackKey = key;
     skinCtx.hurt = e.hurtT > 0;
     skinCtx.moving = e.state === 'approach' && e.frozenT <= 0;
-    skinCtx.elite = e.def.signature === 'revive' && !e.revived;
     window.ENEMY_BODIES[e.def.body](g, skinCtx);
     g.restore();
     if (e.flash > 0) {
@@ -3488,7 +3539,8 @@ const Game = (() => {
         g.translate(e.x, e.y - 22 * e.size);
         g.rotate(e.walkCyc || 0);
         if (window.ENEMY_BODIES && window.ENEMY_BODIES.tire) {
-          g.scale(e.size, e.size);
+          // 0.88: the lugs reach r25 in body space; scaled they sit flush at r22
+          g.scale(e.size * 0.88, e.size * 0.88);
           skinCtx.walkCyc = e.walkCyc || 0;
           skinCtx.animT = e.animT || 0;
           skinCtx.attackKey = e.state === 'windup' ? 'windup' : e.state === 'strike' ? 'strike' : null;
@@ -3577,6 +3629,7 @@ const Game = (() => {
         moving: m.strikeT <= 0, walkCyc: m.walkCyc, animT: m.animT,
         onGround: m.y >= GROUND_Y - 1, attackKey: m.strikeT > 0 ? 'strike' : null,
         hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: 'none', crouch: false, ascended: false,
+        look: m.cdef.baseLook, // crawling babies stay crawling babies
       });
     }
 
@@ -4073,7 +4126,7 @@ const Game = (() => {
       color: cdef.color, color2: cdef.color2, accent: cdef.accent, skin: cdef.skin,
       moving: false, walkCyc: 0, animT: 2, onGround: true,
       crouch: false, attackKey: null, attackExt: 0,
-      hurt: false, flash: 0, frozen: false, weaponTier: 0, weaponStyle: cdef.weaponStyle, weaponColors: cdef.weaponColors, ascended,
+      hurt: false, flash: 0, frozen: false, weaponTier: Save.upg(cdef.id).weapon, weaponStyle: cdef.weaponStyle, weaponColors: cdef.weaponColors, ascended,
       hairStyle: cdef.hairStyle, hairColor: cdef.hairColor, charId: cdef.id, blush: cdef.blush,
       look: ascended ? cdef.finalForm.look : cdef.baseLook,
     });

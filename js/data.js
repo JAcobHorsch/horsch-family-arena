@@ -756,7 +756,7 @@ const WORLDS = [
     id: 'home', name: 'HORSCH FAMILY LAND',
     levelNames: ['The Backyard', 'The Kitchen', 'The Church Parking Lot', 'The Lake', 'The Cul-de-Sac Showdown'],
     props: 'fence',
-    theme: { sky1: '#3d9ae8', sky2: '#bfe6f8', glow: '#ffec9a', ground: '#6b4a30', groundTop: '#78c850', far: '#8fc4a0', near: '#3f6b34' },
+    theme: { sky1: '#3d9ae8', glow: '#ffec9a', far: '#8fc4a0', near: '#3f6b34' },
     enemies: {
       grunt:   { name: 'Yard Gnome',        color: '#c9342a', color2: '#3a5a8a', accessory: 'gnomehat', body: 'gnome' },
       stinger: { name: 'Murder Wasp',       color: '#e8c84a', color2: '#2a2418', accessory: 'wings', signature: 'lunge', body: 'wasp' },
@@ -769,7 +769,7 @@ const WORLDS = [
     id: 'pipes', name: 'THE PLUMBING UNDERWORLD',
     levelNames: ['The Crawlspace', 'The Drain Line', 'The Sewer Kingdom', 'The Water Heater Caverns', 'The Boiler Depths'],
     props: 'pipes',
-    theme: { sky1: '#14524c', sky2: '#08211f', glow: '#3ad4a4', ground: '#1d4a40', groundTop: '#3f9a6f', far: '#0f332e', near: '#174436' },
+    theme: { sky1: '#14524c', glow: '#3ad4a4', far: '#0f332e', near: '#174436' },
     enemies: {
       grunt:   { name: 'Clog Blob',       color: '#6a8a3a', color2: '#2c3a18', accessory: 'drip', signature: 'split', body: 'clog' },
       stinger: { name: 'Drain Rat',       color: '#8a7a6a', color2: '#3a3028', accessory: 'ears', signature: 'pack', body: 'rat' },
@@ -782,7 +782,7 @@ const WORLDS = [
     id: 'road', name: 'THE ROAD TO KANSAS CITY',
     levelNames: ['Leaving the Driveway', 'The Gas Station', "The World's Largest Ball of Twine", 'The Rest Stop at 2 AM', 'Kansas City Limits'],
     props: 'road',
-    theme: { sky1: '#6e3a68', sky2: '#ffa060', glow: '#ffca6a', ground: '#4a4240', groundTop: '#6e625a', far: '#432c48', near: '#39292f' },
+    theme: { sky1: '#6e3a68', glow: '#ffca6a', far: '#432c48', near: '#39292f' },
     enemies: {
       grunt:   { name: 'Traffic Cone',        color: '#e8742a', color2: '#5a2c10', accessory: 'conehat', body: 'cone' },
       stinger: { name: 'Runaway Tire',        color: '#3a3a42', color2: '#18181e', signature: 'roll', body: 'tire' },
@@ -795,7 +795,7 @@ const WORLDS = [
     id: 'fantasy', name: 'THE FANTASY REALMS',
     levelNames: ['The Enchanted Forest', 'The Frost Peaks', 'The Volcano Rim', 'The Haunted Keep', 'The Shadow Throne'],
     props: 'castle',
-    theme: { sky1: '#2c1a58', sky2: '#120b30', glow: '#c24ae8', ground: '#2c2044', groundTop: '#5a4a86', far: '#1c1238', near: '#2c1c48' },
+    theme: { sky1: '#2c1a58', glow: '#c24ae8', far: '#1c1238', near: '#2c1c48' },
     enemies: {
       grunt:   { name: 'Skeleton',  color: '#d8d4c8', color2: '#8a8578', accessory: 'ribs', signature: 'revive', body: 'skeleton' },
       stinger: { name: 'Imp',       color: '#d4503a', color2: '#4d1408', accessory: 'imphorns', signature: 'blink', body: 'imp' },
