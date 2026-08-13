@@ -52,7 +52,9 @@ const Game = (() => {
     viewH = SH / scale;
     worldOffY = Math.max(0, viewH - GROUND_Y - 380); // keep the fight clear of the touch controls
     const budget = IS_TOUCH ? 1300000 : 2400000; // max world-buffer pixels
-    RES = Math.max(0.5, Math.min(scale * DPR, 3, Math.sqrt(budget / (viewW * viewH))));
+    // quantized to 0.25 steps: continuous window drags would otherwise mint a
+    // fresh float RES per event and re-bake (and leak) every cached canvas
+    RES = Math.max(0.5, Math.min(3, Math.round(Math.min(scale * DPR, 3, Math.sqrt(budget / (viewW * viewH))) * 4) / 4));
     lowW = Math.max(160, Math.ceil(viewW * RES));
     lowH = Math.max(120, Math.ceil(viewH * RES));
     lowCvs.width = lowW;
@@ -2329,13 +2331,14 @@ const Game = (() => {
     const key = ch + '|' + wc;
     let s = glyphCache[key];
     if (s) return s;
+    const GS = Math.max(2, RES); // glyphs draw at 12x14 world units
     const pc = document.createElement('canvas');
-    pc.width = 24; pc.height = 28;
+    pc.width = Math.ceil(12 * GS); pc.height = Math.ceil(14 * GS);
     const q = pc.getContext('2d');
-    q.font = '800 16px Verdana, sans-serif';
+    q.font = '800 ' + (8 * GS) + 'px Verdana, sans-serif';
     q.textAlign = 'center'; q.textBaseline = 'middle';
-    q.fillStyle = ramp(wc).out; q.fillText(ch, 13.8, 15.8);
-    q.fillStyle = wc; q.fillText(ch, 12, 14);
+    q.fillStyle = ramp(wc).out; q.fillText(ch, 6 * GS + 0.9 * GS, 7 * GS + 0.9 * GS);
+    q.fillStyle = wc; q.fillText(ch, 6 * GS, 7 * GS);
     return glyphCache[key] = pc;
   }
 
@@ -4048,7 +4051,19 @@ const Game = (() => {
     g.restore();
   }
 
+  // when RES actually changes, drop every RES-keyed bake — otherwise the old
+  // resolutions' multi-megabyte canvases would be retained for the session
+  let bakedRes = -1;
+  function invalidateBakes() {
+    if (bakedRes === RES) return;
+    bakedRes = RES;
+    for (const k in cliffStrips) delete cliffStrips[k];
+    for (const k in floraCache) delete floraCache[k];
+    for (const k in glyphCache) delete glyphCache[k];
+  }
+
   function render() {
+    invalidateBakes();
     // --- far pass: soft (tilt-shift) background layers ---
     let ox = 0, oy = 0;
     if (shakeT > 0) { ox = rand(-1, 1) * shakeMag * shakeT * 4; oy = rand(-1, 1) * shakeMag * shakeT * 4; }
