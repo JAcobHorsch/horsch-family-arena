@@ -265,7 +265,12 @@ const Game = (() => {
     if (e.state === 'windup') { e.state = 'approach'; e.cd = 0.5; }
     addFloat(e.x, e.y - e.h - 14, Math.round(dmg), '#ffd977');
     burst(e.x, e.y - e.h * 0.55, '#ffcf7a', heavy ? 10 : 5, heavy ? 320 : 200);
-    if (heavy && Math.random() < 0.35) impactWord(e.x + rand(-10, 10), e.y - e.h * 0.6, IMPACT_WORDS[Math.floor(Math.random() * IMPACT_WORDS.length)]);
+    if (heavy && Math.random() < 0.35) {
+      // a maxed weapon shouts in its own voice when one is registered for it
+      const fxw = player.upg.weapon >= 5 && window.WEAPON_FX && window.WEAPON_FX[player.cdef.id];
+      const words = (fxw && fxw.words) || IMPACT_WORDS;
+      impactWord(e.x + rand(-10, 10), e.y - e.h * 0.6, words[Math.floor(Math.random() * words.length)]);
+    }
     spawnLight(e.x, e.y - e.h * 0.55, heavy ? 95 : 55, '#ffcf7a', heavy ? 0.5 : 0.3);
     player.energy = Math.min(100, player.energy + 6);
     // combo: consecutive hits without taking damage multiply coin drops
@@ -775,13 +780,19 @@ const Game = (() => {
             // tier-gated impact FX — the ladder's payoff lands on the enemy
             const wt = p.upg.weapon;
             if (wt >= 3) {
-              const wE = p.cdef.weaponEnergy || p.cdef.accent;
+              // per-weapon FX data when the art module ships it (element colors and
+              // whether that element falls or rises), else the character's own energy
+              const fx = window.WEAPON_FX && window.WEAPON_FX[p.cdef.id];
+              const wE = (fx && fx.e) || p.cdef.weaponEnergy || p.cdef.accent;
+              const rises = fx ? !fx.grav : true;
               const iy = e.y - e.h * 0.55;
-              burst(e.x, iy, wE, wt >= 5 ? 10 : wt >= 4 ? 5 : 3, wt >= 5 ? 300 : 200, false);
+              burst(e.x, iy, wE, wt >= 5 ? 10 : wt >= 4 ? 5 : 3, wt >= 5 ? 300 : 200, !rises);
               if (wt >= 4) spawnLight(e.x, iy, wt >= 5 ? 110 : 70, wE, wt >= 5 ? 0.5 : 0.35);
-              // tier 5 adds a second shower in the weapon's own color that falls,
-              // so the hit throws debris as well as light
-              if (wt >= 5) burst(e.x, iy, (p.cdef.weaponColors && p.cdef.weaponColors[4]) || wE, 4, 180, true);
+              // tier 5 throws debris as well as light
+              if (wt >= 5) {
+                const core = (fx && fx.c) || (p.cdef.weaponColors && p.cdef.weaponColors[4]) || wE;
+                burst(e.x, iy, core, 4, 180, true);
+              }
             }
             const wb = p.cdef.weaponBurn;
             if (wb && p.upg.weapon >= wb.tier && enemies.includes(e) && e.state !== 'pile') e.burnT = wb.dur;
@@ -2365,6 +2376,7 @@ const Game = (() => {
     tier: 0, hx: 0, hy: 0, bx: 0, by: 0, ffx: 0, ffy: 0, bfx: 0, bfy: 0,
     shx: 0, shy: 0, hipx: 0, hipy: 0, attackKey: null, attackExt: 0,
     animT: 0, walkCyc: 0, isPlayer: false, colors: null, energy: '#ffd24a',
+    facing: 1, // the fighter transform is already flipped; text art un-mirrors with this
     ramp: ramp, INK: '#14101a',
   };
   const actx = {
@@ -2373,7 +2385,7 @@ const Game = (() => {
     hipx: 0, hipy: 0, shx: 0, shy: 0, fhx: 0, fhy: 0, bhx: 0, bhy: 0,
     ffx: 0, ffy: 0, bfx: 0, bfy: 0, lean: 0,
     color: '#ffffff', color2: '#888888', accent: '#ffd24a', skin: '#e8b58a',
-    weaponTier: 0, armorTier: 0,
+    weaponTier: 0, armorTier: 0, blush: false, facing: 1,
     ramp: ramp, limbStroke: limbStroke, INK: '#14101a',
   };
   function poseInto(c, o, hip, sh, F, B, FF, BF, lean, ak) {
@@ -2393,6 +2405,7 @@ const Game = (() => {
     wctx.hx = F[0]; wctx.hy = F[1];
     wctx.bx = B[0]; wctx.by = B[1];
     wctx.isPlayer = !!o.isPlayer;
+    wctx.facing = o.facing < 0 ? -1 : 1;
     wctx.colors = o.weaponColors || WEAPON_COLORS;
     wctx.energy = o.weaponEnergy || o.accent || '#ffd24a';
     return wctx;
@@ -2410,6 +2423,8 @@ const Game = (() => {
     actx.accent = o.accent; actx.skin = o.skin;
     actx.weaponTier = o.weaponTier || 0;
     actx.armorTier = o.armorTier || 0;
+    actx.blush = !!o.blush;
+    actx.facing = o.facing < 0 ? -1 : 1;
     return actx;
   }
 
