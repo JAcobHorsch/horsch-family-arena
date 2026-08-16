@@ -51,8 +51,10 @@
   const BR_HALO1 = '#37b34a26';
   const BR_HALO2 = '#37b34a00';
   const TOOTH_MOTES = [-6, -8, 0, 1.2, 0, -11, 0.3, 1, 6, -8, 0.55, 1.3, 3, -6, 0.8, 0.9];
-  const CHOMP_N = [3, 3, 6, 7, 7];      // fangs per jaw, by tier
-  const CHOMP_SPAN = [12, 12, 14, 17, 22];
+  // fangs per jaw and jaw span by tier. T5 trades count for size — five giant fangs
+  // leave a white core inside the 1.6-wide spectral rim where seven would go solid green.
+  const CHOMP_N = [3, 3, 6, 7, 5];
+  const CHOMP_SPAN = [12, 12, 14, 20, 22];
   // isla — arms
   const IS_SKIN = '#e8b58a'; // == cdef.skin; the biceps are her own flesh
   const IS_PINK = '#f2a3c2';
@@ -585,7 +587,8 @@
       const jx = w.hx + (t5 ? 7 : 5), jy = w.hy;
       const open = t5 ? (1 - ext) * 11 + 3 : (1 - ext) * 7 + 2;
       const n = CHOMP_N[w.tier - 1], span = CHOMP_SPAN[w.tier - 1];
-      const step = span / n, wide = step * 0.5;
+      // 0.44 not 0.5: leaves a gap so the T4/T5 green rim reads per fang, not as a slab
+      const step = span / n, wide = step * 0.44;
       g.save(); // owns the lineJoin change below
       if (t5) g.globalAlpha = 0.9; // spectral jaws
       g.fillStyle = BR_TOOTH;

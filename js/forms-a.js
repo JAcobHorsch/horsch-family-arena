@@ -154,9 +154,9 @@
     g.fillStyle = TODD_BEARD; g.strokeStyle = BR.out; g.lineWidth = 2;
     g.beginPath();
     g.moveTo(4, -84 - beardUp);
-    g.quadraticCurveTo(-10 + bs, -70 - beardUp, -6 + bs, -52 - beardUp);
-    g.quadraticCurveTo(4 + bs, -43 - beardUp, 14 + bs, -52 - beardUp);
-    g.quadraticCurveTo(18, -70 - beardUp, 12, -84 - beardUp);
+    g.quadraticCurveTo(-8 + bs, -70 - beardUp, -6 + bs, -54 - beardUp);
+    g.quadraticCurveTo(4 + bs, -47 - beardUp, 14 + bs, -54 - beardUp);
+    g.quadraticCurveTo(16, -70 - beardUp, 12, -84 - beardUp);
     g.closePath(); g.fill(); g.stroke();
     g.strokeStyle = TODD_STRIA; g.lineWidth = 1.2;
     g.beginPath();
@@ -458,12 +458,13 @@
     g.stroke();
     const swg = Math.sin(t * (a.moving ? 4.4 : 2.2)) * (a.moving ? 0.7 : 0.44);
     const sw2 = Math.sin(t * (a.moving ? 4.4 : 2.2) + 2.1) * (a.moving ? 0.7 : 0.44);
+    // toys hang off the crossbar ENDS so they clear the canopy and his head
     g.strokeStyle = a.INK; g.lineWidth = 1;
     g.beginPath();
-    g.moveTo(-6, -100); g.lineTo(-6 + Math.sin(swg) * 10, -100 + Math.cos(swg) * 10);
-    g.moveTo(7, -100); g.lineTo(7 + Math.sin(sw2) * 11, -100 + Math.cos(sw2) * 11);
+    g.moveTo(-15, -99); g.lineTo(-15 - Math.sin(swg) * 12, -99 + Math.cos(swg) * 12);
+    g.moveTo(15, -99); g.lineTo(15 + Math.sin(sw2) * 13, -99 + Math.cos(sw2) * 13);
     g.stroke();
-    const stx = -6 + Math.sin(swg) * 10, sty = -100 + Math.cos(swg) * 10;
+    const stx = -15 - Math.sin(swg) * 12, sty = -99 + Math.cos(swg) * 12;
     g.fillStyle = '#ffd24a';
     g.beginPath();
     g.moveTo(stx, sty - 3); g.lineTo(stx + 0.9, sty - 0.9); g.lineTo(stx + 3, sty - 0.6);
@@ -472,7 +473,7 @@
     g.lineTo(stx - 0.9, sty - 0.9);
     g.closePath(); g.fill();
     g.strokeStyle = '#d43b2f'; g.lineWidth = 2;
-    g.beginPath(); g.arc(7 + Math.sin(sw2) * 11, -100 + Math.cos(sw2) * 11, 2.6, 0, 7); g.stroke();
+    g.beginPath(); g.arc(15 + Math.sin(sw2) * 13, -99 + Math.cos(sw2) * 13, 2.6, 0, 7); g.stroke();
     g.restore();
 
     g.translate(lean * 0.3, 0);
@@ -1152,14 +1153,15 @@
     g.save();
     g.translate(-2, -42 + heave); g.rotate(wrot);
     g.fillStyle = HEN_CREAM; g.strokeStyle = CR.out; g.lineWidth = 2;
-    g.beginPath(); g.ellipse(0, 0, 12 + wsp, 7, 0, 0, 7); g.fill(); g.stroke();
-    g.beginPath(); g.ellipse(3 + wsp * 0.4, 4, 10 + wsp, 6, 0, 0, 7); g.fill(); g.stroke();
-    g.beginPath(); g.ellipse(6 + wsp * 0.7, 8, 8 + wsp, 5, 0, 0, 7); g.fill(); g.stroke();
+    // three lobes stepping down-right — offset far enough not to read as nested rings
+    g.beginPath(); g.ellipse(-2, -5, 12 + wsp, 6, -0.16, 0, 7); g.fill(); g.stroke();
+    g.beginPath(); g.ellipse(3 + wsp * 0.4, 2, 10.5 + wsp, 5.5, -0.1, 0, 7); g.fill(); g.stroke();
+    g.beginPath(); g.ellipse(8 + wsp * 0.7, 9, 9 + wsp, 5, -0.05, 0, 7); g.fill(); g.stroke();
     g.strokeStyle = CR.dk; g.lineWidth = 1.2;
     g.beginPath();
-    g.moveTo(-8, -1); g.lineTo(8 + wsp, 0);
-    g.moveTo(-5, 3); g.lineTo(10 + wsp, 4);
-    g.moveTo(-2, 7); g.lineTo(12 + wsp, 8);
+    g.moveTo(-11, -7); g.lineTo(8 + wsp, -4);
+    g.moveTo(-6, 0); g.lineTo(12 + wsp, 3);
+    g.moveTo(-1, 7); g.lineTo(16 + wsp, 10);
     g.stroke();
     if (slam) {
       g.globalAlpha = (1 - ext) * 0.9;
@@ -1317,14 +1319,14 @@
     g.fillStyle = SUB_WAX; g.strokeStyle = WX.out; g.lineWidth = 2;
     g.beginPath();
     g.moveTo(-20, -4);
-    g.lineTo(-14, -18); g.lineTo(-8, -6); g.lineTo(-1, -18);
-    g.lineTo(6, -6); g.lineTo(13, -18); g.lineTo(20, -4);
+    g.lineTo(-16, -16); g.lineTo(-11, -9); g.lineTo(-5, -18);
+    g.lineTo(1, -10); g.lineTo(7, -18); g.lineTo(13, -10); g.lineTo(17, -16); g.lineTo(20, -4);
     g.closePath(); g.fill(); g.stroke();
     g.strokeStyle = WX.dk; g.lineWidth = 1.2;
     g.beginPath();
-    g.moveTo(-12, -6); g.lineTo(-11, -15);
-    g.moveTo(0, -6); g.lineTo(1, -15);
-    g.moveTo(12, -6); g.lineTo(11, -15);
+    g.moveTo(-13, -5); g.lineTo(-14, -14);
+    g.moveTo(-2, -5); g.lineTo(-3, -15);
+    g.moveTo(10, -5); g.lineTo(11, -14);
     g.stroke();
 
     // 2 bottom bread — the only stratum that does not lean
@@ -1739,22 +1741,23 @@
     }
     if (a.hurt) { lean = -8; fx = 16; fy = -62; bx = -6; by = -66; mop = 4; }
 
-    // 1 the clown hammer, slung across his back
+    // 1 the clown hammer, slung across his back — raised off the spec's hip anchor
+    // so the size-14 forearm capsule doesn't swallow the mallet head entirely
     g.strokeStyle = WD.out; g.lineWidth = 6;
-    g.beginPath(); g.moveTo(-26, -30 + breath); g.lineTo(10, -72 + breath + rise); g.stroke();
+    g.beginPath(); g.moveTo(-32, -46 + breath); g.lineTo(4, -84 + breath + rise); g.stroke();
     g.strokeStyle = LEV_WOOD; g.lineWidth = 4;
-    g.beginPath(); g.moveTo(-26, -30 + breath); g.lineTo(10, -72 + breath + rise); g.stroke();
+    g.beginPath(); g.moveTo(-32, -46 + breath); g.lineTo(4, -84 + breath + rise); g.stroke();
     g.fillStyle = a.ramp(LEV_CRACK).out;
-    g.beginPath(); g.roundRect(-35, -41 + breath, 18, 22, 7); g.fill();
+    g.beginPath(); g.roundRect(-45, -56 + breath, 18, 22, 7); g.fill();
     g.fillStyle = LEV_CRACK;
-    g.beginPath(); g.roundRect(-34, -40 + breath, 16, 20, 6); g.fill();
+    g.beginPath(); g.roundRect(-44, -55 + breath, 16, 20, 6); g.fill();
     g.fillStyle = LEV_PALE;
-    g.fillRect(-34, -35 + breath, 16, 5);
-    g.fillRect(-34, -26 + breath, 16, 5);
+    g.fillRect(-44, -50 + breath, 16, 5);
+    g.fillRect(-44, -41 + breath, 16, 5);
     g.strokeStyle = '#ffffff'; g.lineWidth = 1.4;
     g.beginPath();
-    g.moveTo(-29, -30 + breath); g.lineTo(-23, -30 + breath);
-    g.moveTo(-26, -33 + breath); g.lineTo(-26, -27 + breath);
+    g.moveTo(-39, -45 + breath); g.lineTo(-33, -45 + breath);
+    g.moveTo(-36, -48 + breath); g.lineTo(-36, -42 + breath);
     g.stroke();
 
     // 2 the tiny legs, scurrying double-time
