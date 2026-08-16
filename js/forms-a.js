@@ -1198,11 +1198,11 @@
     g.moveTo(13, -95); g.lineTo(15.5, -88); g.lineTo(14, -85); g.lineTo(12, -88);
     g.closePath(); g.fill();
     g.globalAlpha = 0.8 + 0.2 * Math.sin(t * 5);
-    g.strokeStyle = HEN_TRIM; g.lineWidth = 1.4;
+    g.strokeStyle = HEN_TRIM; g.lineWidth = 1;   // rim on the TIPS only — the comb stays red
     g.beginPath();
-    g.moveTo(8, -93); g.lineTo(10.5, -88);
-    g.moveTo(13, -95); g.lineTo(15.5, -88);
-    g.moveTo(18, -96); g.lineTo(20, -88);
+    g.moveTo(7.4, -91.6); g.lineTo(8.6, -91.6);
+    g.moveTo(12.3, -93.6); g.lineTo(13.7, -93.6);
+    g.moveTo(17.3, -94.6); g.lineTo(18.8, -94.6);
     g.stroke();
     g.globalAlpha = 1;
     g.fillStyle = HEN_COMB; g.strokeStyle = CM.out; g.lineWidth = 1.6;
