@@ -43,6 +43,7 @@
   const S_HALO_1 = '#e0b8ff1e';
   // jordan: athletic tape -> clean wrap -> leather strapwork -> trainer -> legend
   const O_TAPE = '#b8b0a0';
+  const O_SCUFF = 'rgba(214,206,190,0.9)'; // tier 1 leaves dust, not light
   const O_WRAP = '#e6e2d8';
   const O_LEATHER = '#9b5031';
   const O_ORANGE = '#e8784a';
@@ -513,38 +514,78 @@
       const ext = w.attackExt || 0, kicking = w.attackKey === 'kick';
       g.lineCap = 'round'; g.lineJoin = 'round';
       switch (w.tier) {
-        case 1: { // FRONT KICK — taped ankles, zero light
+        case 1: { // FRONT KICK — taped ankles; the technique is a straight thrust
           const R = w.ramp(O_TAPE);
           jordanTape(g, fx, fy, R);
           jordanTape(g, bx, by, R);
+          if (kicking && ext > 0.25) { // a plain scuff line, no light at this rung
+            g.globalAlpha = 0.4 * ext;
+            g.strokeStyle = O_SCUFF; g.lineWidth = 2;
+            g.beginPath();
+            g.moveTo(fx - 15 * ext, fy + 1); g.lineTo(fx - 4, fy + 1);
+            g.stroke();
+            g.globalAlpha = 1;
+          }
           break;
         }
-        case 2: { // ROUNDHOUSE — the dressing climbs the shin
+        case 2: { // ROUNDHOUSE — shin wrap, and the foot sweeps a horizontal arc
           const R = w.ramp(O_WRAP);
           jordanWrap(g, fx, fy, R);
           jordanWrap(g, bx, by, R);
+          if (kicking && ext > 0.15) {
+            g.globalAlpha = 0.5 * ext;
+            g.strokeStyle = O_WRAP; g.lineWidth = 3.4;
+            g.beginPath();
+            g.moveTo(fx - 30 * ext, fy + 10 * ext);
+            g.quadraticCurveTo(fx - 16 * ext, fy + 3, fx - 3, fy - 1);
+            g.stroke();
+            g.globalAlpha = 0.75 * ext;
+            g.strokeStyle = WHITE; g.lineWidth = 1.2;
+            g.beginPath();
+            g.moveTo(fx - 26 * ext, fy + 8 * ext);
+            g.quadraticCurveTo(fx - 14 * ext, fy + 2, fx - 3, fy - 2);
+            g.stroke();
+            g.globalAlpha = 1;
+          }
           break;
         }
-        case 3: { // SPINNING BACK KICK — orange camera straps + brass buckle
+        case 3: { // SPINNING BACK KICK — straps, plus the 270° ring the spin carves
           const R = w.ramp(O_LEATHER), B = w.ramp(O_BRASS);
           jordanStraps(g, fx, fy, R, B);
           jordanStraps(g, bx, by, R, B);
+          if (kicking && ext > 0.15) {
+            // the spin pivots on the body, not the foot — centre it on the hip
+            const cx = w.hipx, cy = w.hipy;
+            g.globalAlpha = 0.42 * ext;
+            g.strokeStyle = O_LEATHER; g.lineWidth = 3.4;
+            g.beginPath(); g.arc(cx, cy, 26, 2.6, 2.6 + 4.7 * ext); g.stroke();
+            g.globalAlpha = 0.7 * ext;
+            g.strokeStyle = WHITE; g.lineWidth = 1.3;
+            g.beginPath(); g.arc(cx, cy, 29, 2.6, 2.6 + 4.7 * ext); g.stroke();
+            g.globalAlpha = 1;
+          }
           g.globalAlpha = 0.5 + 0.5 * Math.sin(t * 7);
           g.fillStyle = WHITE;
           star4(g, fx - 3.8, fy - 3, 1.3);
           g.globalAlpha = 1;
           break;
         }
-        case 4: { // FLYING SCISSOR KICK — LED soles are the first light
+        case 4: { // FLYING SCISSOR KICK — LED soles, and BOTH feet leave streaks
           const R = w.ramp(O_TRAINER);
           jordanHitop(g, fx, fy, R, t, 0);
           jordanHitop(g, bx, by, R, t, 1.6);
-          if (kicking && ext > 0.2) { // motion streak behind the kicking foot
-            g.globalAlpha = 0.5;
-            g.strokeStyle = WHITE; g.lineWidth = 2.4;
+          if (kicking && ext > 0.15) { // the two streaks cross: that IS the scissor
+            g.globalAlpha = 0.6 * ext;
+            g.strokeStyle = WHITE; g.lineWidth = 2.6;
             g.beginPath();
-            g.moveTo(fx - 24 * ext, fy - 2);
-            g.quadraticCurveTo(fx - 10 * ext, fy - 8 * ext, fx - 2, fy - 4);
+            g.moveTo(fx - 30 * ext, fy + 12 * ext);
+            g.quadraticCurveTo(fx - 13 * ext, fy - 2, fx - 2, fy - 4);
+            g.stroke();
+            g.globalAlpha = 0.4 * ext;
+            g.strokeStyle = O_TRAINER; g.lineWidth = 2.2;
+            g.beginPath();
+            g.moveTo(bx - 20 * ext, by - 16 * ext);
+            g.quadraticCurveTo(bx - 8 * ext, by - 5, bx + 2, by - 1);
             g.stroke();
             g.globalAlpha = 1;
           }
@@ -564,6 +605,23 @@
           g.fill();
           g.strokeStyle = WHITE; g.lineWidth = 1.2;
           g.beginPath(); g.moveTo(fx - 4.6, fy - 1); g.lineTo(fx + 5, fy - 1); g.stroke();
+          if (kicking && ext > 0.1) {
+            // TWO counter-rotating rings on the hip — the 720 is two revolutions,
+            // and it has to out-drama the tier-3 spin
+            const cx = w.hipx, cy = w.hipy;
+            g.globalAlpha = 0.62 * ext;
+            g.strokeStyle = WHITE; g.lineWidth = 3.2;
+            g.beginPath(); g.arc(cx, cy, 27, 2.4, 2.4 + 6.28 * ext); g.stroke();
+            g.globalAlpha = 0.45 * ext;
+            g.strokeStyle = O_PETAL; g.lineWidth = 4.4;
+            g.beginPath(); g.arc(cx, cy, 36, 2.2, 2.2 - 6.28 * ext, true); g.stroke();
+            // afterimage feet trailing the spin
+            g.globalAlpha = 0.3 * ext;
+            g.fillStyle = WHITE;
+            g.beginPath(); g.ellipse(fx - 15 * ext, fy + 6 * ext, 5.5, 2.8, -0.5, 0, 7); g.fill();
+            g.beginPath(); g.ellipse(fx - 28 * ext, fy + 12 * ext, 4.2, 2.2, -0.8, 0, 7); g.fill();
+            g.globalAlpha = 1;
+          }
           g.fillStyle = WHITE;
           for (let i = 0; i < JORDAN_FLARES.length; i += 4) { // lens-flare sparks
             const cyc = (t * 0.55 + JORDAN_FLARES[i + 2]) % 1;
