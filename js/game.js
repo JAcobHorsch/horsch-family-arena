@@ -747,10 +747,15 @@ const Game = (() => {
         const d = a.def;
         if (!a.slashed) {
           a.slashed = true;
+          // the arc grows with the weapon tier and takes its energy color once
+          // the weapon starts glowing, so upgrades read in the swing itself
+          const wt0 = p.upg.weapon;
           slashes.push({
             x: p.x + p.facing * ((d.range || 90) * 0.5), y: p.y - 52,
             facing: p.facing, t: 0.16, max: 0.16,
-            size: (d.range || 100) * 0.7, color: p.cdef.accent, up: a.key === 'B',
+            size: (d.range || 100) * 0.7 * (wt0 > 1 ? 1 + (wt0 - 1) * 0.1 : 1),
+            color: wt0 >= 4 ? (p.cdef.weaponEnergy || p.cdef.accent) : p.cdef.accent,
+            up: a.key === 'B',
           });
         }
         for (const e of [...enemies]) {
@@ -767,6 +772,17 @@ const Game = (() => {
             a.hits.add(e);
             const dir = d.radius ? (e.x >= p.x ? 1 : -1) : p.facing;
             hitEnemy(e, d.dmg * st.dmg * (p.buffT > 0 ? p.buffDmg : 1) * (p.pwGiantT > 0 ? 1.5 : 1), dir * d.kb, d.kbY, a.key === 'X3' || a.key === 'B');
+            // tier-gated impact FX — the ladder's payoff lands on the enemy
+            const wt = p.upg.weapon;
+            if (wt >= 3) {
+              const wE = p.cdef.weaponEnergy || p.cdef.accent;
+              const iy = e.y - e.h * 0.55;
+              burst(e.x, iy, wE, wt >= 5 ? 10 : wt >= 4 ? 5 : 3, wt >= 5 ? 300 : 200, false);
+              if (wt >= 4) spawnLight(e.x, iy, wt >= 5 ? 110 : 70, wE, wt >= 5 ? 0.5 : 0.35);
+              // tier 5 adds a second shower in the weapon's own color that falls,
+              // so the hit throws debris as well as light
+              if (wt >= 5) burst(e.x, iy, (p.cdef.weaponColors && p.cdef.weaponColors[4]) || wE, 4, 180, true);
+            }
             const wb = p.cdef.weaponBurn;
             if (wb && p.upg.weapon >= wb.tier && enemies.includes(e) && e.state !== 'pile') e.burnT = wb.dur;
           }
@@ -2342,6 +2358,61 @@ const Game = (() => {
     return glyphCache[key] = pc;
   }
 
+  // Weapon art lives in js/weapons-*.js and ascended bodies in js/forms-*.js,
+  // registered on window.WEAPON_BODIES / window.FORM_BODIES. These two contexts
+  // are reused every frame so drawFighter still allocates nothing.
+  const wctx = {
+    tier: 0, hx: 0, hy: 0, bx: 0, by: 0, ffx: 0, ffy: 0, bfx: 0, bfy: 0,
+    shx: 0, shy: 0, hipx: 0, hipy: 0, attackKey: null, attackExt: 0,
+    animT: 0, walkCyc: 0, isPlayer: false, colors: null, energy: '#ffd24a',
+    ramp: ramp, INK: '#14101a',
+  };
+  const actx = {
+    walkCyc: 0, animT: 0, attackKey: null, attackExt: 0, hurt: false,
+    moving: false, onGround: true, crouch: false,
+    hipx: 0, hipy: 0, shx: 0, shy: 0, fhx: 0, fhy: 0, bhx: 0, bhy: 0,
+    ffx: 0, ffy: 0, bfx: 0, bfy: 0, lean: 0,
+    color: '#ffffff', color2: '#888888', accent: '#ffd24a', skin: '#e8b58a',
+    weaponTier: 0, armorTier: 0,
+    ramp: ramp, limbStroke: limbStroke, INK: '#14101a',
+  };
+  function poseInto(c, o, hip, sh, F, B, FF, BF, lean, ak) {
+    c.hipx = hip[0]; c.hipy = hip[1];
+    c.shx = sh[0]; c.shy = sh[1];
+    c.ffx = FF[0]; c.ffy = FF[1];
+    c.bfx = BF[0]; c.bfy = BF[1];
+    c.attackKey = ak;
+    c.attackExt = o.attackExt || 0;
+    c.animT = o.animT || 0;
+    c.walkCyc = o.walkCyc || 0;
+    return c;
+  }
+  function weaponCtx(o, tier, hip, sh, F, B, FF, BF, lean, ak) {
+    poseInto(wctx, o, hip, sh, F, B, FF, BF, lean, ak);
+    wctx.tier = tier;
+    wctx.hx = F[0]; wctx.hy = F[1];
+    wctx.bx = B[0]; wctx.by = B[1];
+    wctx.isPlayer = !!o.isPlayer;
+    wctx.colors = o.weaponColors || WEAPON_COLORS;
+    wctx.energy = o.weaponEnergy || o.accent || '#ffd24a';
+    return wctx;
+  }
+  function formCtx(o, hip, sh, F, B, FF, BF, lean, ak) {
+    poseInto(actx, o, hip, sh, F, B, FF, BF, lean, ak);
+    actx.fhx = F[0]; actx.fhy = F[1];
+    actx.bhx = B[0]; actx.bhy = B[1];
+    actx.lean = lean;
+    actx.hurt = !!o.hurt;
+    actx.moving = !!o.moving;
+    actx.onGround = o.onGround !== false;
+    actx.crouch = !!o.crouch;
+    actx.color = o.color; actx.color2 = o.color2;
+    actx.accent = o.accent; actx.skin = o.skin;
+    actx.weaponTier = o.weaponTier || 0;
+    actx.armorTier = o.armorTier || 0;
+    return actx;
+  }
+
   function drawFighter(g, o) {
     // o: x,y feet in world coords; palette + pose fields
     const cf = o.crouch ? 0.6 : 1;
@@ -2448,6 +2519,13 @@ const Game = (() => {
     const torsoCol = look.shirtless ? o.skin : o.color;
     const backArmCol = look.shirtless ? ramp(o.skin).dk : o.color2;
     const frontArmCol = look.shirtless ? o.skin : o.color;
+
+    // a registered final form owns the entire ascended body; the legacy
+    // look-flag bodies below stay as the fallback for anything unregistered
+    const FB = o.ascended && window.FORM_BODIES && window.FORM_BODIES[o.charId];
+    if (FB) {
+      FB(g, formCtx(o, hip, sh, frontHand, backHand, frontFoot, backFoot, lean, ak));
+    } else {
 
     // back limbs
     if (!look.firetruck) {
@@ -2965,7 +3043,10 @@ const Game = (() => {
       const wc = (o.weaponColors && o.weaponColors[tier - 1]) || WEAPON_COLORS[tier - 1];
       const chid = o.charId || '';
       const F = frontHand;
-      if (o.weaponStyle === 'club' && chid === 'jacob') {
+      const WB = window.WEAPON_BODIES && window.WEAPON_BODIES[chid];
+      if (WB && WB.under) {
+        WB.under(g, weaponCtx(o, tier, hip, sh, F, backHand, frontFoot, backFoot, lean, ak));
+      } else if (o.weaponStyle === 'club' && chid === 'jacob') {
         // plumbing tools: tier 1 plunger, then pipe wrenches — gold at the top
         g.save(); g.translate(F[0], F[1]); g.rotate(-0.7 + (o.attackKey ? (o.attackExt || 0) * 1.2 : 0));
         if (tier === 1) {
@@ -3247,7 +3328,10 @@ const Game = (() => {
       const wc = (o.weaponColors && o.weaponColors[tier - 1]) || WEAPON_COLORS[tier - 1];
       const chid = o.charId || '';
       const F = frontHand;
-      if (o.weaponStyle === 'none' && chid === 'todd') {
+      const WB = window.WEAPON_BODIES && window.WEAPON_BODIES[chid];
+      if (WB) {
+        if (WB.over) WB.over(g, weaponCtx(o, tier, hip, sh, F, backHand, frontFoot, backFoot, lean, ak));
+      } else if (o.weaponStyle === 'none' && chid === 'todd') {
         // knuckle wraps over both mitts
         const fr = look.bigFists ? 8 : 3.6;
         const WR = ramp('#f2ede0');
@@ -3336,6 +3420,8 @@ const Game = (() => {
         g.beginPath(); g.arc(F[0] + 2.2, F[1] - 4.8 - chatter, 0.6, 0, 7); g.fill();
       }
     }
+
+    } // end legacy body (see FORM_BODIES branch above)
 
     g.restore();
 
@@ -3655,7 +3741,9 @@ const Game = (() => {
           armorTier: p.upg.armor,
           hairStyle: p.cdef.hairStyle, hairColor: p.cdef.hairColor, charId: p.cdef.id, blush: p.cdef.blush,
           stretchY: p.landT > 0 ? 0.9 : (!p.onGround && p.vy < -160 ? 1.07 : 1),
+          isPlayer: true,
           weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, weaponColors: p.cdef.weaponColors,
+          weaponEnergy: p.cdef.weaponEnergy,
           weaponWord: p.upg.weapon > 0 ? trackMeta(p.cdef, 'weapon').tiers[p.upg.weapon - 1].split(' ')[0] : '',
           ascended: p.ascended,
           look: p.ascended ? p.cdef.finalForm.look : p.cdef.baseLook,
@@ -4147,6 +4235,7 @@ const Game = (() => {
       crouch: false, attackKey: null, attackExt: 0,
       hurt: false, flash: 0, frozen: false, weaponTier: Save.upg(cdef.id).weapon, weaponStyle: cdef.weaponStyle, weaponColors: cdef.weaponColors, ascended,
       hairStyle: cdef.hairStyle, hairColor: cdef.hairColor, charId: cdef.id, blush: cdef.blush,
+      isPlayer: true, weaponEnergy: cdef.weaponEnergy, // portraits are showcases: let tier 5 glow
       look: ascended ? cdef.finalForm.look : cdef.baseLook,
     });
   }

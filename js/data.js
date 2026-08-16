@@ -79,6 +79,8 @@ const CHARACTERS = [
     // Powerhouse: every hit is a truck; he just doesn't hurry.
     hp: 130, speed: 255, dmg: 1.35, atkSpeed: 1.15,
     weaponStyle: 'none',
+    weaponColors: ['#8a6a48', '#c9963a', '#9aa0ae', '#ba5a2d', '#ff7a2c'],
+    weaponEnergy: '#ff3b1e',
     special: {
       type: 'projectile', name: 'Diabetes Cry',
       desc: 'Chugs pure sugar — his supercharged pancreas fires insulin needles out of his body in both directions.',
@@ -106,6 +108,8 @@ const CHARACTERS = [
     // All-rounder: dependable in every column.
     hp: 115, speed: 315, dmg: 1.05, atkSpeed: 0.98,
     weaponStyle: 'book',
+    weaponColors: ['#9a8a72', '#c94f3f', '#3a6b52', '#a586c1', '#e0b8ff'],
+    weaponEnergy: '#e0b8ff',
     special: {
       type: 'projectile', name: 'Book Throw',
       desc: 'Hurls an overdue library book — every enemy it smacks owes a late fee (bonus money per hit).',
@@ -138,6 +142,8 @@ const CHARACTERS = [
     // Speedster: fastest feet in the family, glass jaw.
     hp: 92, speed: 380, dmg: 0.9, atkSpeed: 0.78,
     weaponStyle: 'feet',
+    weaponColors: ['#b8b0a0', '#e6e2d8', '#9b5031', '#bab7c1', '#ffffff'],
+    weaponEnergy: '#ffffff',
     special: {
       type: 'flash', name: 'Photography',
       desc: 'Snaps a photo — the camera flash sears everything in front of him and leaves enemies seeing spots.',
@@ -169,6 +175,8 @@ const CHARACTERS = [
     // Tank: an absolute unit; enemies chip at him all day.
     hp: 165, speed: 250, dmg: 1.05, atkSpeed: 1.05,
     weaponStyle: 'blade',
+    weaponColors: ['#b0a068', '#e8c84a', '#4a505c', '#3c9eb1', '#4adbe8'],
+    weaponEnergy: '#4adbe8',
     special: {
       type: 'wave', name: 'Power Gulp',
       desc: 'Chugs a gallon of milk — the mighty swallow releases bone-rattling shockwaves in both directions.',
@@ -202,7 +210,8 @@ const CHARACTERS = [
     // Plumber archetype: maxed out in every aspect. The most powerful archetype.
     hp: 150, speed: 370, dmg: 1.3, atkSpeed: 0.8,
     weaponStyle: 'club',
-    weaponColors: ['#c9ccd8', '#b87333', '#dfe3e8', '#8a4ae8', '#ffd24a'],
+    weaponColors: ['#c98d48', '#c9ccd8', '#b87333', '#ba9842', '#ffd24a'],
+    weaponEnergy: '#ffd24a',
     special: {
       type: 'projectile', name: 'Volleyball Spike',
       desc: 'Spikes a volleyball that rockets down and ricochets through the enemy line. Upgrades make it faster and meaner.',
@@ -236,7 +245,8 @@ const CHARACTERS = [
     // Powerhouse: every hit lands like a dropped Tonka truck.
     hp: 120, speed: 270, dmg: 1.32, atkSpeed: 1.12,
     weaponStyle: 'club',
-    weaponColors: ['#ffd24a', '#4ab2e8', '#e8524a', '#37b34a', '#ff4a92'],
+    weaponColors: ['#bcb24c', '#4ab2e8', '#e8742a', '#aa3e42', '#e8524a'],
+    weaponEnergy: '#e8524a',
     special: {
       type: 'projectile', name: 'Chicken Throw',
       desc: 'Throws a live chicken. It flaps, it panics, it hurts everyone it meets.',
@@ -270,6 +280,8 @@ const CHARACTERS = [
     // All-rounder: dependable in every column.
     hp: 112, speed: 320, dmg: 1.08, atkSpeed: 0.95,
     weaponStyle: 'sandwich',
+    weaponColors: ['#cbb98e', '#e0a860', '#f0c084', '#ba9842', '#ffd24a'],
+    weaponEnergy: '#e8a020',
     special: {
       type: 'projectile', name: 'Brooks Toss',
       desc: 'Throws her son Brooks like a boomerang. He hits everything twice — going out AND coming back. He loves it.',
@@ -303,6 +315,8 @@ const CHARACTERS = [
     // Terrible archetype: the worst at everything, on purpose.
     hp: 70, speed: 210, dmg: 0.55, atkSpeed: 1.35,
     weaponStyle: 'swat',
+    weaponColors: ['#c9c9d4', '#d4d4de', '#dfdfe8', '#e8e8f0', '#f4f4fa'],
+    weaponEnergy: '#e8e8f0',
     special: {
       type: 'oops', name: 'Diarrhea',
       desc: 'It goes down her own leg. Does nothing to enemies. Hurts Erika. Upgrades only mean more diarrhea.',
@@ -336,7 +350,8 @@ const CHARACTERS = [
     // Tank: hard to move, harder to stop.
     hp: 158, speed: 245, dmg: 1.12, atkSpeed: 1.1,
     weaponStyle: 'club',
-    weaponColors: ['#8a6a48', '#cfc4a8', '#7a5230', '#8d8574', '#ff4a92'],
+    weaponColors: ['#a09076', '#e3dcc4', '#6a4a2c', '#ba3975', '#ff4a92'],
+    weaponEnergy: '#ff4a92',
     special: {
       type: 'car', name: 'Camaro Crash',
       desc: 'Whistles once — his Camaro comes screaming through and flattens everything in its path.',
@@ -370,6 +385,8 @@ const CHARACTERS = [
     // All-rounder: dependable under any alias.
     hp: 118, speed: 318, dmg: 1.06, atkSpeed: 0.97,
     weaponStyle: 'letters',
+    weaponColors: ['#d8d4c8', '#b87333', '#e3dcc4', '#9a3fbf', '#ffd24a'],
+    weaponEnergy: '#c24ae8',
     special: {
       type: 'shout', name: "I'M NOT BUYING YOU A NEW MINIVAN SAMANTHA!",
       desc: 'He means it. A shockwave of pure dad-budget fury staggers everyone nearby.',
@@ -408,6 +425,8 @@ const CHARACTERS = [
     // Firefighter archetype: tank stats, turnout gear, red helmet.
     hp: 162, speed: 248, dmg: 1.1, atkSpeed: 1.05,
     weaponStyle: 'blade',
+    weaponColors: ['#9aa0ae', '#d43b2f', '#dfe3e8', '#3c82b1', '#f2ee4a'],
+    weaponEnergy: '#4ab2e8',
     enemiesOnFire: true, // every enemy Tim faces is already ablaze
     baseLook: { helmet: true, helmetColor: '#d43b2f' },
     special: {
@@ -444,6 +463,8 @@ const CHARACTERS = [
     // All-rounder: graceful, efficient, always finishing something.
     hp: 114, speed: 322, dmg: 1.05, atkSpeed: 0.96,
     weaponStyle: 'staff',
+    weaponColors: ['#c9a0ba', '#e0c070', '#d444b8', '#3c9eb1', '#4adbe8'],
+    weaponEnergy: '#a8f4ec',
     special: {
       type: 'projectile', name: 'Volleyball Set',
       desc: 'A flawless, graceful set... straight up. When the ball lands, it detonates like a grenade.',
@@ -483,6 +504,8 @@ const CHARACTERS = [
     // Baby archetype: cannot walk. Maxed stats. Incredibly powerful.
     hp: 145, speed: 300, dmg: 1.4, atkSpeed: 0.85,
     weaponStyle: 'muscles',
+    weaponColors: ['#e8b58a', '#e8b58a', '#f2a3c2', '#f4f0e6', '#ffffff'],
+    weaponEnergy: '#f2a3c2',
     baseSize: 0.6,
     baseLook: { crawl: true, baby: true },
     special: {
@@ -519,7 +542,8 @@ const CHARACTERS = [
     // Powerhouse: heavy swings, heavier stares.
     hp: 122, speed: 265, dmg: 1.34, atkSpeed: 1.13,
     weaponStyle: 'blade',
-    weaponColors: ['#b8a888', '#c9ccd8', '#dfe3e8', '#8a4ae8', '#ff7a2c'],
+    weaponColors: ['#8a6a48', '#c9ccd8', '#dfe3e8', '#b85a24', '#ff7a2c'],
+    weaponEnergy: '#ff7a2c',
     weaponBurn: { tier: 5, dur: 3 }, // the Fire Sword ignites on hit
     special: {
       type: 'laser', name: 'Laser Eyes',
@@ -557,6 +581,7 @@ const CHARACTERS = [
     hp: 116, speed: 320, dmg: 1.05, atkSpeed: 0.95,
     weaponStyle: 'blade',
     weaponColors: ['#bfe6f5', '#9fdcff', '#6cc4f0', '#4adbe8', '#e8fbff'],
+    weaponEnergy: '#9fdcff',
     special: {
       type: 'projectile', name: 'Ice Balls',
       desc: 'Fires twin orbs of biting frost that freeze enemies solid.',
@@ -590,6 +615,8 @@ const CHARACTERS = [
     // Speedster: too fast to catch, too bitey to hold.
     hp: 95, speed: 375, dmg: 0.92, atkSpeed: 0.8,
     weaponStyle: 'teeth',
+    weaponColors: ['#fff4dd', '#ffffff', '#ffffff', '#e8fbff', '#ffffff'],
+    weaponEnergy: '#37b34a',
     special: {
       type: 'tornado', name: 'Tornado Brooks',
       desc: 'Spins like a Tasmanian devil — everything nearby gets chewed up and blown away.',
@@ -623,6 +650,7 @@ const CHARACTERS = [
     hp: 85, speed: 250, dmg: 0.75, atkSpeed: 1.25,
     weaponStyle: 'noodle',
     weaponColors: ['#e8d24a', '#4ab2e8', '#e84a92', '#37b34a', '#ff7a2c'],
+    weaponEnergy: '#ffd6e8',
     special: {
       type: 'dive', name: 'Volleyball Dive',
       desc: 'A ball is tossed in from offscreen. He dives. He misses. It hits him in the chest. Upgrades only worsen his timing.',
