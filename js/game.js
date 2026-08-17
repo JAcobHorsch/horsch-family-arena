@@ -2304,8 +2304,6 @@ const Game = (() => {
     g.globalAlpha = 1;
   }
 
-  const WEAPON_COLORS = ['#c9ccd8', '#e6ebf5', '#7fb8ff', '#c47fff', '#ff7f4a'];
-
   // per-color shade ramp, cached forever (bounded by the roster's palette).
   // Outline is a darkened HUE biased toward violet ink, never pure black;
   // highlights mix toward warm white for the painterly sun.
@@ -2387,7 +2385,7 @@ const Game = (() => {
   const wctx = {
     tier: 0, hx: 0, hy: 0, bx: 0, by: 0, ffx: 0, ffy: 0, bfx: 0, bfy: 0,
     shx: 0, shy: 0, hipx: 0, hipy: 0, attackKey: null, attackExt: 0,
-    animT: 0, walkCyc: 0, isPlayer: false, colors: null, energy: '#ffd24a',
+    animT: 0, walkCyc: 0, isPlayer: false, energy: '#ffd24a',
     facing: 1, // the fighter transform is already flipped; text art un-mirrors with this
     ramp: ramp, INK: '#14101a',
   };
@@ -2397,7 +2395,7 @@ const Game = (() => {
     hipx: 0, hipy: 0, shx: 0, shy: 0, fhx: 0, fhy: 0, bhx: 0, bhy: 0,
     ffx: 0, ffy: 0, bfx: 0, bfy: 0, lean: 0,
     color: '#ffffff', color2: '#888888', accent: '#ffd24a', skin: '#e8b58a',
-    weaponTier: 0, armorTier: 0, blush: false, facing: 1,
+    weaponTier: 0, armorTier: 0, facing: 1,
     ramp: ramp, limbStroke: limbStroke, INK: '#14101a',
   };
   function poseInto(c, o, hip, sh, F, B, FF, BF, lean, ak) {
@@ -2418,7 +2416,6 @@ const Game = (() => {
     wctx.bx = B[0]; wctx.by = B[1];
     wctx.isPlayer = !!o.isPlayer;
     wctx.facing = o.facing < 0 ? -1 : 1;
-    wctx.colors = o.weaponColors || WEAPON_COLORS;
     wctx.energy = o.weaponEnergy || o.accent || '#ffd24a';
     return wctx;
   }
@@ -2435,7 +2432,6 @@ const Game = (() => {
     actx.accent = o.accent; actx.skin = o.skin;
     actx.weaponTier = o.weaponTier || 0;
     actx.armorTier = o.armorTier || 0;
-    actx.blush = !!o.blush;
     actx.facing = o.facing < 0 ? -1 : 1;
     return actx;
   }
@@ -3084,271 +3080,8 @@ const Game = (() => {
     // front arm + weapon
     if (!look.chicken && !look.firetruck) limbStroke(g, sh[0] + lean * 0.5, sh[1], frontHand[0], frontHand[1], armW, frontArmCol);
     if (o.weaponTier > 0 && !look.chicken && !look.firetruck) {
-      const tier = o.weaponTier;
-      const wl = 9 + tier * 2.6;
-      const wc = (o.weaponColors && o.weaponColors[tier - 1]) || WEAPON_COLORS[tier - 1];
-      const chid = o.charId || '';
-      const F = frontHand;
-      const WB = window.WEAPON_BODIES && window.WEAPON_BODIES[chid];
-      if (WB && WB.under) {
-        WB.under(g, weaponCtx(o, tier, hip, sh, F, backHand, frontFoot, backFoot, lean, ak));
-      } else if (o.weaponStyle === 'club' && chid === 'jacob') {
-        // plumbing tools: tier 1 plunger, then pipe wrenches — gold at the top
-        g.save(); g.translate(F[0], F[1]); g.rotate(-0.7 + (o.attackKey ? (o.attackExt || 0) * 1.2 : 0));
-        if (tier === 1) {
-          g.strokeStyle = ramp('#c98d48').out; g.lineWidth = 4.4;
-          g.beginPath(); g.moveTo(0, 0); g.lineTo(8.5, 0); g.stroke();
-          g.strokeStyle = '#c98d48'; g.lineWidth = 2.6;
-          g.beginPath(); g.moveTo(0, 0); g.lineTo(8.5, 0); g.stroke();
-          g.fillStyle = ramp('#b03a2f').out;
-          g.beginPath(); g.arc(9.6, 0, 4.6, -1.75, 1.75); g.closePath(); g.fill();
-          g.fillStyle = '#b03a2f';
-          g.beginPath(); g.arc(9.6, 0, 3.8, -1.7, 1.7); g.closePath(); g.fill();
-          g.strokeStyle = '#e06a5a'; g.lineWidth = 1;
-          g.beginPath(); g.arc(9.6, 0, 3, -1.4, 1.4); g.stroke();
-        } else {
-          g.strokeStyle = ramp(wc).out; g.lineWidth = 5.4;
-          g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 3, 0); g.stroke();
-          g.strokeStyle = wc; g.lineWidth = 3.2;
-          g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 3, 0); g.stroke();
-          g.fillStyle = ramp(wc).out; g.beginPath(); g.roundRect(wl - 5.2, -6.4, 7.6, 7.2, 1.4); g.fill();
-          g.fillStyle = wc; g.beginPath(); g.roundRect(wl - 4.6, -5.8, 6.4, 6, 1.2); g.fill();
-          g.fillStyle = INK; g.fillRect(wl - 1.7, -4.6, 2.5, 2.2);
-          g.fillStyle = ramp(wc).dk; g.beginPath(); g.arc(wl - 6.1, -1.8, 1.9, 0, 7); g.fill();
-          g.strokeStyle = ramp(wc).hi; g.lineWidth = 1;
-          g.beginPath(); g.moveTo(1.5, -0.9); g.lineTo(wl - 5, -0.9); g.stroke();
-        }
-        g.restore();
-      } else if (o.weaponStyle === 'club' && chid === 'samantha') {
-        // foam toy sword with a star sticker
-        g.save(); g.translate(F[0], F[1]); g.rotate(-0.5 + (o.attackKey ? (o.attackExt || 0) * 1.1 : 0));
-        g.fillStyle = ramp(wc).out; g.beginPath(); g.roundRect(-1.2, -3.3, wl + 2.4, 6.6, 3.1); g.fill();
-        g.fillStyle = wc; g.beginPath(); g.roundRect(0, -2.5, wl, 5, 2.5); g.fill();
-        g.fillStyle = tier === 1 ? '#4ab2e8' : '#ffd24a'; g.fillRect(-1.8, -4.1, 2.6, 8.2);
-        g.fillStyle = '#ffffff';
-        const stx = wl * 0.55;
-        g.beginPath();
-        g.moveTo(stx - 2, 0); g.lineTo(stx - 0.5, -0.5); g.lineTo(stx, -2); g.lineTo(stx + 0.5, -0.5);
-        g.lineTo(stx + 2, 0); g.lineTo(stx + 0.5, 0.5); g.lineTo(stx, 2); g.lineTo(stx - 0.5, 0.5);
-        g.closePath(); g.fill();
-        g.strokeStyle = ramp(wc).hi; g.lineWidth = 1.1;
-        g.beginPath(); g.moveTo(1, -1.3); g.lineTo(wl - 2, -1.3); g.stroke();
-        g.restore();
-      } else if (o.weaponStyle === 'club' && chid === 'levi') {
-        // knobby caveman clubs; tier 5 is the carnival clown hammer
-        g.save(); g.translate(F[0], F[1]); g.rotate(-0.75 + (o.attackKey ? (o.attackExt || 0) * 1.25 : 0));
-        if (tier < 5) {
-          g.fillStyle = ramp(wc).out;
-          g.beginPath(); g.moveTo(0, -2.3); g.lineTo(wl, -3.9); g.lineTo(wl + 2.6, 0); g.lineTo(wl, 3.9); g.lineTo(0, 2.3); g.closePath(); g.fill();
-          g.fillStyle = wc;
-          g.beginPath(); g.moveTo(0, -1.5); g.lineTo(wl, -3); g.lineTo(wl + 1.6, 0); g.lineTo(wl, 3); g.lineTo(0, 1.5); g.closePath(); g.fill();
-          g.fillStyle = ramp(wc).dk;
-          g.beginPath(); g.arc(wl * 0.45, -1.2, 1, 0, 7); g.fill();
-          g.beginPath(); g.arc(wl * 0.7, 1.4, 1, 0, 7); g.fill();
-          g.strokeStyle = ramp(wc).dk; g.lineWidth = 1.2;
-          g.beginPath(); g.moveTo(wl * 0.3, -2.2); g.lineTo(wl * 0.3, 2.2); g.stroke();
-          g.strokeStyle = ramp(wc).hi; g.lineWidth = 1.1;
-          g.beginPath(); g.moveTo(1, -1); g.lineTo(wl - 2, -2.2); g.stroke();
-        } else {
-          g.strokeStyle = ramp('#c98d48').out; g.lineWidth = 4.6;
-          g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 4, 0); g.stroke();
-          g.strokeStyle = '#c98d48'; g.lineWidth = 2.8;
-          g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 4, 0); g.stroke();
-          g.fillStyle = ramp(wc).out; g.beginPath(); g.roundRect(wl - 6.5, -6.7, 11, 13.4, 3.4); g.fill();
-          g.fillStyle = wc; g.beginPath(); g.roundRect(wl - 5.8, -6, 9.6, 12, 3); g.fill();
-          g.fillStyle = '#ffffff'; g.fillRect(wl - 5.8, -6, 2, 12); g.fillRect(wl + 1, -6, 1.6, 12);
-          g.strokeStyle = ramp(wc).hi; g.lineWidth = 1.2;
-          g.beginPath(); g.arc(wl - 3.2, -3.4, 2.2, Math.PI * 1.1, Math.PI * 1.7); g.stroke();
-        }
-        g.restore();
-      } else if (o.weaponStyle === 'club') {
-        g.strokeStyle = wc; g.lineWidth = 5;
-        g.beginPath(); g.moveTo(F[0], F[1]); g.lineTo(F[0] + wl * 0.7, F[1] - wl * 0.5); g.stroke();
-        g.fillStyle = wc;
-        g.beginPath(); g.arc(F[0] + wl * 0.7, F[1] - wl * 0.5, 4.5, 0, 7); g.fill();
-      } else if (o.weaponStyle === 'staff') {
-        // Myah's broom, carried near-upright; tier 5 is the sentient robot mop
-        g.save(); g.translate(F[0], F[1]); g.rotate(-1.05 + (o.attackKey ? (o.attackExt || 0) * 0.9 : 0));
-        g.strokeStyle = ramp('#c9a86a').out; g.lineWidth = 3.8;
-        g.beginPath(); g.moveTo(-3, 0); g.lineTo(wl, 0); g.stroke();
-        g.strokeStyle = '#c9a86a'; g.lineWidth = 2.2;
-        g.beginPath(); g.moveTo(-3, 0); g.lineTo(wl, 0); g.stroke();
-        g.fillStyle = ramp(wc).out;
-        g.beginPath(); g.moveTo(wl - 1, -3.6); g.lineTo(wl + 5.8, -4.8); g.lineTo(wl + 6.6, 4.8); g.lineTo(wl - 1, 3.6); g.closePath(); g.fill();
-        g.fillStyle = wc;
-        g.beginPath(); g.moveTo(wl - 0.4, -3); g.lineTo(wl + 5.4, -4); g.lineTo(wl + 6, 4); g.lineTo(wl - 0.4, 3); g.closePath(); g.fill();
-        g.strokeStyle = ramp(wc).dk; g.lineWidth = 0.8;
-        g.beginPath(); g.moveTo(wl + 0.5, -2); g.lineTo(wl + 5.6, -2.6); g.stroke();
-        g.beginPath(); g.moveTo(wl + 0.5, 0); g.lineTo(wl + 5.9, 0); g.stroke();
-        g.beginPath(); g.moveTo(wl + 0.5, 2); g.lineTo(wl + 5.6, 2.6); g.stroke();
-        g.fillStyle = o.accent; g.fillRect(wl - 2.3, -3.3, 2.2, 6.6);
-        if (tier >= 5) {
-          g.fillStyle = '#4adbe8'; g.beginPath(); g.arc(wl + 2.6, 0, 1.4, 0, 7); g.fill();
-          g.strokeStyle = ramp('#4adbe8').hi; g.lineWidth = 0.8;
-          g.beginPath(); g.arc(wl + 2.6, 0, 2.2, 0, 7); g.stroke();
-        }
-        g.restore();
-      } else if (o.weaponStyle === 'noodle') {
-        // pool noodle: outline, core, sun stripe, honest tube end
-        const wob = Math.sin((o.animT || 0) * 9) * 4;
-        const nx = F[0] + wl + 2, ny = F[1] - wl * 0.3 + wob;
-        g.lineCap = 'round';
-        g.strokeStyle = ramp(wc).out; g.lineWidth = 6.6;
-        g.beginPath(); g.moveTo(F[0], F[1]); g.quadraticCurveTo(F[0] + wl * 0.6, F[1] - wl * 0.8, nx, ny); g.stroke();
-        g.strokeStyle = wc; g.lineWidth = 4.6;
-        g.beginPath(); g.moveTo(F[0], F[1]); g.quadraticCurveTo(F[0] + wl * 0.6, F[1] - wl * 0.8, nx, ny); g.stroke();
-        g.strokeStyle = ramp(wc).lt; g.lineWidth = 1.6;
-        g.beginPath(); g.moveTo(F[0], F[1] - 1.2); g.quadraticCurveTo(F[0] + wl * 0.6, F[1] - wl * 0.8 - 1.2, nx, ny - 1.2); g.stroke();
-        g.fillStyle = ramp(wc).dk; g.beginPath(); g.arc(nx, ny, 2.3, 0, 7); g.fill();
-        g.fillStyle = INK; g.beginPath(); g.arc(nx, ny, 0.9, 0, 7); g.fill();
-      } else if (o.weaponStyle === 'teeth') {
-        // the chomp: jaws snap shut at the strike point
-        if (o.attackKey && (o.attackExt || 0) > 0.25) {
-          const jx = frontHand[0] + 5, jy = frontHand[1];
-          const open = (1 - (o.attackExt || 0)) * 7 + 2;
-          const nTeeth = 3 + Math.min(o.weaponTier, 4);
-          g.fillStyle = '#ffffff';
-          for (let ti = 0; ti < nTeeth; ti++) {
-            g.beginPath();
-            g.moveTo(jx + ti * 4, jy - open - 4); g.lineTo(jx + ti * 4 + 2, jy - open + 1); g.lineTo(jx + ti * 4 + 4, jy - open - 4);
-            g.fill();
-            g.beginPath();
-            g.moveTo(jx + ti * 4, jy + open + 4); g.lineTo(jx + ti * 4 + 2, jy + open - 1); g.lineTo(jx + ti * 4 + 4, jy + open + 4);
-            g.fill();
-          }
-        }
-      } else if (o.weaponStyle === 'muscles') {
-        // the arms ARE the weapon: shaded bicep bumps from tier 2 up
-        if (tier >= 2) {
-          const RS = ramp(o.skin);
-          const bx = (sh[0] + F[0]) / 2, by = (sh[1] + F[1]) / 2 - 2, br = 2.2 + tier * 0.9;
-          const bx2 = (sh[0] + backHand[0]) / 2, by2 = (sh[1] + backHand[1]) / 2 - 2, br2 = 2 + tier * 0.8;
-          for (const [mx2, my2, mr] of [[bx, by, br], [bx2, by2, br2]]) {
-            g.fillStyle = RS.out; g.beginPath(); g.arc(mx2, my2, mr + 1, 0, 7); g.fill();
-            g.fillStyle = o.skin; g.beginPath(); g.arc(mx2, my2, mr, 0, 7); g.fill();
-            g.fillStyle = RS.lt; g.beginPath(); g.arc(mx2 - mr * 0.3, my2 - mr * 0.35, mr * 0.5, 0, 7); g.fill();
-            g.strokeStyle = RS.dk; g.lineWidth = 0.8;
-            g.beginPath(); g.arc(mx2, my2 + mr * 0.35, mr * 0.55, 0.3, 2.8); g.stroke();
-          }
-          if (tier >= 5) {
-            g.fillStyle = '#ffffff';
-            const px3 = bx + br * 0.5, py3 = by - br * 0.7;
-            g.beginPath();
-            g.moveTo(px3 - 1.3, py3); g.lineTo(px3 - 0.35, py3 - 0.35); g.lineTo(px3, py3 - 1.3); g.lineTo(px3 + 0.35, py3 - 0.35);
-            g.lineTo(px3 + 1.3, py3); g.lineTo(px3 + 0.35, py3 + 0.35); g.lineTo(px3, py3 + 1.3); g.lineTo(px3 - 0.35, py3 + 0.35);
-            g.closePath(); g.fill();
-          }
-        }
-      } else if (o.weaponStyle === 'letters' || o.weaponStyle === 'sandwich' || o.weaponStyle === 'book' || o.weaponStyle === 'none') {
-        // these ride ON the hands — drawn after the fists block
-      } else if (o.weaponStyle === 'swat') {
-        // her weapon is disappointment; visible only mid-swat
-        if (o.attackKey && (o.attackExt || 0) > 0.3) {
-          g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 2 + tier * 0.3;
-          g.beginPath(); g.arc(F[0] - 2, F[1], 7, -0.9, 0.6); g.stroke();
-          g.fillStyle = 'rgba(255,255,255,0.4)';
-          g.beginPath(); g.arc(F[0] + 6, F[1] - 5, 0.7, 0, 7); g.fill();
-          g.beginPath(); g.arc(F[0] + 7.5, F[1] - 1, 0.7, 0, 7); g.fill();
-        }
-      } else if (o.weaponStyle === 'feet') {
-        // the kicks are the weapon: glow rides the feet, wraps ride the ankles
-        g.fillStyle = wc; g.globalAlpha = 0.5;
-        g.beginPath(); g.arc(frontFoot[0], frontFoot[1] - 2, 5, 0, 7); g.fill();
-        g.beginPath(); g.arc(backFoot[0], backFoot[1] - 2, 4.6, 0, 7); g.fill();
-        g.globalAlpha = 1;
-        g.strokeStyle = wc; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(frontFoot[0] - 3.6, frontFoot[1] - 4.8); g.lineTo(frontFoot[0] + 4.6, frontFoot[1] - 4.8); g.stroke();
-        g.beginPath(); g.moveTo(backFoot[0] - 3.6, backFoot[1] - 4.8); g.lineTo(backFoot[0] + 4.6, backFoot[1] - 4.8); g.stroke();
-      } else if (look.mecha) {
-        // Mecha Hayes keeps the cyan energy blade
-        const bl = (10 + tier * 4.5) * 1.5;
-        g.strokeStyle = '#4adbe8'; g.lineWidth = 3.4;
-        g.shadowColor = '#4adbe8'; g.shadowBlur = 9;
-        g.beginPath(); g.moveTo(F[0], F[1]); g.lineTo(F[0] + bl, F[1] - bl * 0.35); g.stroke();
-        g.shadowBlur = 0;
-      } else if (chid === 'jerod') {
-        // 3D-printed sword with layer striations
-        g.save(); g.translate(F[0], F[1]); g.rotate(-0.55 + (o.attackKey ? (o.attackExt || 0) * 1.1 : 0));
-        g.fillStyle = ramp(wc).out;
-        g.beginPath(); g.roundRect(-1.2, -2.9, wl + 2.4, 5.8, 1.5); g.fill();
-        g.beginPath(); g.moveTo(wl + 1, -2.9); g.lineTo(wl + 4.4, 0); g.lineTo(wl + 1, 2.9); g.closePath(); g.fill();
-        g.fillStyle = wc;
-        g.beginPath(); g.roundRect(0, -2, wl, 4, 1); g.fill();
-        g.beginPath(); g.moveTo(wl, -2); g.lineTo(wl + 3.2, 0); g.lineTo(wl, 2); g.closePath(); g.fill();
-        g.strokeStyle = ramp(wc).dk; g.lineWidth = 0.8;
-        g.beginPath(); g.moveTo(1, -0.9); g.lineTo(wl - 0.5, -0.9); g.stroke();
-        g.beginPath(); g.moveTo(1, 0.9); g.lineTo(wl - 0.5, 0.9); g.stroke();
-        g.fillStyle = '#4a5060'; g.fillRect(-1.7, -3.5, 2.3, 7);
-        g.strokeStyle = ramp(wc).hi; g.lineWidth = 1;
-        g.beginPath(); g.moveTo(1, -1.5); g.lineTo(wl - 1.5, -1.5); g.stroke();
-        g.restore();
-      } else if (chid === 'tim') {
-        // fire axe; tier 5 is the hi-vis Jaws of Life
-        const headC = tier === 5 ? '#f2ee4a' : '#d43b2f';
-        const edgeC = tier === 5 ? '#ffffff' : '#e6ebf5';
-        g.save(); g.translate(F[0], F[1]); g.rotate(-0.6 + (o.attackKey ? (o.attackExt || 0) * 1.15 : 0));
-        g.strokeStyle = ramp('#c98d48').out; g.lineWidth = 4.8;
-        g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 2, 0); g.stroke();
-        g.strokeStyle = '#c98d48'; g.lineWidth = 2.6;
-        g.beginPath(); g.moveTo(0, 0); g.lineTo(wl - 2, 0); g.stroke();
-        g.fillStyle = '#1d1d24'; g.beginPath(); g.arc(0, 0, 1.6, 0, 7); g.fill();
-        const x0 = wl - 2;
-        g.fillStyle = ramp(headC).out;
-        g.beginPath(); g.moveTo(x0 - 2.2, -6.9); g.lineTo(x0 + 4.6, -5.2); g.lineTo(x0 + 5.4, -0.4); g.lineTo(x0 - 4.6, -1.2); g.closePath(); g.fill();
-        g.fillStyle = headC;
-        g.beginPath(); g.moveTo(x0 - 1.8, -6.2); g.lineTo(x0 + 4.2, -4.6); g.lineTo(x0 + 4.8, -0.8); g.lineTo(x0 - 4.2, -1.6); g.closePath(); g.fill();
-        g.fillStyle = edgeC;
-        g.beginPath(); g.moveTo(x0 + 3.4, -4.9); g.lineTo(x0 + 4.8, -0.9); g.lineTo(x0 + 3.6, -1); g.lineTo(x0 + 2.4, -4.4); g.closePath(); g.fill();
-        g.fillStyle = headC;
-        g.beginPath(); g.moveTo(x0 - 3.8, -3.6); g.lineTo(x0 - 6.6, -2.6); g.lineTo(x0 - 3.8, -1.8); g.closePath(); g.fill();
-        g.fillStyle = ramp(headC).hi; g.beginPath(); g.arc(x0 - 0.6, -4.9, 0.9, 0, 7); g.fill();
-        g.restore();
-      } else if (chid === 'addi') {
-        // ice sword: faceted crystal with a twinkle
-        g.save(); g.translate(F[0], F[1]); g.rotate(-0.6 + (o.attackKey ? (o.attackExt || 0) * 1.2 : 0));
-        g.fillStyle = ramp(wc).out;
-        g.beginPath(); g.moveTo(1.4, -3.1); g.lineTo(wl * 0.55, -3.7); g.lineTo(wl + 4.2, 0); g.lineTo(wl * 0.55, 3.7); g.lineTo(1.4, 3.1); g.closePath(); g.fill();
-        g.fillStyle = wc;
-        g.beginPath(); g.moveTo(2, -2.4); g.lineTo(wl * 0.55, -3); g.lineTo(wl + 3.2, 0); g.lineTo(wl * 0.55, 3); g.lineTo(2, 2.4); g.closePath(); g.fill();
-        g.fillStyle = '#e8fbff';
-        g.beginPath(); g.moveTo(wl * 0.3, -2.2); g.lineTo(wl + 2.4, -0.2); g.lineTo(wl * 0.3, -0.2); g.closePath(); g.fill();
-        g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 0.9;
-        g.beginPath(); g.moveTo(2.5, 0.5); g.lineTo(wl + 1, 0.5); g.stroke();
-        g.fillStyle = ramp('#9fdcff').out;
-        g.beginPath(); g.moveTo(1, -4.9); g.lineTo(3.9, 0); g.lineTo(1, 4.9); g.lineTo(-1.9, 0); g.closePath(); g.fill();
-        g.fillStyle = '#9fdcff';
-        g.beginPath(); g.moveTo(1, -4.2); g.lineTo(3.2, 0); g.lineTo(1, 4.2); g.lineTo(-1.2, 0); g.closePath(); g.fill();
-        g.globalAlpha = 0.5 + 0.5 * Math.sin((o.animT || 0) * 7);
-        g.fillStyle = '#ffffff';
-        const tx2 = wl * 0.7, ty2 = -2.8;
-        g.beginPath();
-        g.moveTo(tx2 - 1.6, ty2); g.lineTo(tx2 - 0.45, ty2 - 0.45); g.lineTo(tx2, ty2 - 1.6); g.lineTo(tx2 + 0.45, ty2 - 0.45);
-        g.lineTo(tx2 + 1.6, ty2); g.lineTo(tx2 + 0.45, ty2 + 0.45); g.lineTo(tx2, ty2 + 1.6); g.lineTo(tx2 - 0.45, ty2 + 0.45);
-        g.closePath(); g.fill();
-        g.globalAlpha = 1;
-        g.restore();
-      } else {
-        // knight sword (Hayes and any future blade): gold guard, tier 5 flames
-        g.save(); g.translate(F[0], F[1]); g.rotate(-0.6 + (o.attackKey ? (o.attackExt || 0) * 1.2 : 0));
-        g.fillStyle = ramp(wc).out;
-        g.beginPath(); g.moveTo(1.4, -2.7); g.lineTo(wl + 1.5, -2.7); g.lineTo(wl + 4.8, 0); g.lineTo(wl + 1.5, 2.7); g.lineTo(1.4, 2.7); g.closePath(); g.fill();
-        g.fillStyle = wc;
-        g.beginPath(); g.moveTo(2, -1.9); g.lineTo(wl + 1.2, -1.9); g.lineTo(wl + 3.7, 0); g.lineTo(wl + 1.2, 1.9); g.lineTo(2, 1.9); g.closePath(); g.fill();
-        g.strokeStyle = ramp(wc).dk; g.lineWidth = 0.9;
-        g.beginPath(); g.moveTo(3, 0.3); g.lineTo(wl + 1, 0.3); g.stroke();
-        g.strokeStyle = ramp(wc).hi; g.lineWidth = 1;
-        g.beginPath(); g.moveTo(2.6, -1.1); g.lineTo(wl + 1.6, -1.1); g.stroke();
-        g.fillStyle = ramp('#ffd24a').out; g.fillRect(0.6, -4.8, 3, 9.6);
-        g.fillStyle = '#ffd24a'; g.fillRect(1, -4.4, 2.2, 8.8);
-        g.beginPath(); g.arc(-1.2, 0, 1.7, 0, 7); g.fill();
-        if (tier >= 5 && chid === 'hayes') {
-          g.fillStyle = 'rgba(255,178,58,0.85)';
-          const fl3 = Math.sin((o.animT || 0) * 13) * 1.5;
-          g.beginPath(); g.moveTo(wl * 0.4, -2); g.lineTo(wl * 0.5, -5.6 - fl3); g.lineTo(wl * 0.62, -2); g.closePath(); g.fill();
-          g.beginPath(); g.moveTo(wl * 0.68, -2); g.lineTo(wl * 0.74, -3.8 + fl3 * 0.5); g.lineTo(wl * 0.8, -2); g.closePath(); g.fill();
-        }
-        g.restore();
-      }
+      const WB = window.WEAPON_BODIES && window.WEAPON_BODIES[o.charId];
+      if (WB && WB.under) WB.under(g, weaponCtx(o, o.weaponTier, hip, sh, frontHand, backHand, frontFoot, backFoot, lean, ak));
     }
     if (look.mecha && !o.onGround) {
       // jet thrusters
@@ -3369,102 +3102,10 @@ const Game = (() => {
       }
     }
     // hand-riding weapons draw over the mitts
+    // hand-riding weapons draw over the mitts
     if (o.weaponTier > 0 && !look.chicken && !look.firetruck) {
-      const tier = o.weaponTier;
-      const wc = (o.weaponColors && o.weaponColors[tier - 1]) || WEAPON_COLORS[tier - 1];
-      const chid = o.charId || '';
-      const F = frontHand;
-      const WB = window.WEAPON_BODIES && window.WEAPON_BODIES[chid];
-      if (WB) {
-        if (WB.over) WB.over(g, weaponCtx(o, tier, hip, sh, F, backHand, frontFoot, backFoot, lean, ak));
-      } else if (o.weaponStyle === 'none' && chid === 'todd') {
-        // knuckle wraps over both mitts
-        const fr = look.bigFists ? 8 : 3.6;
-        const WR = ramp('#f2ede0');
-        for (const [hx2, hy2, hr] of [[F[0], F[1], fr], [backHand[0], backHand[1], fr * 0.94]]) {
-          g.fillStyle = WR.out; g.beginPath(); g.roundRect(hx2 - hr - 0.6, hy2 - 3.2, hr * 2 + 1.2, 6, 2.4); g.fill();
-          g.fillStyle = '#f2ede0'; g.beginPath(); g.roundRect(hx2 - hr + 0.2, hy2 - 2.5, hr * 2 - 0.4, 4.6, 2); g.fill();
-          g.strokeStyle = WR.dk; g.lineWidth = 0.9;
-          g.beginPath(); g.moveTo(hx2 - hr + 0.6, hy2 - 0.8); g.lineTo(hx2 + hr - 0.6, hy2 - 0.8); g.stroke();
-          g.beginPath(); g.moveTo(hx2 - hr + 0.6, hy2 + 1); g.lineTo(hx2 + hr - 0.6, hy2 + 1); g.stroke();
-          if (tier >= 3) {
-            g.fillStyle = tier >= 5 ? '#ffd24a' : '#c9ccd8';
-            g.beginPath(); g.arc(hx2 - 2, hy2 - 2.9, 0.7, 0, 7); g.fill();
-            g.beginPath(); g.arc(hx2, hy2 - 2.9, 0.7, 0, 7); g.fill();
-            g.beginPath(); g.arc(hx2 + 2, hy2 - 2.9, 0.7, 0, 7); g.fill();
-          }
-        }
-      } else if (o.weaponStyle === 'none') {
-        g.fillStyle = wc; g.globalAlpha = 0.85;
-        g.beginPath(); g.arc(F[0], F[1], 5.5, 0, 7); g.fill();
-        g.beginPath(); g.arc(backHand[0], backHand[1], 5, 0, 7); g.fill();
-        g.globalAlpha = 1;
-      } else if (o.weaponStyle === 'book') {
-        // hardback held flat on the palm
-        const bw = 9 + tier * 1.4, bh = 7 + tier * 0.8;
-        g.save(); g.translate(F[0], F[1]); g.rotate(-0.15 + (o.attackKey ? (o.attackExt || 0) * 0.5 : 0));
-        g.fillStyle = ramp(wc).out; g.beginPath(); g.roundRect(-1.4, -bh - 1.2, bw + 2.8, bh + 2.4, 1.6); g.fill();
-        g.fillStyle = wc; g.fillRect(0, -bh, bw, bh);
-        g.fillStyle = '#fff8e6'; g.fillRect(bw - 2.2, -bh + 1, 2.2, bh - 2);
-        g.fillStyle = ramp(wc).lt; g.fillRect(0, -bh, 2.2, bh);
-        g.fillStyle = ramp(wc).hi; g.fillRect(3.4, -bh + 2.4, bw - 7, 1.4);
-        g.restore();
-      } else if (o.weaponStyle === 'sandwich') {
-        // the Little Bear Special, fully stacked
-        const sw = 8 + tier * 1.7;
-        g.save(); g.translate(F[0], F[1]); g.rotate(-0.1 + (o.attackKey ? (o.attackExt || 0) * 0.35 : 0));
-        g.fillStyle = ramp('#e0a860').out; g.beginPath(); g.roundRect(-2.8, -8.8, sw + 2.8, 9.8, 2); g.fill();
-        g.fillStyle = '#c98d48'; g.fillRect(-2, -2.2, sw, 2.4);
-        g.fillStyle = '#7dc45f';
-        for (let lx2 = -1; lx2 <= sw - 3; lx2 += 3) { g.beginPath(); g.arc(lx2, -2.8, 1.4, 0, 7); g.fill(); }
-        g.fillStyle = '#d43b2f'; g.fillRect(-1, -4.3, sw - 2, 1.7);
-        g.fillStyle = '#ffd24a';
-        g.beginPath(); g.moveTo(-1.5, -5); g.lineTo(sw - 3, -5); g.lineTo(sw - 5, -6.8); g.closePath(); g.fill();
-        g.fillStyle = '#e0a860'; g.beginPath(); g.roundRect(-2, -8.6, sw, 4.6, 2.4); g.fill();
-        g.fillStyle = '#fff4dd';
-        g.beginPath(); g.ellipse(1.5, -7.3, 0.9, 0.6, 0.4, 0, 7); g.fill();
-        g.beginPath(); g.ellipse(sw * 0.5, -7.9, 0.9, 0.6, -0.3, 0, 7); g.fill();
-        g.beginPath(); g.ellipse(sw - 3.5, -7.1, 0.9, 0.6, 0.5, 0, 7); g.fill();
-        g.strokeStyle = '#f0c084'; g.lineWidth = 1;
-        g.beginPath(); g.arc(1.5, -6.2, 2.6, Math.PI * 1.1, Math.PI * 1.6); g.stroke();
-        g.restore();
-      } else if (o.weaponStyle === 'letters') {
-        // his name orbits his fist, spelling doom — glyphs baked, one unmirror
-        const word = (o.weaponWord || 'RON').slice(0, 9);
-        g.save();
-        g.scale(o.facing, 1); // unmirror the glyphs
-        for (let li = 0; li < word.length; li++) {
-          if (word[li] === ' ') continue;
-          const ang = (o.animT || 0) * 1.3 + li * (Math.PI * 2 / word.length);
-          const gx = F[0] + Math.cos(ang) * 13, gy = F[1] + Math.sin(ang) * 8;
-          g.drawImage(glyphSprite(word[li], wc), o.facing * gx - 6, gy - 7, 12, 14);
-        }
-        g.restore();
-      } else if (o.weaponStyle === 'teeth') {
-        // chatter-teeth toy riding the fist, always chattering
-        const tw = 7 + tier * 0.8;
-        const chatter = o.attackKey ? (1 - (o.attackExt || 0)) * 3 : 1.4 + 1.2 * Math.sin((o.animT || 0) * 10);
-        g.fillStyle = ramp('#ff8aa0').out;
-        g.beginPath(); g.arc(F[0], F[1] + 1.5, 5.2, 0, Math.PI); g.closePath(); g.fill();
-        g.fillStyle = '#ff8aa0';
-        g.beginPath(); g.arc(F[0], F[1] + 1.5, 4.4, 0, Math.PI); g.closePath(); g.fill();
-        g.fillStyle = '#b8b4a8';
-        g.fillRect(F[0] - tw - 0.7, F[1] - 2.9 - chatter, tw * 2 + 1.4, 3.3);
-        g.fillRect(F[0] - tw - 0.7, F[1] - 0.6 + chatter * 0.4, tw * 2 + 1.4, 2.9);
-        g.fillStyle = '#ffffff';
-        g.fillRect(F[0] - tw, F[1] - 2.4 - chatter, tw * 2, 2.6);
-        g.fillRect(F[0] - tw, F[1] - 0.2 + chatter * 0.4, tw * 2, 2.2);
-        g.strokeStyle = '#d8d4c8'; g.lineWidth = 0.7;
-        for (const gx2 of [F[0] - tw / 2, F[0], F[0] + tw / 2]) {
-          g.beginPath(); g.moveTo(gx2, F[1] - 2.4 - chatter); g.lineTo(gx2, F[1] + 2 + chatter * 0.4); g.stroke();
-        }
-        g.fillStyle = '#ffffff';
-        g.beginPath(); g.arc(F[0] - 1.6, F[1] - 4.6 - chatter, 1.3, 0, 7); g.fill();
-        g.beginPath(); g.arc(F[0] + 1.9, F[1] - 4.8 - chatter, 1.3, 0, 7); g.fill();
-        g.fillStyle = INK;
-        g.beginPath(); g.arc(F[0] - 1.3, F[1] - 4.6 - chatter, 0.6, 0, 7); g.fill();
-        g.beginPath(); g.arc(F[0] + 2.2, F[1] - 4.8 - chatter, 0.6, 0, 7); g.fill();
-      }
+      const WB = window.WEAPON_BODIES && window.WEAPON_BODIES[o.charId];
+      if (WB && WB.over) WB.over(g, weaponCtx(o, o.weaponTier, hip, sh, frontHand, backHand, frontFoot, backFoot, lean, ak));
     }
 
     } // end legacy body (see FORM_BODIES branch above)
@@ -3788,7 +3429,7 @@ const Game = (() => {
           hairStyle: p.cdef.hairStyle, hairColor: p.cdef.hairColor, charId: p.cdef.id, blush: p.cdef.blush,
           stretchY: p.landT > 0 ? 0.9 : (!p.onGround && p.vy < -160 ? 1.07 : 1),
           isPlayer: true,
-          weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle, weaponColors: p.cdef.weaponColors,
+          weaponTier: p.upg.weapon, weaponStyle: p.cdef.weaponStyle,
           weaponEnergy: p.cdef.weaponEnergy,
           weaponWord: p.upg.weapon > 0 ? trackMeta(p.cdef, 'weapon').tiers[p.upg.weapon - 1].split(' ')[0] : '',
           ascended: p.ascended,
@@ -4281,7 +3922,7 @@ const Game = (() => {
       color: cdef.color, color2: cdef.color2, accent: cdef.accent, skin: cdef.skin,
       moving: false, walkCyc: 0, animT: 2, onGround: true,
       crouch: false, attackKey: null, attackExt: 0,
-      hurt: false, flash: 0, frozen: false, weaponTier: Save.upg(cdef.id).weapon, weaponStyle: cdef.weaponStyle, weaponColors: cdef.weaponColors, ascended,
+      hurt: false, flash: 0, frozen: false, weaponTier: Save.upg(cdef.id).weapon, weaponStyle: cdef.weaponStyle, ascended,
       hairStyle: cdef.hairStyle, hairColor: cdef.hairColor, charId: cdef.id, blush: cdef.blush,
       isPlayer: true, weaponEnergy: cdef.weaponEnergy, // portraits are showcases: let tier 5 glow
       look: ascended ? cdef.finalForm.look : cdef.baseLook,
