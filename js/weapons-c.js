@@ -67,7 +67,7 @@
   const M_TEAL = '#3c9eb1';
   const M_METAL = '#c9ccd8';
   const M_CUP = '#bfe6f580';   // baked alpha — no runtime concat
-  const M_E = '#4adbe8';       // LED cyan (weaponEnergy)
+  const M_E = '#a8f4ec';       // soap-foam aqua, matches data.js weaponEnergy
   const M_CORE = '#e8fbff';
   const M_FOAM = '#9fd8f2';
   const M_HALO_A = '#4adbe852';

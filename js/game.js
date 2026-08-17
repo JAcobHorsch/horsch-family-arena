@@ -241,6 +241,13 @@ const Game = (() => {
   }
   function entRect(e) { return [e.x - e.w / 2, e.y - e.h * (e === player && e.crouch ? 0.62 : 1), e.w, e.h * (e === player && e.crouch ? 0.62 : 1)]; }
 
+  // a fighter's energy hue: a final form may override it when ascension swaps
+  // the weapon itself (the Mecha suit trades a fire sword for a cyan blade)
+  function charEnergy(p) {
+    const ff = p.ascended && p.cdef.finalForm;
+    return (ff && ff.energy) || p.cdef.weaponEnergy || p.cdef.accent;
+  }
+
   const IMPACT_WORDS = ['POW!', 'BAM!', 'WHACK!', 'BONK!', 'KRAK!', 'THWAP!'];
   function impactWord(x, y, txt) {
     floats.push({ x, y, txt, color: '#1a1408', t: 0.55, big: true, word: true, rot: rand(-0.18, 0.18) });
@@ -759,7 +766,7 @@ const Game = (() => {
             x: p.x + p.facing * ((d.range || 90) * 0.5), y: p.y - 52,
             facing: p.facing, t: 0.16, max: 0.16,
             size: (d.range || 100) * 0.7 * (wt0 > 1 ? 1 + (wt0 - 1) * 0.1 : 1),
-            color: wt0 >= 4 ? (p.cdef.weaponEnergy || p.cdef.accent) : p.cdef.accent,
+            color: wt0 >= 4 ? charEnergy(p) : p.cdef.accent,
             up: a.key === 'B',
           });
         }
@@ -776,18 +783,23 @@ const Game = (() => {
           if (hit) {
             a.hits.add(e);
             const dir = d.radius ? (e.x >= p.x ? 1 : -1) : p.facing;
+            const absorbed = e.armorHits > 0;
             hitEnemy(e, d.dmg * st.dmg * (p.buffT > 0 ? p.buffDmg : 1) * (p.pwGiantT > 0 ? 1.5 : 1), dir * d.kb, d.kbY, a.key === 'X3' || a.key === 'B');
             // tier-gated impact FX — the ladder's payoff lands on the enemy
             const wt = p.upg.weapon;
-            if (wt >= 3) {
+            // armor absorbs the hit outright and a kill fires its own burst —
+            // in both cases the tier FX would lie about what just happened
+            if (wt >= 3 && !absorbed && e.hp > 0) {
               // per-weapon FX data when the art module ships it (element colors and
               // whether that element falls or rises), else the character's own energy
               const fx = window.WEAPON_FX && window.WEAPON_FX[p.cdef.id];
-              const wE = (fx && fx.e) || p.cdef.weaponEnergy || p.cdef.accent;
+              const wE = charEnergy(p) || (fx && fx.e);
               const rises = fx ? !fx.grav : true;
               const iy = e.y - e.h * 0.55;
               burst(e.x, iy, wE, wt >= 5 ? 10 : wt >= 4 ? 5 : 3, wt >= 5 ? 300 : 200, !rises);
-              if (wt >= 4) spawnLight(e.x, iy, wt >= 5 ? 110 : 70, wE, wt >= 5 ? 0.5 : 0.35);
+              // leave headroom in the 24-slot pool so kill and special flashes,
+              // which carry real information, never lose their slot to chip hits
+              if (wt >= 4 && lights.length < 17) spawnLight(e.x, iy, wt >= 5 ? 110 : 70, wE, wt >= 5 ? 0.5 : 0.35);
               // tier 5 throws debris as well as light
               if (wt >= 5) {
                 const core = (fx && fx.c) || (p.cdef.weaponColors && p.cdef.weaponColors[4]) || wE;
@@ -2428,6 +2440,14 @@ const Game = (() => {
     return actx;
   }
 
+  // Final forms that already carry their weapon (Addi's ice swords, Myah's mop,
+  // the Mecha blade, Levi's slung hammer) or have no hands at all (Wrenchy IS a
+  // wrench; the chicken, sandwich and firetruck hold nothing).
+  const FORM_OWNS_WEAPON = {
+    sonya: 1, jacob: 1, samantha: 1, cassandra: 1, levi: 1, tim: 1,
+    myah: 1, isla: 1, hayes: 1, addi: 1, brooks: 1, dayne: 1,
+  };
+
   function drawFighter(g, o) {
     // o: x,y feet in world coords; palette + pose fields
     const cf = o.crouch ? 0.6 : 1;
@@ -2540,6 +2560,17 @@ const Game = (() => {
     const FB = o.ascended && window.FORM_BODIES && window.FORM_BODIES[o.charId];
     if (FB) {
       FB(g, formCtx(o, hip, sh, frontHand, backHand, frontFoot, backFoot, lean, ak));
+      // Ascension requires a maxed weapon, so a form that neither draws its own
+      // weapon nor replaces its hands would silently strip the tier-5 art the
+      // player just bought. Those forms get the weapon layer on top.
+      if (o.weaponTier > 0 && !FORM_OWNS_WEAPON[o.charId]) {
+        const WBa = window.WEAPON_BODIES && window.WEAPON_BODIES[o.charId];
+        if (WBa) {
+          const wa = weaponCtx(o, o.weaponTier, hip, sh, frontHand, backHand, frontFoot, backFoot, lean, ak);
+          if (WBa.under) WBa.under(g, wa);
+          if (WBa.over) WBa.over(g, wa);
+        }
+      }
     } else {
 
     // back limbs
@@ -4243,8 +4274,10 @@ const Game = (() => {
     const g = canvas.getContext('2d');
     g.clearRect(0, 0, canvas.width, canvas.height);
     drawFighter(g, {
-      x: canvas.width / 2, y: canvas.height - 8, facing: 1,
-      size: (canvas.height / 118) * (ascended ? 1.08 : 1),
+      x: canvas.width / 2, y: canvas.height - 5, facing: 1,
+      // final forms are bulkier and taller than the base fighter, so they need
+      // LESS scale to stay inside the card — they still read bigger
+      size: (canvas.height / 118) * (ascended ? 0.94 : 1),
       color: cdef.color, color2: cdef.color2, accent: cdef.accent, skin: cdef.skin,
       moving: false, walkCyc: 0, animT: 2, onGround: true,
       crouch: false, attackKey: null, attackExt: 0,

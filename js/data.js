@@ -567,6 +567,7 @@ const CHARACTERS = [
       name: 'MECHA HAYES',
       desc: 'A towering mech: laser sword, repulsor wrist blasts, and jet thrusters — hold JUMP to fly.',
       look: { mecha: true },
+      energy: '#4adbe8', // the suit swaps his fire sword for a cyan blade, so its FX follow
       special: { type: 'projectile', name: 'Repulsor Blasts', count: 3, dmg: 14, speed: 640, r: 7, pierce: true, spreadY: 40, color: '#4adbe8' },
       fly: true,
       boost: { maxHp: 1.7, dmg: 2.0, defense: 0.55 },
