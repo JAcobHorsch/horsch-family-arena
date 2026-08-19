@@ -25,6 +25,19 @@ const Input = {
     el.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
+  // cutscenes take the whole canvas: tap advances dialogue, corner skips
+  const gameCvs = document.getElementById('game');
+  gameCvs.addEventListener('pointerdown', (e) => {
+    if (!window.Game || !Game.inCutscene) return;
+    Sfx.unlock();
+    if (Game.cutTap(e.clientX, e.clientY)) e.preventDefault();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (!window.Game || !Game.inCutscene) return;
+    if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyJ') { Game.cutTap(-1, -1); e.preventDefault(); }
+    if (e.code === 'Escape') { Game.cutTap(1e9, 1e9); e.preventDefault(); }
+  });
+
   for (const [id, prop] of Object.entries(holdMap)) {
     const el = document.getElementById(id);
     bind(el, () => { Input[prop] = true; Sfx.unlock(); }, () => { Input[prop] = false; });

@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.json">
 <title>Horsch Family Arena</title>
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -43,11 +43,23 @@
   <div class="title-wrap">
     <div class="game-logo">HORSCH FAMILY<span>ARENA</span></div>
     <p class="tagline">Fight. Earn. Ascend.</p>
-    <button class="bigbtn" id="titleStart">ENTER THE ARENA</button>
+    <button class="bigbtn" id="titleStart">CAMPAIGN</button>
+    <button class="bigbtn alt" id="titleArena">ARENA</button>
     <button class="smallbtn danger hidden" id="titleReset">Reset Save</button>
     <p class="kbd-hint">Keyboard: A/D move &middot; W jump &middot; S crouch &middot; J=combo &middot; K=ranged &middot; L=launcher &middot; I=special</p>
   </div>
-  <p class="build-tag">BUILD 18</p>
+  <p class="build-tag">BUILD 19</p>
+</div>
+
+<!-- Campaign -->
+<div id="screen-campaign" class="screen hidden">
+  <h2 class="scr-head">CAMPAIGN</h2>
+  <p class="scr-sub">Win a fighter's chapter to unlock them for the Arena.</p>
+  <p id="campaignNote" class="unlock-note hidden"></p>
+  <div id="campaignList"></div>
+  <div class="scr-foot">
+    <button class="smallbtn" id="campaignBack">Back</button>
+  </div>
 </div>
 
 <!-- Character select -->
@@ -94,22 +106,26 @@
   </div>
 </div>
 
-<script src="js/data.js?v=18"></script>
-<script src="js/skins-home.js?v=18"></script>
-<script src="js/skins-pipes.js?v=18"></script>
-<script src="js/skins-road.js?v=18"></script>
-<script src="js/skins-fantasy.js?v=18"></script>
-<script src="js/weapons-a.js?v=18"></script>
-<script src="js/weapons-b.js?v=18"></script>
-<script src="js/weapons-c.js?v=18"></script>
-<script src="js/weapons-d.js?v=18"></script>
-<script src="js/forms-a.js?v=18"></script>
-<script src="js/forms-b.js?v=18"></script>
-<script src="js/forms-c.js?v=18"></script>
-<script src="js/forms-d.js?v=18"></script>
-<script src="js/audio.js?v=18"></script>
-<script src="js/input.js?v=18"></script>
-<script src="js/ui.js?v=18"></script>
-<script src="js/game.js?v=18"></script>
+<script src="js/data.js?v=19"></script>
+<script src="js/campaign.js?v=19"></script>
+<script src="js/skins-home.js?v=19"></script>
+<script src="js/skins-pipes.js?v=19"></script>
+<script src="js/skins-road.js?v=19"></script>
+<script src="js/skins-fantasy.js?v=19"></script>
+<script src="js/weapons-a.js?v=19"></script>
+<script src="js/weapons-b.js?v=19"></script>
+<script src="js/weapons-c.js?v=19"></script>
+<script src="js/weapons-d.js?v=19"></script>
+<script src="js/forms-a.js?v=19"></script>
+<script src="js/forms-b.js?v=19"></script>
+<script src="js/forms-c.js?v=19"></script>
+<script src="js/forms-d.js?v=19"></script>
+<script src="js/skins-campaign.js?v=19"></script>
+<script src="js/stage-home.js?v=19"></script>
+<script src="js/audio.js?v=19"></script>
+<script src="js/input.js?v=19"></script>
+<script src="js/cutscene.js?v=19"></script>
+<script src="js/ui.js?v=19"></script>
+<script src="js/game.js?v=19"></script>
 </body>
 </html>

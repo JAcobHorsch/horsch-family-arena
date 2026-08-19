@@ -7,7 +7,7 @@ const Save = {
   fresh() {
     const chars = {};
     for (const c of CHARACTERS) chars[c.id] = { weapon: 0, ranged: 0, armor: 0, ability: 0, ascended: false };
-    return { money: 0, level: 1, chars };
+    return { money: 0, level: 1, chars, unlocked: {}, campaignDone: {} };
   },
   load() {
     try {
@@ -17,9 +17,21 @@ const Save = {
         if (!this.data.chars[c.id]) this.data.chars[c.id] = { weapon: 0, ranged: 0, armor: 0, ability: 0, ascended: false };
         if (typeof this.data.chars[c.id].ranged !== 'number') this.data.chars[c.id].ranged = 0; // migrate pre-ranged saves
       }
+      if (!this.data.unlocked) this.data.unlocked = {};
+      if (!this.data.campaignDone) this.data.campaignDone = {};
+      // anyone already playing before campaign mode existed keeps the whole
+      // roster — locking fighters they had earned would be a punishment
+      if (!this.data.campaignMigrated) {
+        const played = this.data.level > 1 || this.data.money > 0 ||
+          CHARACTERS.some(c => { const u = this.data.chars[c.id]; return u.weapon || u.ranged || u.armor || u.ability || u.ascended; });
+        if (played) for (const c of CHARACTERS) this.data.unlocked[c.id] = true;
+        this.data.campaignMigrated = true;
+      }
     } catch (e) { this.data = this.fresh(); }
     return this.data;
   },
+  isUnlocked(id) { return !!this.data.unlocked[id]; },
+  anyUnlocked() { return CHARACTERS.some(c => this.data.unlocked[c.id]); },
   write() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); } catch (e) {} },
   reset() { this.data = this.fresh(); this.write(); },
   upg(id) { return this.data.chars[id]; },
@@ -39,7 +51,7 @@ function ensureBounty() {
 }
 
 const UI = (() => {
-  const screens = ['title', 'select', 'shop', 'defeat', 'pause'];
+  const screens = ['title', 'campaign', 'select', 'shop', 'defeat', 'pause'];
   const $ = (id) => document.getElementById(id);
   const money = () => '$' + Save.data.money.toLocaleString();
 
@@ -70,8 +82,9 @@ const UI = (() => {
       cardIdx++;
       const u = Save.upg(c.id);
       const st = computeStats(c, u);
+      const locked = !Save.isUnlocked(c.id);
       const card = document.createElement('div');
-      card.className = 'char-card' + (u.ascended ? ' holo' : '');
+      card.className = 'char-card' + (u.ascended ? ' holo' : '') + (locked ? ' locked' : '');
       card.style.setProperty('--cc', c.color);
       card.innerHTML = `
         ${u.ascended ? `<div class="ff-badge">★ ${c.finalForm.name} ★</div>` : ''}
@@ -86,8 +99,12 @@ const UI = (() => {
         </div>
         <div class="char-upg">${trackMeta(c, 'weapon').icon}<b>${u.weapon}</b> ${trackMeta(c, 'ranged').icon}<b>${u.ranged}</b> ${trackMeta(c, 'armor').icon}<b>${u.armor}</b> ${trackMeta(c, 'ability').icon}<b>${u.ability}</b></div>
         <div class="char-special">A: ${c.special.name} — ${u.ascended ? c.finalForm.desc : c.special.desc}</div>
-        <div class="card-num">#${String(cardIdx).padStart(2, '0')}/${CHARACTERS.length}</div>`;
-      card.addEventListener('click', () => { Sfx.buy(); show(null); Game.startLevel(c.id); });
+        <div class="card-num">#${String(cardIdx).padStart(2, '0')}/${CHARACTERS.length}</div>
+        ${locked ? '<div class="lock-veil"><span>🔒</span><b>Win their chapter<br>in Campaign</b></div>' : ''}`;
+      card.addEventListener('click', () => {
+        if (locked) { Sfx.denied(); return; }
+        Sfx.buy(); show(null); Game.startLevel(c.id);
+      });
       grid.appendChild(card);
       Game.drawPortrait(card.querySelector('canvas'), c, u.ascended);
     }
@@ -168,6 +185,48 @@ const UI = (() => {
     $('shopContinue').textContent = 'CONTINUE — LEVEL ' + Save.data.level;
   }
 
+  // ---------- Campaign ----------
+  function buildCampaign(justUnlocked) {
+    const list = $('campaignList');
+    list.innerHTML = '';
+    let prevDone = true; // chapter 1 is always open
+    CAMPAIGN.forEach((ch, i) => {
+      const cdef = CHARACTERS.find(c => c.id === ch.char);
+      const done = !!Save.data.campaignDone[ch.id];
+      const open = prevDone;
+      const row = document.createElement('div');
+      row.className = 'chapter' + (done ? ' done' : '') + (open ? '' : ' shut');
+      row.style.setProperty('--cc', cdef ? cdef.color : '#888');
+      row.innerHTML = `
+        <canvas width="76" height="92"></canvas>
+        <div class="chapter-body">
+          <div class="chapter-no">CHAPTER ${String(i + 1).padStart(2, '0')}${done ? '  ·  COMPLETE' : open ? '' : '  ·  LOCKED'}</div>
+          <div class="chapter-name">${ch.title}</div>
+          <div class="chapter-where">${ch.where}</div>
+          <div class="chapter-blurb">${ch.blurb}</div>
+        </div>
+        <div class="chapter-go">${open ? (done ? 'REPLAY' : 'PLAY') : '🔒'}</div>`;
+      if (open) {
+        row.addEventListener('click', () => { Sfx.buy(); show(null); Game.startCampaign(ch.id); });
+      } else {
+        row.addEventListener('click', () => Sfx.denied());
+      }
+      list.appendChild(row);
+      if (cdef) Game.drawPortrait(row.querySelector('canvas'), cdef, false);
+      prevDone = done;
+    });
+    const note = $('campaignNote');
+    if (justUnlocked) {
+      const c = CHARACTERS.find(x => x.id === justUnlocked);
+      note.textContent = '★ ' + (c ? c.name : justUnlocked) + ' is now playable in Arena mode.';
+      note.classList.remove('hidden');
+      Sfx.ascend();
+    } else {
+      note.classList.add('hidden');
+    }
+  }
+  function toCampaign(justUnlocked) { buildCampaign(justUnlocked); show('campaign'); }
+
   function toSelect() { buildSelect(); show('select'); }
   function toShop(earnedText, charId) {
     shopEarnedText = earnedText || 'Spend your winnings, then return to the arena.';
@@ -186,7 +245,13 @@ const UI = (() => {
     const dirty = Save.data.money > 0 || Save.data.level > 1 ||
       CHARACTERS.some(c => { const u = Save.upg(c.id); return u.weapon + u.ranged + u.armor + u.ability > 0 || u.ascended; });
     $('titleReset').classList.toggle('hidden', !dirty);
-    $('titleStart').addEventListener('click', () => { Sfx.unlock(); Sfx.buy(); toSelect(); });
+    $('titleStart').addEventListener('click', () => { Sfx.unlock(); Sfx.buy(); toCampaign(null); });
+    $('titleArena').addEventListener('click', () => {
+      Sfx.unlock();
+      if (!Save.anyUnlocked()) { Sfx.denied(); toCampaign(null); return; }
+      Sfx.buy(); toSelect();
+    });
+    $('campaignBack').addEventListener('click', () => { Sfx.buy(); show('title'); });
     $('titleReset').addEventListener('click', () => {
       Save.reset(); Sfx.denied(); $('titleReset').classList.add('hidden');
     });
@@ -200,5 +265,5 @@ const UI = (() => {
     show('title');
   }
 
-  return { init, show, toSelect, toShop, toDefeat };
+  return { init, show, toSelect, toShop, toDefeat, toCampaign };
 })();

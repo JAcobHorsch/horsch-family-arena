@@ -110,13 +110,13 @@ const Game = (() => {
   }
 
   // ---------- Level flow ----------
-  function startLevel(charId) {
+  function startLevel(charId, camPlan) {
     const cdef = CHARACTERS.find(c => c.id === charId);
     const upg = Save.upg(charId);
     const stats = computeStats(cdef, upg);
     lastCharId = charId;
-    plan = levelPlan(Save.data.level);
-    theme = themeFor(Save.data.level);
+    plan = camPlan || levelPlan(Save.data.level);
+    theme = camPlan ? camPlan.world.theme : themeFor(Save.data.level);
 
     player = {
       cdef, upg, stats,
@@ -149,9 +149,13 @@ const Game = (() => {
         });
       });
     }
-    // bake the level's terrain art up front so the first frame doesn't hitch
-    getCliffStrip(plan.world);
-    for (const pl of platforms) { pl.cvs = buildPlatformIsland(pl.w, plan.world); pl.cvsRes = RES; }
+    // interiors are flat rooms: no island, no floating platforms to bake
+    if (plan.world.interior) platforms.length = 0;
+    else {
+      // bake the level's terrain art up front so the first frame doesn't hitch
+      getCliffStrip(plan.world);
+      for (const pl of platforms) { pl.cvs = buildPlatformIsland(pl.w, plan.world); pl.cvsRes = RES; }
+    }
     waveIdx = 0; spawnDelay = 1.2; endTimer = 0; endFired = false;
     camX = clamp(player.x - viewW / 2, 0, Math.max(0, STAGE_W - viewW));
     earned = 0; mode = 'playing'; paused = false; timeScale = 1; hitstop = 0;
@@ -211,8 +215,9 @@ const Game = (() => {
   function winLevel() {
     mode = 'victory'; timeScale = 0.55; endTimer = 2.0; endFired = false;
     // advance + bank immediately so quitting during the slow-mo can't
-    // farm bounties or replay the cleared level
-    Save.data.level += 1;
+    // farm bounties or replay the cleared level. Campaign fights are story
+    // beats, not arena levels — they must not push arena progression.
+    if (!(plan && plan.campaign)) Save.data.level += 1;
     let sub = '+$' + earned + ' earned';
     // bounty: win any level as the wanted fighter
     const b = Save.data.bounty;
@@ -1287,6 +1292,13 @@ const Game = (() => {
 
   // ---------- Main update ----------
   function update(dt) {
+    if (mode === 'cutscene') {
+      Cut.update(dt);
+      camX = clamp(Cut.camX, 0, Math.max(0, STAGE_W - viewW));
+      if (Cut.shake > 0) { shakeT = Math.max(shakeT, Cut.shake * 0.25); shakeMag = 8; }
+      updateFx(dt);
+      return;
+    }
     if (mode === 'idle') { updateFx(dt); return; }
 
     updatePlayer(dt);
@@ -1339,12 +1351,19 @@ const Game = (() => {
         if (mode === 'victory') {
           Save.write();
           mode = 'idle';
-          UI.toShop('LEVEL ' + plan.level + ' CLEARED  —  +$' + earned + ' earned this run', lastCharId);
+          if (campaign) nextBeat(); // straight into the next story beat
+          else UI.toShop('LEVEL ' + plan.level + ' CLEARED  —  +$' + earned + ' earned this run', lastCharId);
         } else {
           Save.write();
           mode = 'idle';
-          UI.toDefeat('You fell on Level ' + plan.level + ', wave ' + waveIdx + ' of ' + plan.waves.length +
-            '. You keep the $' + earned + ' you earned — buy upgrades and come back stronger.');
+          if (campaign) {
+            const ch = campaign.ch;
+            campaign = null;
+            UI.toDefeat('You fell in ' + ch.title + '. Nothing is lost — the chapter restarts from your last fight.');
+          } else {
+            UI.toDefeat('You fell on Level ' + plan.level + ', wave ' + waveIdx + ' of ' + plan.waves.length +
+              '. You keep the $' + earned + ' you earned — buy upgrades and come back stronger.');
+          }
         }
       }
     }
@@ -1810,8 +1829,25 @@ const Game = (() => {
   }
 
   // the FAR pass: everything here is rendered soft (tilt-shift) behind the action
+  // interior campaign stages draw their own room instead of sky + island
+  function stageArt() {
+    const id = plan && plan.world && plan.world.stageArt;
+    return (id && window.STAGE_ART && window.STAGE_ART[id]) || null;
+  }
+  const stageCtx = {
+    camX: 0, viewW: 0, viewH: 0, worldOffY: 0, GROUND_Y: GROUND_Y, STAGE_W: STAGE_W,
+    t: 0, seeded: seeded, ramp: ramp, checker: checkerPat,
+  };
+  function fillStageCtx() {
+    stageCtx.camX = camX; stageCtx.viewW = viewW; stageCtx.viewH = viewH;
+    stageCtx.worldOffY = worldOffY; stageCtx.t = performance.now() * 0.001;
+    return stageCtx;
+  }
+
   function drawBackgroundFar() {
     const g = rctx;
+    const sa = stageArt();
+    if (sa) { sa.far(g, fillStageCtx()); return; }
     const sh2 = themeShades();
     // banded sky — the quarter-res soft pass blends the seams on its own
     const skyTop = -worldOffY, skyH = viewH;
@@ -2121,6 +2157,8 @@ const Game = (() => {
   const LEAF_US = [0.45, 0.8];
   function drawBackground() {
     const g = rctx;
+    const sa0 = stageArt();
+    if (sa0) { sa0.near(g, fillStageCtx()); return; } // interiors: flat floor, no platforms
     const E = themeShades().E;
     const wid = plan ? plan.world.id : 'home';
     const tS = performance.now() * 0.001; // shared sway clock
@@ -3777,7 +3815,8 @@ const Game = (() => {
       g.fillText(plan.levelName.toUpperCase(), cx, 18);
       g.font = "700 10px 'Segoe UI', sans-serif";
       g.fillStyle = '#9a927e';
-      g.fillText('LEVEL ' + plan.level + '  —  WAVE ' + Math.min(waveIdx, plan.waves.length) + ' / ' + plan.waves.length, cx, 34);
+      g.fillText((plan.campaign ? plan.levelName : 'LEVEL ' + plan.level) +
+        '  —  WAVE ' + Math.min(waveIdx, plan.waves.length) + ' / ' + plan.waves.length, cx, 34);
       if (plan.event) {
         g.font = "700 9px 'Segoe UI', sans-serif";
         g.fillStyle = theme.glow;
@@ -3837,6 +3876,109 @@ const Game = (() => {
     for (const k in glyphCache) delete glyphCache[k];
   }
 
+  // Cutscene actors are the real fighters, posed by the script — cutscene Todd
+  // wears whatever upgrades your Todd has.
+  const CUT_POSE = { punch: 'X1', cross: 'X2', kick: 'X3', windup: 'windup', strike: 'strike' };
+  const cutSkin = { walkCyc: 0, animT: 0, attackKey: null, hurt: false, moving: false, elite: false };
+  // boss bodies take the live-enemy shape; this stand-in satisfies it
+  const cutBoss = {
+    walkCyc: 0, animT: 0, state: null, hurtT: 0, size: 1, facing: 1,
+    def: { color: '#c9563a', color2: '#5a1e14' },
+  };
+  function drawCutActors() {
+    const g = rctx;
+    const as = Cut.actors();
+    for (const k in as) {
+      const a = as[k];
+      if (a.hide) continue;
+      const cdef = CHARACTERS.find(c => c.id === a.char);
+      if (cdef) {
+        const u = Save.upg(cdef.id) || { weapon: 0, armor: 0, ascended: false };
+        drawFighter(g, {
+          x: a.x, y: a.y, facing: a.facing, size: a.scale,
+          color: cdef.color, color2: cdef.color2, accent: cdef.accent, skin: cdef.skin,
+          moving: false, walkCyc: 0, animT: a.t, onGround: true,
+          crouch: a.pose === 'crouch',
+          attackKey: CUT_POSE[a.pose] || null, attackExt: a.ext,
+          hurt: a.pose === 'hurt' || a.hurt, flash: 0, frozen: false,
+          armorTier: u.armor, weaponTier: u.weapon, weaponStyle: cdef.weaponStyle,
+          weaponEnergy: cdef.weaponEnergy, isPlayer: true,
+          hairStyle: cdef.hairStyle, hairColor: cdef.hairColor, charId: cdef.id, blush: cdef.blush,
+          ascended: !!u.ascended,
+          look: u.ascended ? cdef.finalForm.look : cdef.baseLook,
+        });
+        continue;
+      }
+      // campaign-only cast: boss or enemy bodies from the skin registries
+      const reg = a.boss ? window.BOSS_BODIES : window.ENEMY_BODIES;
+      const body = reg && reg[a.char];
+      if (!body) continue;
+      g.save();
+      g.translate(a.x, a.y);
+      g.fillStyle = 'rgba(0,0,0,0.4)';
+      g.beginPath(); g.ellipse(0, 2, 24 * a.scale, 5, 0, 0, 7); g.fill();
+      g.scale(a.facing * a.scale, a.scale);
+      cutSkin.walkCyc = 0;
+      cutSkin.animT = a.t;
+      cutSkin.attackKey = (a.pose === 'windup' || a.pose === 'strike') ? a.pose : null;
+      cutSkin.hurt = a.pose === 'hurt' || a.hurt;
+      cutSkin.moving = false;
+      if (a.boss) {
+        cutBoss.animT = a.t; cutBoss.walkCyc = 0;
+        cutBoss.state = cutSkin.attackKey;
+        cutBoss.hurtT = cutSkin.hurt ? 1 : 0;
+        cutBoss.facing = a.facing;
+        body(g, cutBoss, a.t);
+      } else body(g, cutSkin);
+      g.restore();
+    }
+  }
+
+  // ---------- Campaign ----------
+  let campaign = null; // {chapter, beat}
+  function startCampaign(chapterId) {
+    const ch = CAMPAIGN.find(c => c.id === chapterId);
+    if (!ch) return;
+    campaign = { ch, beat: -1 };
+    nextBeat();
+  }
+  function nextBeat() {
+    if (!campaign) return;
+    campaign.beat++;
+    const ch = campaign.ch;
+    if (campaign.beat >= ch.beats.length) {
+      // chapter cleared: bank the unlock and hand back to the campaign screen
+      Save.data.campaignDone[ch.id] = true;
+      if (ch.unlocks) Save.data.unlocked[ch.unlocks] = true;
+      Save.write();
+      campaign = null;
+      mode = 'idle';
+      UI.toCampaign(ch.unlocks);
+      return;
+    }
+    const b = ch.beats[campaign.beat];
+    if (b.type === 'cut') {
+      const stage = (window.CUTSCENES[b.name] || {}).stage;
+      const st = CAMPAIGN_STAGES[stage];
+      if (st) { plan = campaignPlan(ch, { stage: stage, label: '', waves: [] }); theme = st.theme; }
+      mode = 'cutscene';
+      paused = false;
+      camX = 0;
+      if (!Cut.play(b.name, nextBeat)) nextBeat();
+    } else {
+      startLevel(ch.char, campaignPlan(ch, b));
+    }
+  }
+  function campaignPlan(ch, b) {
+    const st = CAMPAIGN_STAGES[b.stage] || CAMPAIGN_STAGES['home-day'];
+    return {
+      level: 1, world: st, lw: 1, levelName: b.label || st.name, event: null,
+      waves: (b.waves || []).map(w => w.slice()),
+      hpMult: 1, dmgMult: 1, speedMult: 1, valueMult: 1,
+      boss: !!b.boss, campaign: true,
+    };
+  }
+
   function render() {
     invalidateBakes();
     // --- far pass: soft (tilt-shift) background layers ---
@@ -3859,7 +4001,8 @@ const Game = (() => {
     lctx.setTransform(k, 0, 0, k, 0, 0);
     lctx.translate(-camX + ox, worldOffY + oy);
     drawBackground();
-    if (mode !== 'idle') drawEntities();
+    if (mode === 'cutscene') drawCutActors();
+    if (mode !== 'idle' && mode !== 'cutscene') drawEntities();
     if (mode !== 'idle' && plan && plan.event === 'fog' && player) {
       const fg = lctx.createRadialGradient(player.x, player.y - 50, 240, player.x, player.y - 50, 430);
       fg.addColorStop(0, 'rgba(6,6,12,0)');
@@ -3867,6 +4010,7 @@ const Game = (() => {
       lctx.fillStyle = fg;
       lctx.fillRect(camX - 20, -worldOffY - 20, viewW + 40, viewH + 40);
     }
+    if (mode === 'cutscene') { Cut.drawWorld(lctx); Cut.drawBubble(lctx, camX, viewW); }
     drawForeground();
     rctx = ctx;
 
@@ -3886,7 +4030,8 @@ const Game = (() => {
       ctx.fillStyle = 'rgba(255,255,255,' + Math.min(0.85, flashFxT * 2.6).toFixed(3) + ')';
       ctx.fillRect(0, 0, w, h);
     }
-    if (mode !== 'idle') drawHUD();
+    if (mode === 'cutscene') Cut.drawUI(ctx, w, h);
+    else if (mode !== 'idle') drawHUD();
   }
 
   // ---------- Loop ----------
@@ -3948,8 +4093,27 @@ const Game = (() => {
     };
   }
 
+  // a tap during a cutscene advances dialogue, or skips from the corner
+  function cutTap(px, py) {
+    if (mode !== 'cutscene') return false;
+    if (Cut.hitSkip(px, py, SW, SH)) { Cut.skip(); return true; }
+    Cut.tap();
+    return true;
+  }
+
   return {
     startLevel, drawPortrait, setPaused, quit, debug,
+    startCampaign, cutTap,
+    // play a scene standalone (chapter previews, and how cutscenes get checked)
+    playCut(name, onDone) {
+      const s = window.CUTSCENES[name];
+      if (!s) return false;
+      const st = CAMPAIGN_STAGES[s.stage];
+      if (st) { plan = campaignPlan(null, { stage: s.stage, label: '', waves: [] }); theme = st.theme; }
+      mode = 'cutscene'; paused = false; camX = 0;
+      return Cut.play(name, () => { mode = 'idle'; if (onDone) onDone(); });
+    },
+    get inCutscene() { return mode === 'cutscene'; },
     get lastCharId() { return lastCharId; },
   };
 })();
