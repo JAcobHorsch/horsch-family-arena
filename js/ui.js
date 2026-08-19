@@ -234,8 +234,14 @@ const UI = (() => {
     if (!shopChar) shopChar = CHARACTERS[0].id;
     buildShop(); show('shop');
   }
-  function toDefeat(text) {
+  let defeatChapter = null;
+  function toDefeat(text, chapterId) {
     $('defeatText').textContent = text;
+    defeatChapter = chapterId || null;
+    // losing a campaign fight must lead back to the campaign, not to an
+    // arena roster a new player hasn't unlocked anything in yet
+    $('defeatShop').classList.toggle('hidden', !!defeatChapter);
+    $('defeatRetry').textContent = defeatChapter ? 'Back to Campaign' : 'Back to Fighter Select';
     show('defeat'); Sfx.defeat();
   }
 
@@ -258,7 +264,10 @@ const UI = (() => {
     $('selectShopBtn').addEventListener('click', () => toShop(null));
     $('shopContinue').addEventListener('click', () => { Sfx.buy(); toSelect(); });
     $('defeatShop').addEventListener('click', () => toShop(null, Game.lastCharId));
-    $('defeatRetry').addEventListener('click', () => toSelect());
+    $('defeatRetry').addEventListener('click', () => {
+      if (defeatChapter) { defeatChapter = null; toCampaign(null); return; }
+      toSelect();
+    });
     $('pauseBtn').addEventListener('click', () => { Game.setPaused(true); show('pause'); });
     $('pauseResume').addEventListener('click', () => { show(null); Game.setPaused(false); });
     $('pauseQuit').addEventListener('click', () => { Game.quit(); toSelect(); });

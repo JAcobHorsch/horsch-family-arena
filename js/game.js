@@ -1357,9 +1357,12 @@ const Game = (() => {
           Save.write();
           mode = 'idle';
           if (campaign) {
+            // bank the beat so the retry starts at the fight that beat you
+            Save.data.campaignAt = { ch: campaign.ch.id, beat: campaign.beat };
+            Save.write();
             const ch = campaign.ch;
             campaign = null;
-            UI.toDefeat('You fell in ' + ch.title + '. Nothing is lost — the chapter restarts from your last fight.');
+            UI.toDefeat('You fell in ' + ch.title + '. Nothing is lost — pick the chapter again and you resume at this fight.', ch.id);
           } else {
             UI.toDefeat('You fell on Level ' + plan.level + ', wave ' + waveIdx + ' of ' + plan.waves.length +
               '. You keep the $' + earned + ' you earned — buy upgrades and come back stronger.');
@@ -3935,11 +3938,14 @@ const Game = (() => {
   }
 
   // ---------- Campaign ----------
-  let campaign = null; // {chapter, beat}
+  let campaign = null; // {ch, beat}
   function startCampaign(chapterId) {
     const ch = CAMPAIGN.find(c => c.id === chapterId);
     if (!ch) return;
-    campaign = { ch, beat: -1 };
+    // resume where a defeat left off rather than replaying the whole chapter
+    const at = Save.data.campaignAt;
+    const from = (at && at.ch === ch.id && at.beat > 0) ? at.beat : 0;
+    campaign = { ch, beat: from - 1 };
     nextBeat();
   }
   function nextBeat() {
@@ -3950,6 +3956,7 @@ const Game = (() => {
       // chapter cleared: bank the unlock and hand back to the campaign screen
       Save.data.campaignDone[ch.id] = true;
       if (ch.unlocks) Save.data.unlocked[ch.unlocks] = true;
+      Save.data.campaignAt = null;
       Save.write();
       campaign = null;
       mode = 'idle';
@@ -4104,6 +4111,12 @@ const Game = (() => {
   return {
     startLevel, drawPortrait, setPaused, quit, debug,
     startCampaign, cutTap,
+    // test hook: clear the current fight so a chapter can be driven end to end
+    debugClearWave() {
+      if (mode !== 'playing') return false;
+      for (const e of [...enemies]) killEnemy(e);
+      return true;
+    },
     // play a scene standalone (chapter previews, and how cutscenes get checked)
     playCut(name, onDone) {
       const s = window.CUTSCENES[name];

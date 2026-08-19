@@ -263,7 +263,9 @@
     g.stroke();
     g.restore();
 
-    // 8 head
+    // 8 head — cast a contact shadow first or the head and torso read as one lump
+    g.fillStyle = PM_SHADE;
+    g.beginPath(); g.ellipse(3, -25, 10.5, 3.6, 0, 0, 7); g.fill();
     g.fillStyle = PM_MID; g.strokeStyle = PM_OUT; g.lineWidth = 2.8;
     g.beginPath(); g.ellipse(3, -33.5, 11.5, 10.5, 0, 0, 7); g.fill(); g.stroke();
     g.save();
@@ -288,7 +290,7 @@
 
     // 10 big cream muzzle
     g.fillStyle = PM_MZ_MID; g.strokeStyle = PM_MZ_OUT; g.lineWidth = 2.2;
-    g.beginPath(); g.ellipse(9, -30, 9.5, 7.5, 0, 0, 7); g.fill(); g.stroke();
+    g.beginPath(); g.ellipse(9, -30.5, 10.5, 8, 0, 0, 7); g.fill(); g.stroke();
     g.fillStyle = PM_MZ_LT;
     g.beginPath(); g.ellipse(5.5, -33.5, 4.5, 2.8, -0.3, 0, 7); g.fill();
     g.fillStyle = PM_MZ_DK;
@@ -457,9 +459,10 @@
     g.fillStyle = J_DENIM_LT; g.fillRect(-10, -49, 4, 8);
     g.fillStyle = J_DENIM_OUT; g.fillRect(-11, -50, 24, 2.4);
 
-    // 3 back arm hangs slack
-    const bhx = hurt ? -14 : -12 + lean * 0.3, bhy = hurt ? -50 : -46;
-    joshArm(g, -10, -66, -14, -57, bhx, bhy, J_SKIN_DK, J_SKIN_MID);
+    // 3 back arm hangs slack — kept outboard of the torso edge (x=-12) so the
+    // short sleeve isn't left hanging over empty space
+    const bhx = hurt ? -18 : -16 + lean * 0.3, bhy = hurt ? -50 : -46;
+    joshArm(g, -11, -66, -17, -57, bhx, bhy, J_SKIN_DK, J_SKIN_MID);
 
     // 4 narrow band tee — lanky, half the standard chest width
     g.fillStyle = J_TEE_MID; g.strokeStyle = J_TEE_OUT; g.lineWidth = 2.6;
@@ -547,19 +550,30 @@
     g.beginPath(); g.moveTo(1.4, -76.4); g.quadraticCurveTo(5.4, -75.4, 9.2, -78); g.stroke();
 
     // 7 scruffy mop
+    // one mass with a carved fringe — overlapping circles buried his eyes
     g.fillStyle = J_HAIR_MID;
     g.beginPath();
-    g.arc(-3, -84.5, 5.8, 0, 7);
-    g.arc(3, -86.4, 6, 0, 7);
-    g.arc(9, -84.5, 5.2, 0, 7);
-    g.arc(11.5, -80.5, 3.8, 0, 7);
-    g.fill();
-    g.fillStyle = J_HAIR_MID; g.strokeStyle = J_HAIR_DK; g.lineWidth = 1.3;
-    g.beginPath(); g.moveTo(-4, -87.5); g.lineTo(-6.6, -90.4); g.lineTo(-0.5, -89); g.closePath(); g.fill(); g.stroke();
-    g.beginPath(); g.moveTo(2, -90); g.lineTo(3.4, -92); g.lineTo(6.5, -89); g.closePath(); g.fill(); g.stroke();
-    g.beginPath(); g.moveTo(8, -88); g.lineTo(12.6, -90); g.lineTo(10.8, -85.5); g.closePath(); g.fill(); g.stroke();
+    g.moveTo(-8.8, -78.5);
+    g.quadraticCurveTo(-11.6, -86, -7, -90.6);
+    g.quadraticCurveTo(-1, -93.6, 6.5, -91.4);
+    g.quadraticCurveTo(12, -89.4, 12.6, -83.5);
+    g.quadraticCurveTo(10.6, -86.6, 6, -87);     // fringe underside sits on the brow
+    g.quadraticCurveTo(-1, -87.4, -5.6, -85.8);
+    g.quadraticCurveTo(-8.2, -84.2, -8.8, -78.5);
+    g.closePath(); g.fill();
+    // broad clumps, FILL ONLY — an outline made each one read as a separate ear
+    g.fillStyle = J_HAIR_MID;
+    g.beginPath(); g.moveTo(-8, -88.4); g.lineTo(-9.8, -91.6); g.lineTo(-1.6, -91); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(-2.4, -91.4); g.lineTo(0.4, -93.4); g.lineTo(5.4, -91.6); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(5.2, -90.6); g.lineTo(11.2, -91.4); g.lineTo(10.4, -87); g.closePath(); g.fill();
+    g.fillStyle = J_HAIR_DK; // parting shade gives the mass form instead
+    g.beginPath();
+    g.moveTo(-7.4, -85.4);
+    g.quadraticCurveTo(-9.6, -88.4, -8.2, -80.5);
+    g.quadraticCurveTo(-6.4, -84.6, -4.6, -85.6);
+    g.closePath(); g.fill();
     g.strokeStyle = J_HAIR_LT; g.lineWidth = 1.6;
-    g.beginPath(); g.moveTo(-3, -87.6); g.quadraticCurveTo(2, -90.6, 8, -87.8); g.stroke();
+    g.beginPath(); g.moveTo(-5.5, -87.8); g.quadraticCurveTo(0.5, -91.4, 7.5, -88.8); g.stroke();
 
     // 8 lead hand + the kitchen knife
     let khx = 17, khy = -54, kex = 15, key = -62, kang = -0.28;
