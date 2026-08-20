@@ -3903,13 +3903,25 @@ const Game = (() => {
     for (const k in as) {
       const a = as[k];
       if (a.hide) continue;
+      // tumbles rotate about the body's middle; a held victim squirms
+      const held = !!a.attach;
+      const ang = (a.rot || 0) + (held ? Math.sin(a.t * 16) * 0.07 : 0);
+      const spun = !!ang;
+      if (spun) {
+        g.save();
+        g.translate(a.x, a.y - 45 * a.scale);
+        g.rotate(ang * a.facing);
+        g.translate(-a.x, -(a.y - 45 * a.scale));
+      }
+      const wcyc = held ? a.t * 13 : a.gaitCyc;
+      const stepping = held || a.gaitOn;
       const cdef = CHARACTERS.find(c => c.id === a.char);
       if (cdef) {
         const u = Save.upg(cdef.id) || { weapon: 0, armor: 0, ascended: false };
         drawFighter(g, {
           x: a.x, y: a.y, facing: a.facing, size: a.scale,
+          moving: stepping, walkCyc: wcyc, animT: a.t, onGround: !held,
           color: cdef.color, color2: cdef.color2, accent: cdef.accent, skin: cdef.skin,
-          moving: false, walkCyc: 0, animT: a.t, onGround: true,
           crouch: a.pose === 'crouch',
           attackKey: CUT_POSE[a.pose] || null, attackExt: a.ext,
           hurt: a.pose === 'hurt' || a.hurt, flash: 0, frozen: false,
@@ -3919,6 +3931,7 @@ const Game = (() => {
           ascended: !!u.ascended,
           look: u.ascended ? cdef.finalForm.look : cdef.baseLook,
         });
+        if (spun) g.restore();
         continue;
       }
       // campaign-only cast: boss or enemy bodies from the skin registries
@@ -3930,19 +3943,20 @@ const Game = (() => {
       g.fillStyle = 'rgba(0,0,0,0.4)';
       g.beginPath(); g.ellipse(0, 2, 24 * a.scale, 5, 0, 0, 7); g.fill();
       g.scale(a.facing * a.scale, a.scale);
-      cutSkin.walkCyc = 0;
+      cutSkin.walkCyc = wcyc;
       cutSkin.animT = a.t;
       cutSkin.attackKey = (a.pose === 'windup' || a.pose === 'strike') ? a.pose : null;
       cutSkin.hurt = a.pose === 'hurt' || a.hurt;
-      cutSkin.moving = false;
+      cutSkin.moving = stepping;
       if (a.boss) {
-        cutBoss.animT = a.t; cutBoss.walkCyc = 0;
-        cutBoss.state = cutSkin.attackKey;
+        cutBoss.animT = a.t; cutBoss.walkCyc = wcyc;
+        cutBoss.state = cutSkin.attackKey || (stepping ? 'approach' : null);
         cutBoss.hurtT = cutSkin.hurt ? 1 : 0;
         cutBoss.facing = a.facing;
         body(g, cutBoss, a.t);
       } else body(g, cutSkin);
       g.restore();
+      if (spun) g.restore();
     }
   }
 
@@ -4004,10 +4018,12 @@ const Game = (() => {
     // --- far pass: soft (tilt-shift) background layers ---
     let ox = 0, oy = 0;
     if (shakeT > 0) { ox = rand(-1, 1) * shakeMag * shakeT * 4; oy = rand(-1, 1) * shakeMag * shakeT * 4; }
-    // cutscene shots zoom the whole world about the frame centre
+    // cutscene shots zoom the world; camX stays the LEFT EDGE of the visible
+    // window (the shot framing math depends on that), while the vertical zoom
+    // centres on the action
     const cz = mode === 'cutscene' ? Cut.zoom : 1;
-    const ctx0 = camX + viewW / 2, cty0 = -worldOffY + viewH / 2;
-    const ctxX = -(ctx0 - viewW / (2 * cz));
+    const cty0 = -worldOffY + viewH / 2;
+    const ctxX = -camX;
     const ctxY = -(cty0 - viewH / (2 * cz));
 
     rctx = bctx;

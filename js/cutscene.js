@@ -91,6 +91,11 @@ const Cut = (() => {
         facing: a.facing == null ? 1 : a.facing, pose: a.pose || null, ext: a.ext || 0,
         scale: a.scale || 1, hide: !!a.hide, hurt: false, t: Math.random() * 6,
         mvx: 0, mvy: 0, mvt: 0, mvd: 0, fromX: 0, fromY: 0, arc: 0,
+        // the animation layer: stepping feet, tumbles, tweened acting, grabs
+        gait: null, gaitCyc: 0, gaitOn: false, sfxStep: false,
+        rot: 0, fromRot: 0, spin: 0,
+        animQ: null, animI: 0, animT2: 0, extFrom: 0,
+        attach: null,
       };
     }
     cam.x = cam.fromX = cam.toX = sc.camX || 0;
@@ -123,6 +128,8 @@ const Cut = (() => {
         if (s.set.scale != null) a.scale = s.set.scale;
         if (s.set.hurt != null) a.hurt = !!s.set.hurt;
         if (s.set.hide != null) a.hide = !!s.set.hide;
+        if (s.set.rot != null) { a.rot = s.set.rot; a.spin = 0; }
+        if (s.set.attach === false) a.attach = null;
       }
     } else if (s.pose) {
       const a = actors[s.pose.who];
@@ -135,8 +142,30 @@ const Cut = (() => {
         a.mvy = s.move.y == null ? a.y : s.move.y;
         a.arc = s.move.arc || 0;
         a.mvd = s.move.dur || 0.6; a.mvt = 0;
+        a.gait = s.move.gait !== undefined ? s.move.gait : (s.move.spin ? null : 'walk');
+        a.sfxStep = !!s.move.sfxStep;
+        a.fromRot = a.rot;
+        a.spin = s.move.spin || 0;
+        a.attach = null; // being thrown or walking away breaks any hold
         if (s.move.facing != null) a.facing = s.move.facing;
         if (s.move.pose !== undefined) a.pose = s.move.pose;
+      }
+    } else if (s.anim) {
+      // tweened acting: frames of {pose, ext, dur}, ext easing between frames
+      const a = actors[s.anim.who];
+      if (a) { a.animQ = s.anim.frames; a.animI = -1; a.animT2 = 0; a.extFrom = a.ext; }
+    } else if (s.grab) {
+      // two-actor contact: the victim hangs off the grabber at a fixed offset,
+      // lifted over the hold, legs kicking. A later move on the victim breaks it.
+      const g2 = actors[s.grab.who], v = actors[s.grab.victim];
+      if (g2 && v) {
+        v.attach = {
+          to: s.grab.who, dx: s.grab.dx == null ? 40 : s.grab.dx,
+          dy: s.grab.dy == null ? -20 : s.grab.dy,
+          lift: s.grab.lift || 0, t: 0, dur: s.grab.dur || 0.8,
+        };
+        v.pose = 'hurt';
+        v.facing = -g2.facing;
       }
     } else if (s.shot) {
       // a hard cut: framing, subject and grade all change on the same frame
@@ -200,6 +229,17 @@ const Cut = (() => {
       fx.push({ kind: 'dust', x: s.x || 0, y: s.y || 468, t: 0, dur: s.dur || 0.7, n: s.n || 8 });
     } else if (s.fx === 'stars') {
       fx.push({ kind: 'stars', x: s.x || 0, y: s.y || 430, t: 0, dur: s.dur || 0.9 });
+    } else if (s.fx === 'doorburst') {
+      // the slab tears off its hinges and tumbles into the room, and the
+      // doorway floods with light for the rest of the scene
+      const dx0 = s.x || 762, dx1 = s.x1 || 898, dy = s.y || 182, gy2 = s.gy || 468;
+      fx.push({ kind: 'doorglow', x: dx0, x1: dx1, y: dy, gy: gy2, t: 0, dur: 999 });
+      fx.push({
+        kind: 'doorpanel', x: (dx0 + dx1) / 2, y: (dy + gy2) / 2,
+        w: dx1 - dx0, h: gy2 - dy,
+        vx: s.vx == null ? -320 : s.vx, vy: -140, spin: -3.4,
+        rot: 0, t: 0, dur: 1.15,
+      });
     }
   }
 
@@ -213,6 +253,14 @@ const Cut = (() => {
     if (s.move) {
       const a = actors[s.move.who];
       return !a || a.mvt >= a.mvd;
+    }
+    if (s.anim) {
+      const a = actors[s.anim.who];
+      return !a || !a.animQ;
+    }
+    if (s.grab) {
+      const v = actors[s.grab.victim];
+      return !v || !v.attach || v.attach.t >= v.attach.dur;
     }
     if (s.cam) return cam.t >= cam.dur;
     if (s.title) return card ? card.t >= card.dur : true;
@@ -231,12 +279,56 @@ const Cut = (() => {
     for (const k in actors) {
       const a = actors[k];
       a.t += dt;
+      a.gaitOn = false;
       if (a.mvt < a.mvd) {
+        const px = a.x;
         a.mvt = Math.min(a.mvd, a.mvt + dt);
         const u = EASE(clamp01(a.mvt / a.mvd));
         a.x = a.fromX + (a.mvx - a.fromX) * u;
         a.y = a.fromY + (a.mvy - a.fromY) * u - Math.sin(u * Math.PI) * a.arc;
+        if (a.spin) a.rot = a.fromRot + a.spin * u;
+        if (a.gait) {
+          // feet step with the ground actually covered, so no gliding;
+          // a sneak takes shorter, more careful steps
+          a.gaitOn = true;
+          const stride = a.gait === 'sneak' ? 8 : a.gait === 'stomp' ? 15 : 11;
+          const prevPhase = Math.floor(a.gaitCyc / Math.PI);
+          a.gaitCyc += Math.abs(a.x - px) / stride;
+          if (Math.floor(a.gaitCyc / Math.PI) !== prevPhase) {
+            if (a.gait === 'stomp') { shake = Math.max(shake, 0.32); Sfx.stomp(); }
+            else if (a.sfxStep) Sfx.step();
+          }
+        }
       }
+      // tweened acting frames
+      if (a.animQ) {
+        if (a.animI < 0 || a.animT2 >= (a.animQ[a.animI].dur || 0.2)) {
+          a.animI++;
+          a.animT2 = 0;
+          a.extFrom = a.ext;
+          if (a.animI >= a.animQ.length) { a.animQ = null; }
+          else if (a.animQ[a.animI].pose !== undefined) a.pose = a.animQ[a.animI].pose;
+        }
+        if (a.animQ) {
+          const fr = a.animQ[a.animI];
+          a.animT2 += dt;
+          const fu = EASE(clamp01(a.animT2 / (fr.dur || 0.2)));
+          a.ext = a.extFrom + ((fr.ext == null ? 1 : fr.ext) - a.extFrom) * fu;
+        }
+      }
+    }
+    // grabs resolve after everyone has moved, so the victim rides this frame's
+    // hand position, rising over the lift
+    for (const k in actors) {
+      const a = actors[k];
+      if (!a.attach) continue;
+      const g2 = actors[a.attach.to];
+      if (!g2) { a.attach = null; continue; }
+      a.attach.t = Math.min(a.attach.dur, a.attach.t + dt);
+      const lu = EASE(clamp01(a.attach.t / a.attach.dur));
+      a.x = g2.x + g2.facing * a.attach.dx;
+      a.y = g2.y + a.attach.dy - a.attach.lift * lu;
+      a.facing = -g2.facing;
     }
     if (cam.t < cam.dur) {
       cam.t = Math.min(cam.dur, cam.t + dt);
@@ -258,13 +350,19 @@ const Cut = (() => {
         bubble.hold += dt;
       }
     }
-    // the take breathes: a slow push that never snaps back
+    // the take breathes: a slow push that never snaps back. The window is
+    // left-anchored, so the push splits its shrink between both edges to keep
+    // the composition centred instead of drifting right.
     shot.cutT += dt;
     if (shot.zoom !== shot.zoomTo) {
+      const z0 = shot.zoom;
       const d = shot.zoomTo - shot.zoom;
       shot.zoom += d * Math.min(1, dt * 0.22);
       if (Math.abs(shot.zoomTo - shot.zoom) < 0.002) shot.zoom = shot.zoomTo;
-      if (shot.kind === 'world') cam.zoom = shot.zoom; // face pushes zoom the bust, not the room
+      if (shot.kind === 'world') {
+        cam.zoom = shot.zoom; // face pushes zoom the bust, not the room
+        if (cam.t >= cam.dur) cam.x += (viewW / z0 - viewW / shot.zoom) / 2;
+      }
     }
     if (card) card.t += dt;
     if (shake > 0) shake = Math.max(0, shake - dt * 1.8);
@@ -278,6 +376,13 @@ const Cut = (() => {
         f.x = f.sx + (f.tx - f.sx) * u;
         f.y = f.sy + (f.ty - f.sy) * u - Math.sin(u * Math.PI) * 18;
         f.spin += dt * 26;
+      } else if (f.kind === 'doorpanel') {
+        f.vy += 1500 * dt;
+        f.x += f.vx * dt;
+        f.y += f.vy * dt;
+        f.rot += f.spin * dt;
+        const floor = 468 - f.h * 0.18; // it settles on edge, mostly flat
+        if (f.y > floor) { f.y = floor; f.vy = 0; f.vx *= 0.6; f.spin *= 0.4; }
       }
       if (f.t >= f.dur + (f.kind === 'knife' ? 0.25 : 0)) fx.splice(i, 1);
     }
@@ -317,6 +422,38 @@ const Cut = (() => {
         g.closePath(); g.fill();
         g.fillStyle = '#f2f5fb';
         g.fillRect(0, -1.4, 10, 1);
+        g.restore();
+      } else if (f.kind === 'doorglow') {
+        // hot light pouring from the EMPTY doorway — bright enough to burn out
+        // the baked door art behind it, so the frame reads as open
+        g.fillStyle = 'rgba(255,236,200,0.94)';
+        g.fillRect(f.x, f.y, f.x1 - f.x, f.gy - f.y);
+        g.fillStyle = 'rgba(255,214,150,0.55)';
+        g.fillRect(f.x - 8, f.y - 6, f.x1 - f.x + 16, 8);
+        g.fillRect(f.x - 8, f.y, 8, f.gy - f.y);
+        g.fillRect(f.x1, f.y, 8, f.gy - f.y);
+        g.globalAlpha = 0.22;
+        g.fillStyle = '#ffca6a';
+        g.beginPath();
+        g.moveTo(f.x - 6, f.gy); g.lineTo(f.x1 + 6, f.gy);
+        g.lineTo(f.x1 + 150, f.gy + 60); g.lineTo(f.x - 150, f.gy + 60);
+        g.closePath(); g.fill();
+        g.globalAlpha = 1;
+      } else if (f.kind === 'doorpanel') {
+        g.save();
+        g.translate(f.x, f.y);
+        g.rotate(f.rot);
+        g.fillStyle = '#171219';
+        g.fillRect(-f.w / 2 - 3, -f.h / 2 - 3, f.w + 6, f.h + 6);
+        g.fillStyle = '#3d3340';
+        g.fillRect(-f.w / 2, -f.h / 2, f.w, f.h);
+        g.fillStyle = '#50434f';
+        g.fillRect(-f.w / 2, -f.h / 2, 8, f.h);
+        g.fillStyle = '#2c242f';
+        g.fillRect(-f.w / 2 + 16, -f.h / 2 + 22, f.w - 32, f.h * 0.32);
+        g.fillRect(-f.w / 2 + 16, f.h * 0.08, f.w - 32, f.h * 0.34);
+        g.fillStyle = '#c9a227';
+        g.beginPath(); g.arc(f.w / 2 - 16, 6, 6, 0, 7); g.fill();
         g.restore();
       } else if (f.kind === 'creak') {
         const u = clamp01(f.t / f.dur);

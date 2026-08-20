@@ -43,6 +43,8 @@ const Sfx = (() => {
     ascend()   { [523, 659, 784, 1046, 1318, 1568].forEach((f, i) => setTimeout(() => blip(f, 0.3, 'square', 0.06), i * 100)); },
     // one short chirp per letter of dialogue, pitched per speaker
     voice(f)   { blip((f || 180) * (0.94 + Math.random() * 0.12), 0.035, 'square', 0.03); },
+    step()     { blip(120, 0.045, 'triangle', 0.035, -40); },
+    stomp()    { blip(64, 0.1, 'sawtooth', 0.09, -20); noise(0.07, 0.07); },
     door()     { blip(70, 0.22, 'sawtooth', 0.12, -30); noise(0.18, 0.16); },
     creak()    { blip(320, 0.34, 'triangle', 0.05, -120); },
   };

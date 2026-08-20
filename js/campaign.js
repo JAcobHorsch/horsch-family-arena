@@ -158,16 +158,22 @@ window.CUTSCENES['ch1-josh-stairs'] = {
     { flash: '#ffffff' },
     { shake: 0.9 },
 
-    // down the stairs
+    // DOWN THE STAIRS: he tumbles end over end, bouncing off the treads
     { shot: { size: 'wide', on: 'josh', x: 780 } },
-    { move: { who: 'josh', x: 1010, y: GY - 40, dur: 0.45, arc: 60, pose: 'hurt', facing: -1 } },
-    { fx: 'stars', x: 1010, y: GY - 60, dur: 0.9 },
-    { move: { who: 'josh', x: 1120, y: GY + 120, dur: 0.7, arc: 20 } },
+    { move: { who: 'josh', x: 1290, y: GY - 150, dur: 0.5, arc: 70, spin: 3.6, pose: 'hurt', facing: -1, gait: null } },
+    { sfx: 'hit' },
+    { shake: 0.35 },
+    { fx: 'stars', x: 1290, y: GY - 170, dur: 0.8 },
+    { move: { who: 'josh', x: 1252, y: GY - 72, dur: 0.32, arc: 30, spin: 2.4, gait: null } },
+    { sfx: 'hit' },
+    { shake: 0.35 },
+    { move: { who: 'josh', x: 1206, y: GY, dur: 0.36, arc: 22, spin: 1.8, gait: null } },
     { sfx: 'die' },
     { shake: 0.7 },
-    { fx: 'dust', x: 1090, y: GY + 40, n: 10, dur: 0.8, hold: 0.5 },
-    { set: { who: 'josh', hide: true } },
-    { wait: 0.5 },
+    { fx: 'dust', x: 1206, y: GY, n: 12, dur: 0.9, hold: 0.4 },
+    // he stays down, flat on his back at the foot of the stairs
+    { set: { who: 'josh', rot: 1.55, y: GY - 10 } },
+    { wait: 0.9 },
 
     { shot: { face: true, on: 'todd', expr: 'neutral', size: 'mcu', push: 0.06 } },
     { set: { who: 'todd', pose: null } },
@@ -193,10 +199,10 @@ window.CUTSCENES['ch1-night'] = {
     { say: 'todd', text: "Just water. In and out." },
     { say: 'todd', text: "Don't wake him up. Do not wake him up." },
 
-    // back to the hallway; the walk is slow on purpose
+    // back to the hallway; he actually tiptoes, step by step
     { shot: { size: 'med', on: 'todd', push: 0.05, warm: '#2c3a6a' } },
-    { move: { who: 'todd', x: 360, dur: 2 } },
-    { move: { who: 'todd', x: 430, dur: 1.6 } },
+    { move: { who: 'todd', x: 360, dur: 2.4, gait: 'sneak', sfxStep: true } },
+    { move: { who: 'todd', x: 430, dur: 2, gait: 'sneak', sfxStep: true } },
 
     // the floorboard
     { sfx: 'creak' },
@@ -211,34 +217,43 @@ window.CUTSCENES['ch1-night'] = {
     { shot: { size: 'med', on: 'damon', x: 600, warm: '#2c3a6a' } },
     { wait: 1.2 },
 
-    // it happens
+    // the door TEARS OFF ITS HINGES and Damon fills the empty frame
     { sfx: 'door' },
     { flash: '#ff4a3a' },
     { shake: 1 },
-    { set: { who: 'damon', hide: false, x: 700, pose: 'windup', ext: 1 } },
-    { fx: 'dust', x: 700, y: GY, n: 14, dur: 0.9 },
+    { fx: 'doorburst', x: 762, x1: 898, y: 182, gy: GY },
+    { set: { who: 'damon', hide: false, x: 830, pose: 'windup', ext: 1 } },
+    { fx: 'dust', x: 830, y: GY, n: 14, dur: 0.9 },
     { shot: { face: true, on: 'damon', expr: 'rage', size: 'cu', push: 0.1, warm: '#ff3b1e', sfx: 'heavy' } },
     { say: 'damon', text: "WHAT DID I SAY ABOUT BEING UP." },
 
-    // he crosses the room
-    { shot: { size: 'full', on: 'todd', x: 300, warm: '#5a2a3a' } },
-    { move: { who: 'damon', x: 500, dur: 0.42 } },
-    { sfx: 'heavy' },
-    { shake: 0.8 },
-    { set: { who: 'todd', pose: 'hurt', y: GY - 34 } },
-    { pose: { who: 'damon', pose: 'strike', ext: 1 } },
-    { say: 'damon', text: "I SAID GO TO BED." },
-    { wait: 0.3 },
+    // he stomps across the room — each footfall lands
+    { shot: { size: 'full', on: 'todd', x: 320, warm: '#5a2a3a' } },
+    { move: { who: 'damon', x: 505, dur: 1.1, gait: 'stomp', pose: null } },
 
-    // the throw
+    // THE GRAB: hand closes on Todd's neck and hauls him off the floor
+    { anim: { who: 'damon', frames: [{ pose: 'windup', ext: 1, dur: 0.22 }, { pose: 'strike', ext: 1, dur: 0.14 }] } },
+    { sfx: 'heavy' },
+    { shake: 0.5 },
+    // the victim's NECK lands in the fist, so his feet hang just off the floor
+    { grab: { who: 'damon', victim: 'todd', dx: 52, dy: -4, lift: 14, dur: 0.9 } },
+    { shot: { size: 'med', on: 'damon', x: 400 } },
+    { say: 'damon', text: "I SAID GO TO BED." },
+    { wait: 0.35 },
+
+    // THE THROW: wind back with the boy still in hand, then launch him
+    { anim: { who: 'damon', frames: [{ pose: 'windup', ext: 1, dur: 0.28 }] } },
     { flash: '#ffffff' },
     { sfx: 'die' },
     { shake: 1 },
+    { pose: { who: 'damon', pose: 'strike', ext: 1 } },
     { shot: { size: 'wide', on: 'todd', x: 120 } },
-    { move: { who: 'todd', x: 180, y: GY, dur: 0.5, arc: 90, facing: -1 } },
+    { move: { who: 'todd', x: 175, y: GY, dur: 0.55, arc: 100, spin: -6.8, facing: -1, pose: 'hurt', gait: null } },
+    { sfx: 'hit' },
     { fx: 'dust', x: 180, y: GY, n: 12, dur: 0.8 },
     { fx: 'stars', x: 180, y: GY - 40, dur: 1 },
     { shake: 0.6 },
+    { set: { who: 'todd', rot: 0 } },
     { wait: 1.2 },
 
     // he gets up. this is where Super Todd starts.
