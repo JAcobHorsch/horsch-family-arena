@@ -45,6 +45,8 @@ const Sfx = (() => {
     voice(f)   { blip((f || 180) * (0.94 + Math.random() * 0.12), 0.035, 'square', 0.03); },
     step()     { blip(120, 0.045, 'triangle', 0.035, -40); },
     stomp()    { blip(64, 0.1, 'sawtooth', 0.09, -20); noise(0.07, 0.07); },
+    fart()     { blip(82, 0.4, 'sawtooth', 0.1, -46); setTimeout(() => blip(64, 0.24, 'sawtooth', 0.07, -28), 90); },
+    screech()  { blip(1240, 0.55, 'sawtooth', 0.075, -900); blip(1650, 0.4, 'square', 0.04, -1100); },
     door()     { blip(70, 0.22, 'sawtooth', 0.12, -30); noise(0.18, 0.16); },
     creak()    { blip(320, 0.34, 'triangle', 0.05, -120); },
   };

@@ -28,6 +28,29 @@ const CAMPAIGN_STAGES = {
   },
 };
 
+// Chapter 2 stages — Collette's property. worldEnemyDef merges these defs over
+// ENEMY_ROLES[key], which is undefined for custom keys, so every def is complete.
+CAMPAIGN_STAGES['collette-yard'] = {
+  id: 'collette-yard', name: "MOM'S FRONT YARD", props: 'house', stageArt: 'collette-yard', interior: true,
+  theme: { sky1: '#b8664a', sky2: '#ffc76a', glow: '#ffca6a', ground: '#4a6a34', groundTop: '#78c850', far: '#8a6a58', near: '#44542f' },
+  enemies: {
+    suitor: { name: "Yvonne's Suitor", body: 'suitor', color: '#8a5a8e', color2: '#3a2440', hp: 26, dmg: 7, speed: 155, reach: 60, windup: 0.45, cooldown: 0.9, value: 14, size: 1.0 },
+    heath: { name: 'HEATH', color: '#6a8a3a', color2: '#2c3a18', bossKind: 'heath', hp: 300, dmg: 16, speed: 120, reach: 82, windup: 0.8, cooldown: 1.3, value: 260, size: 1.55, boss: true },
+    jrv: { name: "JR'S RV", color: '#c9b08a', color2: '#5a4632', bossKind: 'jrv', hp: 430, dmg: 20, speed: 100, reach: 95, windup: 0.9, cooldown: 1.5, value: 300, size: 1.85, boss: true },
+    yvonne: { name: 'YVONNE', color: '#c44a8e', color2: '#4d1440', bossKind: 'yvonne', hp: 360, dmg: 18, speed: 140, reach: 78, windup: 0.6, cooldown: 1.0, value: 300, size: 1.5, boss: true },
+  },
+};
+CAMPAIGN_STAGES['collette-garage'] = {
+  id: 'collette-garage', name: 'THE GARAGE', props: 'house', stageArt: 'collette-garage', interior: true,
+  theme: { sky1: '#241c2c', sky2: '#141018', glow: '#ffca6a', ground: '#3a3230', groundTop: '#4a423e', far: '#2a2226', near: '#201a20' },
+  enemies: {
+    collette: {
+      name: 'COLLETTE', color: '#9a9aa8', color2: '#3a3a48', bossKind: 'collette', signature: 'lunge',
+      hp: 520, dmg: 22, speed: 135, reach: 85, windup: 0.7, cooldown: 1.1, value: 380, size: 1.6, boss: true,
+    },
+  },
+};
+
 const CAMPAIGN = [
   {
     id: 'ch1', char: 'todd', title: 'SUPER TODD', where: 'The Childhood Home',
@@ -43,6 +66,25 @@ const CAMPAIGN = [
       { type: 'cut', name: 'ch1-night' },
       { type: 'fight', stage: 'home-night', label: 'DAMON HORSCH', boss: true, waves: [['boss']] },
       { type: 'cut', name: 'ch1-end' },
+    ],
+  },
+  {
+    id: 'ch2', char: 'sonya', title: 'SONYA', where: "Mom's House",
+    blurb: 'Three siblings, one mother, and a garage nobody has seen the back of since 1987.',
+    unlocks: 'sonya',
+    beats: [
+      { type: 'cut', name: 'ch2-open' },
+      { type: 'fight', stage: 'collette-yard', label: 'HEATH', boss: true, waves: [['heath']] },
+      { type: 'cut', name: 'ch2-jr' },
+      { type: 'fight', stage: 'collette-yard', label: "JR'S RV", boss: true, waves: [['jrv']] },
+      { type: 'cut', name: 'ch2-yvonne' },
+      {
+        type: 'fight', stage: 'collette-yard', label: 'YVONNE', boss: true,
+        waves: [['suitor', 'suitor', 'suitor', 'suitor'], ['suitor', 'suitor', 'suitor', 'suitor', 'suitor'], ['yvonne']],
+      },
+      { type: 'cut', name: 'ch2-collette' },
+      { type: 'fight', stage: 'collette-garage', label: 'COLLETTE', boss: true, waves: [['collette']] },
+      { type: 'cut', name: 'ch2-end' },
     ],
   },
 ];

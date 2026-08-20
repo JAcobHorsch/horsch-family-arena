@@ -1012,6 +1012,38 @@ const Game = (() => {
         e.chargeHit = false;
         addFloat(e.x, e.y - e.h - 28, 'VROOOOM', '#ffd24a', true);
         Sfx.heavy();
+      } else if (kind === 'jrv') {
+        // JR's RV: the same burnout charge, more house behind it
+        e.charging = 1;
+        e.chargeDir = Math.sign(player.x - e.x) || 1;
+        e.chargeHit = false;
+        addFloat(e.x, e.y - e.h - 30, 'WINNEBAGOOO!', '#ffd24a', true);
+        Sfx.heavy();
+      } else if (kind === 'heath') {
+        // he turns around and lets one rip: slow noxious clouds drift out
+        const dir = Math.sign(player.x - e.x) || 1;
+        for (let gi = 0; gi < 3; gi++) {
+          projectiles.push({
+            type: 'bolt', hostile: true, x: e.x + dir * (16 + gi * 8), y: e.y - 34 - gi * 14,
+            vx: dir * (90 + gi * 35), vy: -12 + gi * 10, dmg: e.dmg * 0.55, r: 15 - gi * 2,
+            life: 1.7, color: gi % 2 ? '#8fae4a' : '#6a8a3a',
+          });
+        }
+        burst(e.x + dir * 18, e.y - 36, '#8fae4a', 10, 150, false);
+        addFloat(e.x, e.y - e.h - 26, 'PFFFFT', '#8fae4a', true);
+        Sfx.fart();
+      } else if (kind === 'yvonne') {
+        // a blown kiss, weaponized: three hearts arc out at the player
+        const dir = Math.sign(player.x - e.x) || 1;
+        for (let hi = 0; hi < 3; hi++) {
+          projectiles.push({
+            type: 'bolt', hostile: true, x: e.x + dir * 14, y: e.y - 66,
+            vx: dir * (250 + hi * 60), vy: -260 - hi * 50, arcGrav: true,
+            dmg: e.dmg * 0.7, r: 9, life: 2.2, color: hi % 2 ? '#ff5a7a' : '#e84a92',
+          });
+        }
+        addFloat(e.x, e.y - e.h - 26, 'MWAH!', '#ff5a7a', true);
+        Sfx.coin();
       } else if (kind === 'dragon') {
         const dir = Math.sign(player.x - e.x) || 1;
         for (let i = 0; i < 4; i++) {

@@ -66,6 +66,17 @@
   const BAR_A = '#4adbe8';
   const BAR_B = '#ff4a3a';
   const EYEGLOW = 'rgba(255,106,42,0.30)';
+  const HOLLOW = 'rgba(16,10,28,0.22)';    // sunken-cheek shade for the ghast
+  const HOOP_OUT = '#6e4e14';
+  const HOOP = '#e8c04a';
+  const HOOP_HI = '#f7e29a';
+  const ROLL_OUT = '#7a3050';
+  const ROLL_MID = '#e87ba4';
+  const ROLL_LT = '#f5adc6';
+  const ROLL_HI = '#fbd6e2';
+  const PICK_OUT = '#6e4c22';
+  const PICK = '#e0c084';
+  const PICK_HI = '#f2dcae';
 
   /* ===================== hoisted geometry tables ====================== */
   // 5 swept spikes, authored for cw=46 and scaled. An ODD, uneven crest —
@@ -85,6 +96,11 @@
   // levi's ascended wrecking-crew mop — fewer, bigger, messier
   const MOP = [
     -34, -34, 17, -18, -60, 20, 8, -64, 21, 32, -44, 17, -44, -6, 13, 42, -10, 12,
+  ];
+  // yvonne's towering salon coif — nine uneven clumps, tallest off-centre
+  const BIGH = [
+    -36, -28, 17, -18, -54, 19, 6, -64, 21, 30, -48, 17, 44, -18, 14,
+    -47, -4, 13, 49, 8, 12, -43, 22, 11, 47, 30, 10,
   ];
   // short hair: three soft bumps so the dome is not a dead arc
   const BUMP = [-24, -46, 13, -2, -55, 14, 24, -44, 12];
@@ -310,6 +326,66 @@
     cOut: '#241a42', cDk: '#3f2f6b', cMid: '#4f3e81', cLt: '#7a68b4', acc: '#ff7d1c',
     muzzle: 1, muzO: '#9c8455', muzM: '#f2e3bf', muzL: '#fff7e2',
     horns: 1, plushEar: 1, seam: '#4d3c80', collar: '#ff7d1c',
+  };
+
+  /* ------ campaign chapter 2 cast: Sonya's side of the family. ------
+     Heath / JR / Yvonne carry sonya's exact skin ramp and green eyes;
+     Collette is where both came from. */
+  D.heath = {
+    sOut: '#7b5a50', sDk: '#c4906f', sMid: '#eeba90', sLt: '#f5cfaa', sHi: '#fae0c4',
+    hOut: '#2a1a10', hDk: '#3a2617', hMid: '#553a22', hLt: '#84603c',
+    hair: 'scruff', cw: 45, jw: 31, chin: 56,
+    bw: 3.2, eW: 10.8, eH: 7.4, ir: '#4a6b52', irD: '#22331f', irL: '#84ab88',
+    noseW: 12, mW: 24,
+    lip: '#b06861', lipD: '#78383a', lipH: '#d5968d',
+    cOut: '#33401f', cDk: '#57682e', cMid: '#7a8f3e', cLt: '#a1b060', acc: '#d5dfa8',
+    patchy: 1, lidBias: 0.14, mcBias: 0.18,
+  };
+  D.jr = {
+    sOut: '#7b5a50', sDk: '#c4906f', sMid: '#eeba90', sLt: '#f5cfaa', sHi: '#fae0c4',
+    hOut: '#241608', hDk: '#3a2410', hMid: '#553618', hLt: '#84603a',
+    hair: 'short', cw: 49, jw: 38, chin: 55,
+    bw: 4.4, eW: 10.6, eH: 7.2, ir: '#4a6b52', irD: '#22331f', irL: '#84ab88',
+    noseW: 14, mW: 24,
+    lip: '#ae625c', lipD: '#743438', lipH: '#d38f88',
+    cOut: '#1b2942', cDk: '#2c4265', cMid: '#3f5f8e', cLt: '#5d80b1', acc: '#d8c48a',
+    beard: 1, bOut: '#241608', bDk: '#3a2410', bMid: '#553618', bLt: '#84603a',
+    cap: 1, gOut: '#8a3408', gDk: '#c95410', gMid: '#ff7d1c', gLt: '#ffa752',
+    pick: 1,
+  };
+  D.yvonne = {
+    sOut: '#7b5a50', sDk: '#c4906f', sMid: '#eeba90', sLt: '#f5cfaa', sHi: '#fae0c4',
+    hOut: '#2c0f22', hDk: '#3e152e', hMid: '#571d40', hLt: '#8a4a66',
+    hair: 'big', cw: 45, jw: 30, chin: 54,
+    bw: 2, bArch: 3.6, eW: 11.6, eH: 8.8, ir: '#4a6b52', irD: '#22331f', irL: '#84ab88',
+    noseW: 11, mW: 22,
+    lip: '#d43450', lipD: '#8e1c34', lipH: '#f06a80',
+    cOut: '#4a2066', cDk: '#7a35a4', cMid: '#a44ae8', cLt: '#c078ec', acc: '#e8c0f7',
+    lash: 1, hoops: 1, lidBias: 0.12, mcBias: 0.12,
+  };
+  D.collette = {
+    sOut: '#7b5a50', sDk: '#c4906f', sMid: '#eeba90', sLt: '#f5cfaa', sHi: '#fae0c4',
+    hOut: '#2e2c34', hDk: '#4a4852', hMid: '#6e6c78', hLt: '#a2a0ac',
+    hair: 'short', cw: 46, jw: 33, chin: 52,
+    bw: 3.8, eW: 10.8, eH: 7.8, ir: '#4a6b52', irD: '#22331f', irL: '#84ab88',
+    noseW: 12, mW: 16,
+    lip: '#b06a72', lipD: '#784046', lipH: '#d5989c',
+    cOut: '#5c2f44', cDk: '#94506c', cMid: '#c4728e', cLt: '#d898ab', acc: '#f2d0da',
+    glasses: 1, rollers: 1, jowl: 1, mcBias: -0.1,
+    gOut: '#433464', gDk: '#6b559c', gMid: '#8f77c4', gLt: '#b3a0dc',
+  };
+  // the ghastly form — ashen, gaunt, lit from somewhere wrong
+  D.colletteghast = {
+    sOut: '#484654', sDk: '#7d828f', sMid: '#a8aeb8', sLt: '#c4c9d2', sHi: '#dde1e8',
+    hOut: '#585866', hDk: '#b2b4c2', hMid: '#eceef4', hLt: '#ffffff',
+    hair: 'mop', cw: 47, jw: 30, chin: 58,
+    bw: 3, brow: '#eef1f7', eW: 12.5, eH: 9.5, ir: '#bfe3d2', irD: '#5f8577', irL: '#e7f7ee',
+    noseW: 10, mW: 30,
+    lip: '#4a3a4a', lipD: '#241826', lipH: '#6e5a6e',
+    cOut: '#3a3348', cDk: '#5c5372', cMid: '#7d7396', cLt: '#a39ab8', acc: '#d8d2e8',
+    hollow: 1, glow: 1, glowCol: 'rgba(190,255,224,0.32)', pupil: 0.45,
+    gape: 2.2, fangs: 1, cracks: 1, lidBias: -0.06,
+    aura: 1, au1: 'rgba(198,236,218,0.22)', au2: 'rgba(198,236,218,0.12)', au3: 'rgba(198,236,218,0.06)',
   };
 
   /* ===================== ascended (finalForm.look) ==================== */
@@ -591,6 +667,14 @@
       g.beginPath(); g.ellipse(-jw + 2, chin - 20, 15, 13, 0, 0, 7); g.fill();
       g.beginPath(); g.ellipse(jw - 2, chin - 20, 15, 13, 0, 0, 7); g.fill();
     }
+    // hollow cheeks + sunken sockets: the ghast read
+    if (d.hollow) {
+      g.fillStyle = HOLLOW;
+      g.beginPath(); g.ellipse(-jw + 1, 16, 8, 15, 0.32, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(jw - 1, 16, 8, 15, -0.32, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(-S.ex, S.ey + 11, 10, 5, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(S.ex, S.ey + 11, 10, 5, 0, 0, 7); g.fill();
+    }
     // beard shadow: ONE tinted region over the jaw, kept clear of the nose
     if (d.stubble) {
       g.fillStyle = STUB;
@@ -605,6 +689,17 @@
       g.beginPath();
       g.ellipse(0, S.my - 7, S.mW * 0.74, 6, 0, 0, 7);
       g.fill();
+    }
+    // patchy scruff: broken uneven patches, never the full region.
+    // chin + near-jaw get a second pass so the patchiness itself reads.
+    if (d.patchy) {
+      g.fillStyle = STUB;
+      g.beginPath(); g.ellipse(-jw + 5, chin - 24, 13, 10, 0.3, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(-jw + 5, chin - 24, 9, 7, 0.3, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(jw - 3, chin - 27, 9, 7, -0.25, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(3, chin - 5, 14, 9, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(3, chin - 5, 10, 6, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(-2, S.my - 7, S.mW * 0.6, 5, 0, 0, 7); g.fill();
     }
     // cheek colour
     if (d.blush) {
@@ -696,9 +791,9 @@
     g.beginPath(); g.arc(ix, iy - ir * 0.1, ir * 0.72, 0, 7); g.fill();
     g.strokeStyle = d.irD; g.lineWidth = 1.6;
     g.beginPath(); g.arc(ix, iy, ir - 0.7, 0, 7); g.stroke();
-    // 3 pupil
+    // 3 pupil (d.pupil pins it to a point for the ghast)
     g.fillStyle = INK;
-    g.beginPath(); g.arc(ix, iy, ir * 0.46 * e.pup, 0, 7); g.fill();
+    g.beginPath(); g.arc(ix, iy, ir * 0.46 * e.pup * (d.pupil || 1), 0, 7); g.fill();
     // 4 ONE catchlight at the iris's upper-left
     g.fillStyle = CATCH;
     g.beginPath(); g.arc(ix - ir * 0.36, iy - ir * 0.4, ir * 0.3, 0, 7); g.fill();
@@ -755,7 +850,7 @@
     g.quadraticCurveTo(0, h * 1.24, w - 2, h * 0.78);
     g.stroke();
     if (d.glow) {
-      g.fillStyle = EYEGLOW;
+      g.fillStyle = d.glowCol || EYEGLOW;
       g.beginPath(); g.arc(0, h * 0.16, h * 1.5, 0, 7); g.fill();
     }
     g.restore();
@@ -767,7 +862,7 @@
     const xi = sd * (S.ex - 12 + e.bp), xo = sd * (S.ex + 12);
     const y0 = S.ey - 15 + (d.eH - 8) * 0.9;
     g.fillStyle = bc;
-    browShape(g, xi, y0 + e.bi + lift, xo, y0 + e.bo + lift, d.bw, d.bw * 0.42, 2.4);
+    browShape(g, xi, y0 + e.bi + lift, xo, y0 + e.bo + lift, d.bw, d.bw * 0.42, d.bArch || 2.4);
     g.fill();
   }
 
@@ -821,8 +916,9 @@
     const k = e.m;
     if (k === 'lens' || k === 'firm' || k === 'smirk') {
       const th = k === 'firm' ? 4 : 3.3;
-      const l1 = k === 'smirk' ? e.mc * hw * 0.7 : e.mc * hw * 0.45;
-      const l2 = k === 'smirk' ? -e.mc * hw * 0.1 : e.mc * hw * 0.45;
+      const mc = e.mc + (d.mcBias || 0);  // resting-face grin / purse bias
+      const l1 = k === 'smirk' ? mc * hw * 0.7 : mc * hw * 0.45;
+      const l2 = k === 'smirk' ? -mc * hw * 0.1 : mc * hw * 0.45;
       // upper lip plane, then the mouth line itself sits inside it
       g.fillStyle = d.lip;
       g.beginPath();
@@ -839,6 +935,15 @@
       g.closePath();
       g.fill();
       lipShine(g, hw, my, th);
+      if (d.cracks) {
+        // dry vertical splits across the lip plane
+        g.strokeStyle = INK; g.lineWidth = 1.3; g.lineCap = 'round';
+        g.beginPath();
+        g.moveTo(-hw * 0.5, my - 3); g.lineTo(-hw * 0.44, my + 2.6);
+        g.moveTo(-hw * 0.08, my - 2.2); g.lineTo(-hw * 0.02, my + 3.4);
+        g.moveTo(hw * 0.34, my - 3); g.lineTo(hw * 0.42, my + 2.6);
+        g.stroke();
+      }
       if (k === 'smirk') {
         g.strokeStyle = CREASE; g.lineWidth = 2.2; g.lineCap = 'round';
         g.beginPath();
@@ -874,7 +979,7 @@
       return;
     }
     if (k === 'shout') {
-      const oh = 12 + e.mo * 12;
+      const oh = (12 + e.mo * 12) * (d.gape || 1);  // ghast: jaw drops past the chin
       g.fillStyle = d.lipD;
       g.beginPath();
       g.moveTo(-hw, my - 8);
@@ -894,6 +999,21 @@
       g.fillRect(-hw * 0.7, my - 3.4, hw * 1.4, 1.4);
       g.fillStyle = TONGUE;
       g.beginPath(); g.ellipse(0, my + oh + 3, hw * 0.62, oh * 0.5, 0, 0, 7); g.fill();
+      if (d.fangs) {
+        // too many teeth: needle points off both rows, over the tongue
+        g.fillStyle = TEETH;
+        for (let fx = -hw * 0.7; fx < hw * 0.62; fx += hw * 0.175) {
+          g.beginPath();
+          g.moveTo(fx, my - 3); g.lineTo(fx + hw * 0.0875, my + 6); g.lineTo(fx + hw * 0.175, my - 3);
+          g.closePath(); g.fill();
+        }
+        g.beginPath(); g.roundRect(-hw * 0.62, my + oh - 9, hw * 1.24, 8, 3); g.fill();
+        for (let fx = -hw * 0.6; fx < hw * 0.52; fx += hw * 0.15) {
+          g.beginPath();
+          g.moveTo(fx, my + oh - 8); g.lineTo(fx + hw * 0.075, my + oh - 16); g.lineTo(fx + hw * 0.15, my + oh - 8);
+          g.closePath(); g.fill();
+        }
+      }
       g.restore();
       return;
     }
@@ -916,6 +1036,19 @@
       g.beginPath(); g.roundRect(-hw * 0.62, my + oh - 1, hw * 1.24, 8, 3); g.fill();
       g.fillStyle = TEETH_SH;
       g.fillRect(-hw * 0.8, my - 2.6, hw * 1.6, 1.6);
+      if (d.fangs) {
+        g.fillStyle = TEETH;
+        for (let fx = -hw * 0.78; fx < hw * 0.7; fx += hw * 0.195) {
+          g.beginPath();
+          g.moveTo(fx, my - 2); g.lineTo(fx + hw * 0.0975, my + 5); g.lineTo(fx + hw * 0.195, my - 2);
+          g.closePath(); g.fill();
+        }
+        for (let fx = -hw * 0.6; fx < hw * 0.52; fx += hw * 0.155) {
+          g.beginPath();
+          g.moveTo(fx, my + oh); g.lineTo(fx + hw * 0.0775, my + oh - 7); g.lineTo(fx + hw * 0.155, my + oh);
+          g.closePath(); g.fill();
+        }
+      }
       g.restore();
       return;
     }
@@ -1006,6 +1139,14 @@
       g.fillStyle = d.hMid;
       g.beginPath(); g.ellipse(-S.cw - 6, 24, 12, 36, 0.1, 0, 7); g.fill();
       g.beginPath(); g.ellipse(S.cw + 5, 26, 11, 34, -0.1, 0, 7); g.fill();
+    } else if (st === 'big') {
+      // the coif's under-mass framing both sides of the face
+      g.fillStyle = d.hDk; g.strokeStyle = d.hOut; g.lineWidth = 3;
+      g.beginPath(); g.ellipse(-S.cw - 8, 18, 19, 38, 0.18, 0, 7); g.fill(); g.stroke();
+      g.beginPath(); g.ellipse(S.cw + 8, 20, 18, 36, -0.18, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = d.hMid;
+      g.beginPath(); g.ellipse(-S.cw - 9, 12, 12, 27, 0.18, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(S.cw + 9, 14, 11, 25, -0.18, 0, 7); g.fill();
     }
   }
 
@@ -1056,6 +1197,7 @@
       }
     } else if (st === 'shaggy') clumps(g, SHAG, k, 3);
     else if (st === 'mop') clumps(g, MOP, k, 3);
+    else if (st === 'big') clumps(g, BIGH, k, 3);
     else if (st === 'scruff') clumps(g, SCRUFF, k, 3);
     else if (st === 'wisp') {
       g.strokeStyle = d.hOut; g.lineWidth = 7; g.lineCap = 'round';
@@ -1083,6 +1225,7 @@
       }
     } else if (st === 'shaggy') clumps(g, SHAG, k, 0);
     else if (st === 'mop') clumps(g, MOP, k, 0);
+    else if (st === 'big') clumps(g, BIGH, k, 0);
     else if (st === 'scruff') clumps(g, SCRUFF, k, 0);
     else if (st === 'wisp') {
       g.strokeStyle = d.hMid; g.lineWidth = 4; g.lineCap = 'round';
@@ -1329,6 +1472,57 @@
       g.fillStyle = HORN_LT;
       g.beginPath(); g.ellipse(-33, -58, 3, 8, 0.4, 0, 7); g.fill();
     }
+    if (d.hoops) {
+      // gold hoops swing from the lobes — rings, never discs
+      g.strokeStyle = HOOP_OUT; g.lineWidth = 4.6;
+      g.beginPath(); g.arc(-cw + 1, 26, 8.5, 0, 7); g.stroke();
+      g.beginPath(); g.arc(cw - 1, 26, 8.5, 0, 7); g.stroke();
+      g.strokeStyle = HOOP; g.lineWidth = 2.4;
+      g.beginPath(); g.arc(-cw + 1, 26, 8.5, 0, 7); g.stroke();
+      g.beginPath(); g.arc(cw - 1, 26, 8.5, 0, 7); g.stroke();
+      g.strokeStyle = HOOP_HI; g.lineWidth = 1.4;
+      g.beginPath(); g.arc(-cw + 1, 26, 8.5, 3.4, 4.4); g.stroke();
+      g.beginPath(); g.arc(cw - 1, 26, 8.5, 3.4, 4.4); g.stroke();
+    }
+    if (d.rollers) {
+      // head scarf over the crown, knotted top-left on the key side
+      g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 3;
+      g.beginPath();
+      g.moveTo(-cw - 5, -20);
+      g.bezierCurveTo(-cw - 3, -88, cw + 3, -88, cw + 5, -20);
+      g.quadraticCurveTo(0, -32, -cw - 5, -20);
+      g.closePath();
+      g.fill(); g.stroke();
+      g.save();
+      g.beginPath();
+      g.moveTo(-cw - 5, -20);
+      g.bezierCurveTo(-cw - 3, -88, cw + 3, -88, cw + 5, -20);
+      g.quadraticCurveTo(0, -32, -cw - 5, -20);
+      g.closePath();
+      g.clip();
+      g.fillStyle = d.gLt;
+      g.beginPath(); g.ellipse(-18, -54, 17, 7, 0.28, 0, 7); g.fill();
+      g.fillStyle = SHADE;
+      g.beginPath(); g.arc(cw, -32, 32, 0, 7); g.fill();
+      g.restore();
+      // knot: two soft rabbit-ear lobes, then the knot itself
+      g.fillStyle = d.gDk; g.strokeStyle = d.gOut; g.lineWidth = 2.4;
+      g.beginPath(); g.ellipse(-24, -70, 9, 5.5, 0.55, 0, 7); g.fill(); g.stroke();
+      g.beginPath(); g.ellipse(-5, -73, 5.5, 9, 0.3, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = d.gMid;
+      g.beginPath(); g.ellipse(-12, -63, 7, 5.5, 0.2, 0, 7); g.fill(); g.stroke();
+      // the front row of rollers peeking out under the wrap
+      g.fillStyle = ROLL_MID; g.strokeStyle = ROLL_OUT; g.lineWidth = 2.2;
+      g.beginPath(); g.roundRect(-39, -39, 20, 11, 5); g.fill(); g.stroke();
+      g.beginPath(); g.roundRect(-16, -41, 22, 12, 5.5); g.fill(); g.stroke();
+      g.beginPath(); g.roundRect(9, -39, 18, 11, 5); g.fill(); g.stroke();
+      g.fillStyle = ROLL_LT;
+      g.fillRect(-35, -38, 3, 9); g.fillRect(-27, -38, 3, 9);
+      g.fillRect(-11, -40, 3, 10); g.fillRect(-2, -40, 3, 10);
+      g.fillRect(12, -38, 3, 9); g.fillRect(19, -38, 3, 9);
+      g.fillStyle = ROLL_HI;
+      g.fillRect(-35, -38, 3, 3); g.fillRect(-11, -40, 3, 3.4); g.fillRect(12, -38, 3, 3);
+    }
   }
 
   // the monster's plush muzzle carries its own nose + mouth
@@ -1469,6 +1663,16 @@
       g.beginPath(); g.ellipse(S.mW * 0.5 + 4, S.my + 1, 4, 3, -0.3, 0, 7); g.fill();
       g.strokeStyle = PACI_RING; g.lineWidth = 2.6;
       g.beginPath(); g.arc(S.mW * 0.5 + 17, S.my + 8, 5.5, 0, 7); g.stroke();
+    }
+    if (d.pick) {
+      // toothpick riding the mouth corner
+      g.lineCap = 'round';
+      g.strokeStyle = PICK_OUT; g.lineWidth = 3.6;
+      g.beginPath(); g.moveTo(S.mW * 0.5 - 1, S.my + 1); g.lineTo(S.mW * 0.5 + 15, S.my + 7); g.stroke();
+      g.strokeStyle = PICK; g.lineWidth = 1.9;
+      g.beginPath(); g.moveTo(S.mW * 0.5 - 1, S.my + 1); g.lineTo(S.mW * 0.5 + 15, S.my + 7); g.stroke();
+      g.strokeStyle = PICK_HI; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(S.mW * 0.5 + 8, S.my + 4.2); g.lineTo(S.mW * 0.5 + 14, S.my + 6.4); g.stroke();
     }
     drawFx(g, d, e);
 

@@ -58,13 +58,14 @@ const Cut = (() => {
     jacob: 240, samantha: 250, cassandra: 245, erika: 265, levi: 130,
     ronathon: 190, tim: 165, myah: 270, isla: 320, hayes: 235, addi: 300,
     brooks: 290, dayne: 200, narrator: 0,
+    heath: 170, jr: 140, yvonne: 240, collette: 215, colletteghast: 88,
   };
 
   function reset() {
     idx = 0; stepT = 0; actors = {}; fx.length = 0;
     bubble = null; card = null; shake = 0; flash = 0; letterbox = 0; ended = false;
     shot.kind = 'world'; shot.on = null; shot.expr = 'neutral';
-    shot.size = 'full'; shot.base = 1;
+    shot.size = 'full'; shot.base = 1; shot.faceId = null;
     shot.zoom = 1; shot.zoomTo = 1; shot.dim = 0; shot.warm = null; shot.cutT = 0;
   }
 
@@ -172,6 +173,7 @@ const Cut = (() => {
       const sh = s.shot;
       shot.kind = sh.face ? 'face' : 'world';
       shot.on = sh.on || shot.on;
+      shot.faceId = sh.faceId || null; // when the bust isn't the actor's body key
       shot.expr = sh.expr || 'neutral';
       const base = SHOT_ZOOM[sh.size] || 1;
       shot.size = sh.size || 'full';
@@ -229,6 +231,9 @@ const Cut = (() => {
       fx.push({ kind: 'dust', x: s.x || 0, y: s.y || 468, t: 0, dur: s.dur || 0.7, n: s.n || 8 });
     } else if (s.fx === 'stars') {
       fx.push({ kind: 'stars', x: s.x || 0, y: s.y || 430, t: 0, dur: s.dur || 0.9 });
+    } else if (s.fx === 'bats') {
+      // she is GONE: a burst of bats spirals up and away from the point
+      fx.push({ kind: 'bats', x: s.x || 0, y: s.y || 400, t: 0, dur: s.dur || 2.6, n: s.n || 14 });
     } else if (s.fx === 'doorburst') {
       // the slab tears off its hinges and tumbles into the room, and the
       // doorway floods with light for the rest of the scene
@@ -455,6 +460,26 @@ const Cut = (() => {
         g.fillStyle = '#c9a227';
         g.beginPath(); g.arc(f.w / 2 - 16, 6, 6, 0, 7); g.fill();
         g.restore();
+      } else if (f.kind === 'bats') {
+        // deterministic swarm: each bat gets its own arc from index math alone
+        const u = clamp01(f.t / f.dur);
+        g.strokeStyle = '#1d1030';
+        g.lineWidth = 2.4;
+        g.lineCap = 'round';
+        for (let i = 0; i < f.n; i++) {
+          const a = (i / f.n) * Math.PI * 2 + i * 0.7;
+          const spd = 90 + (i % 5) * 44;
+          const bx = f.x + Math.cos(a) * spd * f.t + Math.sin(f.t * 3 + i) * 8;
+          const by = f.y - 60 * f.t * f.t - Math.abs(Math.sin(a)) * spd * f.t * 0.5 + Math.cos(f.t * 4 + i) * 6;
+          const fl = Math.sin(f.t * 21 + i * 1.3) * 4;
+          g.globalAlpha = (1 - u) * 0.95;
+          g.beginPath();
+          g.moveTo(bx - 7, by - fl);
+          g.quadraticCurveTo(bx - 2.5, by + 2.5, bx, by);
+          g.quadraticCurveTo(bx + 2.5, by + 2.5, bx + 7, by - fl);
+          g.stroke();
+        }
+        g.globalAlpha = 1;
       } else if (f.kind === 'creak') {
         const u = clamp01(f.t / f.dur);
         g.globalAlpha = (1 - u) * 0.9;
@@ -563,7 +588,7 @@ const Cut = (() => {
   function drawCloseup(g, SW, SH, rampFn) {
     if (!sc || shot.kind !== 'face') return false;
     const a = actors[shot.on];
-    const id = a ? a.char : shot.on;
+    const id = shot.faceId || (a ? a.char : shot.on);
     if (!window.FACES || !window.FACES.has || !window.FACES.has(id)) return false;
     // push the staged scene back so the face reads as the subject
     if (shot.dim > 0) {
