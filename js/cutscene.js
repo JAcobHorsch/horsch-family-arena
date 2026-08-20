@@ -143,16 +143,17 @@ const Cut = (() => {
       shot.dim = sh.dim == null ? (shot.kind === 'face' ? 0.55 : 0) : sh.dim;
       shot.warm = sh.warm || null;
       shot.cutT = 0;
-      // frame the world camera on the subject unless the shot names an x
+      // Always frame the world camera on the subject — a close-up draws over
+      // the scene, so if its face is missing the shot beneath must still be
+      // pointed at the right person rather than wherever the last cut left it.
       const a = actors[shot.on];
-      if (shot.kind === 'world') {
-        cam.fromX = cam.x;
-        cam.toX = sh.x != null ? sh.x : (a ? a.x - 240 / base : cam.x);
-        cam.fromZ = cam.zoom; cam.toZ = base;
-        cam.dur = sh.ease ? (sh.ease || 0.5) : 0; // 0 = instant cut
-        cam.t = 0;
-        if (!cam.dur) { cam.x = cam.toX; cam.zoom = base; }
-      }
+      const wz = shot.kind === 'face' ? SHOT_ZOOM.med : base;
+      cam.fromX = cam.x;
+      cam.toX = sh.x != null ? sh.x : (a ? a.x - viewW / (2 * wz) : cam.x);
+      cam.fromZ = cam.zoom; cam.toZ = wz;
+      cam.dur = sh.ease || 0; // 0 = instant cut
+      cam.t = 0;
+      if (!cam.dur) { cam.x = cam.toX; cam.zoom = wz; }
       if (sh.sfx && Sfx[sh.sfx]) Sfx[sh.sfx]();
     } else if (s.cam) {
       cam.fromX = cam.x; cam.toX = s.cam.x == null ? cam.x : s.cam.x;
@@ -210,7 +211,9 @@ const Cut = (() => {
     return true; // set/pose/shake/flash/sfx are instantaneous
   }
 
-  function update(dt) {
+  let viewW = 960; // set by the renderer so shots can centre their subject
+  function update(dt, vw) {
+    if (vw) viewW = vw;
     if (!sc) return;
     if (idx === 0 && stepT === 0 && !ended) { if (begin()) return; }
     letterbox = Math.min(1, letterbox + dt * 4);
@@ -252,7 +255,7 @@ const Cut = (() => {
       const d = shot.zoomTo - shot.zoom;
       shot.zoom += d * Math.min(1, dt * 0.22);
       if (Math.abs(shot.zoomTo - shot.zoom) < 0.002) shot.zoom = shot.zoomTo;
-      if (shot.kind === 'world') cam.zoom = shot.zoom;
+      if (shot.kind === 'world') cam.zoom = shot.zoom; // face pushes zoom the bust, not the room
     }
     if (card) card.t += dt;
     if (shake > 0) shake = Math.max(0, shake - dt * 1.8);

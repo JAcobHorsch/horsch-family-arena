@@ -1294,7 +1294,7 @@ const Game = (() => {
   // ---------- Main update ----------
   function update(dt) {
     if (mode === 'cutscene') {
-      Cut.update(dt);
+      Cut.update(dt, viewW);
       camX = clamp(Cut.camX, 0, Math.max(0, STAGE_W - viewW));
       if (Cut.shake > 0) { shakeT = Math.max(shakeT, Cut.shake * 0.25); shakeMag = 8; }
       // the normal decay lives past this early return, so run it here or the
