@@ -41,6 +41,8 @@ const Cut = (() => {
     kind: 'world',        // 'world' = staged scene, 'face' = close-up bust
     on: null,             // actor the shot is framed on
     expr: 'neutral',
+    size: 'full',         // framing name, which also sets how much a bust fills
+    base: 1,              // the size's zoom before any push
     zoom: 1, zoomTo: 1,   // slow push-in over the take
     dim: 0,               // how far the scene behind a close-up is pushed down
     warm: null,           // per-shot colour grade
@@ -62,6 +64,7 @@ const Cut = (() => {
     idx = 0; stepT = 0; actors = {}; fx.length = 0;
     bubble = null; card = null; shake = 0; flash = 0; letterbox = 0; ended = false;
     shot.kind = 'world'; shot.on = null; shot.expr = 'neutral';
+    shot.size = 'full'; shot.base = 1;
     shot.zoom = 1; shot.zoomTo = 1; shot.dim = 0; shot.warm = null; shot.cutT = 0;
   }
 
@@ -70,6 +73,10 @@ const Cut = (() => {
   // never below 1: interiors only paint the room, and pulling back past the
   // default framing shows the world outside it
   const SHOT_ZOOM = { wide: 1, full: 1.16, med: 1.45, mcu: 1.8, cu: 2.3 };
+  // For a bust the shot size sets how much of the frame the head fills. This
+  // is NOT the world zoom — multiplying by that blew the head off the frame.
+  const FACE_FILL = { wide: 0.32, full: 0.40, med: 0.48, mcu: 0.58, cu: 0.70 };
+  const HEAD_UNITS = 150; // head plus hair, in the face renderer's units
 
   function play(name, onDone) {
     const script = window.CUTSCENES && window.CUTSCENES[name];
@@ -138,6 +145,8 @@ const Cut = (() => {
       shot.on = sh.on || shot.on;
       shot.expr = sh.expr || 'neutral';
       const base = SHOT_ZOOM[sh.size] || 1;
+      shot.size = sh.size || 'full';
+      shot.base = base;
       shot.zoom = base;
       shot.zoomTo = sh.push ? base * (1 + sh.push) : base;
       shot.dim = sh.dim == null ? (shot.kind === 'face' ? 0.55 : 0) : sh.dim;
@@ -426,8 +435,11 @@ const Cut = (() => {
     }
     const bar = 46 * letterbox;
     const frameH = SH - bar * 2;
-    // head fills a consistent share of the frame regardless of screen shape
-    const s = (frameH / 300) * shot.zoom;
+    // head fills a set share of the frame regardless of screen shape; the
+    // shot's push adds only a gentle drift on top
+    const fill = FACE_FILL[shot.size] || FACE_FILL.full;
+    const push = 1 + (shot.zoom - shot.base) * 0.3;
+    const s = (frameH * fill / HEAD_UNITS) * push;
     g.save();
     g.translate(SW * 0.5, bar + frameH * 0.46);
     g.scale(s, s);

@@ -1,339 +1,375 @@
 // faces.js — cinematic close-up busts for the cutscene 'face' shots.
 //
-// Local frame: (0,0) is the CENTRE OF THE HEAD, +y is down, one unit is one
-// unit. The head reads ~100 units across; the shoulders run off the bottom of
-// the frame. The caller owns the translate/scale; we own our save/restore.
+// Local frame: (0,0) is the CENTRE OF THE HEAD, +y is down. The head reads
+// ~100 units across and ~118 tall; the shoulders run off the bottom of the
+// frame. The caller owns the translate/scale; we own our save/restore.
 //
-// ONE generic bust renderer driven by two tables:
-//   DESC[id]  — who this is: skin/hair/shirt ramps, face proportions, brow
-//               weight, eye size + iris, nose, mouth, and look extras.
-//   EXPR[key] — how they feel: brow ends, lid closure, pupil size, mouth kind,
-//               flush and jaw tension. Every field moves; nothing is a mouth swap.
+// ONE generic bust renderer driven by two hoisted tables:
+//   D[id]     — who this is: skin/hair/shirt ramps, skull width, jaw, eye
+//               size + iris, nose, mouth width, and look extras.
+//   EXPR[key] — how they feel. Brow ends, lid closure, pupil scale and mouth
+//               kind all move together; nothing is a mouth swap.
 // ASC[id] carries the finalForm.look variant, resolved ONCE at load.
 //
-// Canonical drawing faces +x (front). spec.facing mirrors the whole bust the
-// same way drawFighter does, so the key light is authored top-left in the
-// canonical frame: broad shade on the back plane, warm rim on the upper-left
-// edge, form light on the forehead and front cheekbone.
+// The bust faces the viewer square-on so both eyes are the same construction
+// mirrored about x=0. The key light is authored UPPER-LEFT: form shadow down
+// the right and lower edge, warm rim along the upper-left. spec.facing<0
+// mirrors the whole bust, which flips the hair sweep with it.
 //
 // Flat fills only — no gradients, no shadowBlur, no per-frame allocations.
 (function () {
   const F = (window.FACES = window.FACES || {});
 
-  // ============================ shared ink =============================
-  const INK = '#14101a';
-  const EYEW = '#fffdf6';
-  const LID_SHADE = 'rgba(96,80,104,0.26)';   // upper lid shadow on the white
-  const RIM = 'rgba(255,246,221,0.42)';       // warm sun rim, upper-left edge
-  const RIM_SOFT = 'rgba(255,246,221,0.22)';
-  const SHADE = 'rgba(20,16,26,0.17)';        // back-plane shade
-  const SHADE_HARD = 'rgba(20,16,26,0.27)';
-  const NECK_SHADE = 'rgba(20,16,26,0.34)';
-  const BLUSH = 'rgba(255,122,122,0.34)';
-  const BLUSH_HOT = 'rgba(255,110,110,0.48)';
-  const FLUSH_LO = 'rgba(206,42,24,0.14)';
-  const FLUSH_MID = 'rgba(206,42,24,0.26)';
-  const FLUSH_HOT = 'rgba(255,64,28,0.38)';
-  const HEAT_A = 'rgba(255,140,70,0.34)';
-  const HEAT_B = 'rgba(255,176,112,0.20)';
-  const TEAR = 'rgba(150,214,255,0.78)';
-  const TEAR_HI = 'rgba(240,252,255,0.90)';
-  const SWEAT = 'rgba(186,228,255,0.85)';
-  const CATCH = 'rgba(255,255,255,0.95)';
+  /* ============================ shared ink ============================ */
+  const INK = '#181220';
+  const EYEW = '#fbf7ee';
+  const LID_SH = 'rgba(104,74,96,0.20)';   // lid's cast shadow on the white
+  const CATCH = 'rgba(255,255,255,0.96)';
   const CATCH2 = 'rgba(255,255,255,0.40)';
-  const STUB = 'rgba(40,32,44,0.30)';
-  const FRECK = 'rgba(168,96,58,0.44)';
+  const RIM = 'rgba(255,246,221,0.38)';    // warm sun rim, upper-left edge
+  const SHADE = 'rgba(24,16,34,0.15)';     // form shadow, right/lower plane
+  const JAWSH = 'rgba(24,16,34,0.13)';
+  const NECKSH = 'rgba(20,14,30,0.32)';
+  const NOSE_SH = 'rgba(98,54,44,0.22)';
+  const NOSE_HI = 'rgba(255,246,221,0.34)';
+  const LIPHI = 'rgba(255,238,216,0.34)';
+  const LOWLID = 'rgba(122,80,74,0.28)';
+  const CREASE = 'rgba(112,72,68,0.18)';
+  const BLUSH = 'rgba(255,118,118,0.28)';
+  const FLUSH1 = 'rgba(206,42,24,0.12)';
+  const FLUSH2 = 'rgba(206,42,24,0.22)';
+  const STUB = 'rgba(48,38,56,0.13)';      // beard shadow: a REGION, never dots
+  const FRECK = 'rgba(170,98,60,0.34)';
   const TEETH = '#fbf6ea';
-  const TEETH_DK = '#cfc4b2';
-  const GUM = '#4d1f28';
-  const GUM_HOT = '#6b1f24';
-  const TONGUE = '#d4626e';
-  const VEIN = 'rgba(190,42,30,0.55)';
+  const TEETH_SH = 'rgba(126,108,96,0.26)';
+  const MOUTH_IN = '#3c1220';
+  const TONGUE = '#cf5f6d';
+  const HEAT_A = 'rgba(255,150,58,0.78)';
+  const HEAT_B = 'rgba(255,198,132,0.44)';
+  const TEAR = 'rgba(152,214,255,0.82)';
+  const TEAR_HI = 'rgba(240,252,255,0.92)';
+  const SWEAT = 'rgba(192,232,255,0.86)';
+  const SHEEN = 'rgba(255,255,255,0.26)';
+  const GLASSF = 'rgba(206,232,246,0.14)';
+  const GLASSR = '#2a2a35';
+  const HAIRSH = 'rgba(24,16,34,0.16)';
+  const SWEAT_OUT = 'rgba(96,150,190,0.70)';
+  const PACI = '#4ab2e8';
+  const PACI_OUT = '#1f5c8a';
+  const PACI_LT = '#9fdcff';
+  const PACI_RING = '#2f7bd4';
+  const BEAK = '#f0b23a';
+  const BEAK_OUT = '#9c6a12';
+  const HORN = '#e0cf9e';
+  const HORN_OUT = '#8a7548';
+  const HORN_LT = '#f6ecc8';
+  const BAR_A = '#4adbe8';
+  const BAR_B = '#ff4a3a';
+  const EYEGLOW = 'rgba(255,106,42,0.30)';
 
-  // hoisted scatter/geometry — indices, never rebuilt
-  const STUBBLE = [
-    -26, 34, -16, 42, -6, 47, 4, 49, 14, 47, 23, 42, 30, 34,
-    -22, 26, -11, 34, 0, 39, 11, 39, 20, 33, 27, 25, 33, 17,
+  /* ===================== hoisted geometry tables ====================== */
+  // 5 swept spikes, authored for cw=46 and scaled. An ODD, uneven crest —
+  // never two matched points, which would read as cat ears.
+  const SPIKE = [
+    -33, -40, -43, -62, 8.5,
+    -17, -54, -23, -80, 9.5,
+    2, -58, 5, -87, 10,
+    20, -53, 30, -77, 9,
+    34, -38, 46, -58, 7.5,
   ];
-  const FRECKLES = [8, 4, 18, 2, 27, 5, 34, 10, -2, 6, -11, 9, 14, 10, 24, 12];
-  const SPIKES = [-30, -78, -13, -88, 4, -90, 21, -83, 35, -70];
-  const SHAG = [-32, -56, 20, -16, -66, 21, 2, -70, 22, 24, -64, 20, 40, -52, 17];
-  const MOP = [-30, -62, 25, -6, -74, 27, 20, -66, 24, 38, -50, 19];
-  const HEAT_ST = [-58, 0, -30, 1.7, 8, 3.3, 42, 4.8, 62, 2.4];
-  const MOTES = [-64, -34, 0, 60, -50, 1.6, -50, 30, 3.1, 68, 18, 4.4, 10, -84, 5.2];
-  const SEEDS = [-18, -30, -2, -38, 14, -32, 26, -20, -30, -16];
-  const CROWN = [-34, -46, -34, -78, -17, -58, 2, -86, 21, -58, 38, -78, 38, -46];
+  // shaggy: big overlapping rounded clumps + two side locks
+  const SHAG = [
+    -34, -30, 14, -27, -50, 16, -6, -60, 17.5, 15, -57, 16, 34, -38, 13.5,
+    -42, -8, 11, 40, -12, 10,
+  ];
+  // levi's ascended wrecking-crew mop — fewer, bigger, messier
+  const MOP = [
+    -34, -34, 17, -18, -60, 20, 8, -64, 21, 32, -44, 17, -44, -6, 13, 42, -10, 12,
+  ];
+  // short hair: three soft bumps so the dome is not a dead arc
+  const BUMP = [-24, -46, 13, -2, -55, 14, 24, -44, 12];
+  // josh's scruffy crop
+  const SCRUFF = [-26, -44, 12, -4, -52, 13, 20, -45, 12, 34, -32, 9];
+  // freckles: ONE tight band across the nose bridge, never a scatter
+  const FRECKLES = [-19, 9, -12, 12, -5, 14, 7, 13, 14, 11, 20, 8];
+  // rage heat: side, x pad, base y, phase — it rises off the SIDES of the head
+  const HEAT = [
+    -1, 9, 8, 0, -1, 22, 0, 1.9, -1, 34, 14, 3.1,
+    1, 9, 4, 4.4, 1, 22, -4, 0.8, 1, 34, 12, 2.4,
+  ];
+  // princess crown silhouette
+  const CROWN = [-30, -50, -30, -76, -15, -60, 0, -84, 15, -60, 30, -76, 30, -50];
+  // ascension aura: widest and faintest first, so the core stays brightest
+  const AURA = [112, 2, 94, 1, 78, 0];
 
-  // ============================ palettes ===============================
-  // every ramp is the game's own ramp() of the base hue, baked to literals
+  /* ============================= palettes ============================= */
+  // every ramp is the game's own ramp() of that character's hue, baked flat
   const D = {};
 
   D.todd = {
-    sOut: '#654a4b', sDk: '#a57a62', sMid: '#e0a878', sLt: '#e9be94', sHi: '#f1d3b0',
-    hOut: '#2d152a', hDk: '#3c1a24', hMid: '#4b1e1f', hLt: '#7d5a54',
-    hair: 'short', fx: 48, fy: 47, fj: 37, fc: 55, cx0: 7,
-    bw: 6.2, bt: -1, eW: 10.5, eH: 10.4, ir: '#5b3a22', irD: '#31200f', irL: '#8f6338',
-    noseL: 22, noseW: 13, noseHk: 3, mW: 23, mBias: -0.06,
-    lip: '#b4635c', lipD: '#7e3a3c', lipH: '#d99189',
+    sOut: '#7a5546', sDk: '#c08d63', sMid: '#e8b58a', sLt: '#f2caa6', sHi: '#f8ddc0',
+    hOut: '#2a1218', hDk: '#3a161a', hMid: '#4b1e1f', hLt: '#7a4a42',
+    hair: 'short', cw: 48, jw: 41, chin: 54,
+    bw: 3.6, eW: 11, eH: 7.6, ir: '#5b3a22', irD: '#2c1a0c', irL: '#96693c',
+    noseW: 14, mW: 27,
+    lip: '#b4635c', lipD: '#7a3438', lipH: '#d9918a',
     cOut: '#68293a', cDk: '#aa3e42', cMid: '#e8524a', cLt: '#ee8073', acc: '#f7c2c0',
     band: 1, stubble: 1,
   };
   D.sonya = {
-    sOut: '#6b5154', sDk: '#ae8773', sMid: '#eeba90', sLt: '#f3cba6', sHi: '#f7dbba',
-    hOut: '#2d1432', hDk: '#3c1833', hMid: '#4b1b34', hLt: '#7d5863',
-    hair: 'pony', fx: 45, fy: 47, fj: 30, fc: 55, cx0: 7,
-    bw: 3.8, bt: -4, eW: 11.6, eH: 12.2, ir: '#4a6b52', irD: '#25392a', irL: '#7ba283',
-    noseL: 17, noseW: 10, noseBtn: 1, mW: 20, mBias: 0.14,
-    lip: '#cc6a80', lipD: '#8e3c50', lipH: '#ef9daa',
+    sOut: '#7b5a50', sDk: '#c4906f', sMid: '#eeba90', sLt: '#f5cfaa', sHi: '#fae0c4',
+    hOut: '#2a1020', hDk: '#3a1428', hMid: '#4b1b34', hLt: '#7c4a5c',
+    hair: 'pony', cw: 45, jw: 31, chin: 55,
+    bw: 2.4, eW: 11.4, eH: 8.6, ir: '#4a6b52', irD: '#22331f', irL: '#84ab88',
+    noseW: 11, mW: 21,
+    lip: '#cc6a80', lipD: '#8a3448', lipH: '#ef9daa',
     cOut: '#682655', cDk: '#aa3975', cMid: '#e84a92', cLt: '#ee7aa7', acc: '#f7c0d9',
     band: 1, lash: 1,
   };
   D.jordan = {
-    sOut: '#684d50', sDk: '#aa816b', sMid: '#e8b184', sLt: '#eec49d', sHi: '#f5d7b5',
-    hOut: '#2d1a2a', hDk: '#3c2224', hMid: '#4b291f', hLt: '#7d6254',
-    hair: 'spiky', fx: 43, fy: 50, fj: 27, fc: 59, cx0: 8,
-    bw: 4.8, bt: -2, eW: 10.8, eH: 11.2, ir: '#3f5a74', irD: '#1e2e3e', irL: '#7292ab',
-    noseL: 21, noseW: 10, mW: 21, mBias: 0.08,
-    lip: '#b96a63', lipD: '#813e40', lipH: '#dc9890',
+    sOut: '#785343', sDk: '#bf8b60', sMid: '#e8b184', sLt: '#f0c69f', sHi: '#f7dabb',
+    hOut: '#2a161a', hDk: '#3a1e1c', hMid: '#4b291f', hLt: '#7a5644',
+    hair: 'spiky', cw: 45, jw: 29, chin: 57,
+    bw: 3, eW: 11, eH: 7.9, ir: '#3f5a74', irD: '#1c2a38', irL: '#7f9fb8',
+    noseW: 11, mW: 22,
+    lip: '#b96a63', lipD: '#7c383c', lipH: '#dc9890',
     cOut: '#68383a', cDk: '#aa5942', cMid: '#e8784a', cLt: '#ee9b73', acc: '#f7d0c0',
     band: 1, stubble: 1,
   };
   D.jerod = {
-    sOut: '#6a5155', sDk: '#ae8875', sMid: '#edbb92', sLt: '#f2cca7', sHi: '#f7dbbb',
-    hOut: '#2d222a', hDk: '#3c3224', hMid: '#4b401f', hLt: '#7d7354',
-    hair: 'short', fx: 49, fy: 46, fj: 36, fc: 53, cx0: 6,
-    bw: 5.4, bt: -1, eW: 10.6, eH: 10.8, ir: '#4d6f5c', irD: '#243a2c', irL: '#7fa48c',
-    noseL: 20, noseW: 14, noseBtn: 1, mW: 22, mBias: 0.10,
-    lip: '#b96b62', lipD: '#813f3f', lipH: '#dc998f',
+    sOut: '#7a5747', sDk: '#c39067', sMid: '#edbb92', sLt: '#f4cfab', sHi: '#f9e0c5',
+    hOut: '#2a2214', hDk: '#3a3018', hMid: '#4b401f', hLt: '#7a6c46',
+    hair: 'short', cw: 49, jw: 37, chin: 54,
+    bw: 3.4, eW: 11, eH: 7.7, ir: '#4d6f5c', irD: '#22342a', irL: '#88ad94',
+    noseW: 14, mW: 23,
+    lip: '#b96b62', lipD: '#7c3a3a', lipH: '#dc998f',
     cOut: '#68563a', cDk: '#aa9142', cMid: '#e8c84a', cLt: '#eed573', acc: '#f7ecc0',
-    band: 1, stubble: 1, xeye: 1,
+    band: 1, stubble: 1,
   };
   D.jacob = {
-    sOut: '#684c4e', sDk: '#a97f68', sMid: '#e6ae80', sLt: '#edc29a', sHi: '#f4d6b3',
-    hOut: '#1b262d', hDk: '#1b382a', hMid: '#1c4928', hLt: '#5c795b',
-    hair: 'spiky', fx: 46, fy: 47, fj: 33, fc: 55, cx0: 7,
-    bw: 5.6, bt: -2, eW: 10.8, eH: 11, ir: '#3f6b4c', irD: '#1d3624', irL: '#729d7c',
-    noseL: 21, noseW: 12, mW: 22, mBias: 0.05,
-    lip: '#b6665f', lipD: '#7f3b3d', lipH: '#d9948b',
+    sOut: '#775241', sDk: '#bd8a5f', sMid: '#e6ae80', sLt: '#efc59c', sHi: '#f7dabb',
+    hOut: '#0f2618', hDk: '#153320', hMid: '#1c4928', hLt: '#4c7a58',
+    hair: 'spiky', cw: 46, jw: 33, chin: 55,
+    bw: 3.4, eW: 11, eH: 7.9, ir: '#3f6b4c', irD: '#1b3222', irL: '#7ba886',
+    noseW: 12, mW: 23,
+    lip: '#b6665f', lipD: '#7a3638', lipH: '#d9948b',
     cOut: '#2c6246', cDk: '#3ca759', cMid: '#4ae86a', cLt: '#7dec8a', acc: '#c0f7cb',
     band: 1, stubble: 1,
   };
   D.samantha = {
-    sOut: '#6b5358', sDk: '#b08b7a', sMid: '#f0c09a', sLt: '#f4cfad', sHi: '#f8debf',
-    hOut: '#1b2635', hDk: '#1b3839', hMid: '#1c493d', hLt: '#5c796a',
-    hair: 'pony', fx: 46, fy: 46, fj: 31, fc: 53, cx0: 7,
-    bw: 4, bt: -4, eW: 11.8, eH: 12.4, ir: '#5a4a6e', irD: '#2c2338', irL: '#8b7ba0',
-    noseL: 17, noseW: 11, noseBtn: 1, mW: 20, mBias: 0.16,
-    lip: '#cc6f7c', lipD: '#8e404c', lipH: '#efa1a6',
+    sOut: '#7d5c4c', sDk: '#c69672', sMid: '#f0c09a', sLt: '#f6d2b0', sHi: '#fae2c8',
+    hOut: '#0f2622', hDk: '#153630', hMid: '#1c493d', hLt: '#4c7a6c',
+    hair: 'pony', cw: 46, jw: 32, chin: 53,
+    bw: 2.5, eW: 11.6, eH: 8.8, ir: '#5a4a6e', irD: '#2a2136', irL: '#948aa8',
+    noseW: 11, mW: 21,
+    lip: '#cc6f7c', lipD: '#8a3a46', lipH: '#efa1a6',
     cOut: '#2c6261', cDk: '#3ca78b', cMid: '#4ae8b2', cLt: '#7decbe', acc: '#c0f7e4',
     band: 1, lash: 1,
   };
   D.cassandra = {
-    sOut: '#6a5054', sDk: '#ad8672', sMid: '#ecb98e', sLt: '#f1caa4', sHi: '#f6dbb9',
-    hOut: '#1b253b', hDk: '#1b3644', hMid: '#1c464d', hLt: '#5c7775',
-    hair: 'long', fx: 45, fy: 47, fj: 30, fc: 55, cx0: 7,
-    bw: 4, bt: -3, eW: 11.4, eH: 12, ir: '#6b5136', irD: '#38281a', irL: '#9d8158',
-    noseL: 18, noseW: 10, noseBtn: 1, mW: 20, mBias: 0.13,
-    lip: '#c96876', lipD: '#8c3c48', lipH: '#ec9ba2',
+    sOut: '#7b5949', sDk: '#c4926e', sMid: '#ecb98e', sLt: '#f3cda8', sHi: '#f9dfc3',
+    hOut: '#0f2028', hDk: '#152e38', hMid: '#1c464d', hLt: '#4c7378',
+    hair: 'long', cw: 45, jw: 31, chin: 55,
+    bw: 2.5, eW: 11.5, eH: 8.6, ir: '#6b5136', irD: '#33261a', irL: '#a4885e',
+    noseW: 11, mW: 21,
+    lip: '#c96876', lipD: '#88343e', lipH: '#ec9ba2',
     cOut: '#2c5d76', cDk: '#3c9eb1', cMid: '#4adbe8', cLt: '#7de3e5', acc: '#c0f2f7',
     band: 1, lash: 1,
   };
   D.erika = {
-    sOut: '#6c545a', sDk: '#b18e7e', sMid: '#f2c49f', sLt: '#f6d2b0', sHi: '#f9e0c1',
-    hOut: '#1b1b3b', hDk: '#1b2444', hMid: '#1c2d4d', hLt: '#5c6575',
-    hair: 'pony', fx: 47, fy: 46, fj: 34, fc: 52, cx0: 5,
-    bw: 3.2, bt: -6, eW: 11, eH: 12.6, ir: '#4a6178', irD: '#243040', irL: '#7d95a8',
-    noseL: 16, noseW: 10, noseBtn: 1, mW: 16, mBias: -0.12,
-    lip: '#c47784', lipD: '#874a54', lipH: '#e7a6ab',
+    sOut: '#7f5e50', sDk: '#c99976', sMid: '#f2c49f', sLt: '#f8d5b4', sHi: '#fbe4ca',
+    hOut: '#101426', hDk: '#151f36', hMid: '#1c2d4d', hLt: '#4c5c78',
+    hair: 'pony', cw: 47, jw: 34, chin: 53,
+    bw: 2.2, eW: 11.2, eH: 8.8, ir: '#4a6178', irD: '#222c3a', irL: '#829bb0',
+    noseW: 11, mW: 18,
+    lip: '#c47784', lipD: '#82424c', lipH: '#e7a6ab',
     cOut: '#2c3d76', cDk: '#3c63b1', cMid: '#4a86e8', cLt: '#7da5e5', acc: '#c0d5f7',
-    band: 1, lash: 1, xeye: 1,
+    band: 1, lash: 1,
   };
   D.levi = {
-    sOut: '#644b4d', sDk: '#a37d65', sMid: '#ddab7c', sLt: '#e7c097', sHi: '#f0d4b1',
-    hOut: '#22143b', hDk: '#291844', hMid: '#2f1b4d', hLt: '#695875',
-    hair: 'shaggy', fx: 49, fy: 47, fj: 38, fc: 56, cx0: 7,
-    bw: 7, bt: 0, eW: 10.2, eH: 10, ir: '#4d3f6b', irD: '#241d33', irL: '#7f7098',
-    noseL: 22, noseW: 14, noseHk: 2, mW: 24, mBias: -0.04,
-    lip: '#ae615c', lipD: '#79383b', lipH: '#d38f88',
+    sOut: '#745040', sDk: '#b9855c', sMid: '#ddab7c', sLt: '#e8c197', sHi: '#f2d7b6',
+    hOut: '#1a0f2a', hDk: '#241438', hMid: '#2f1b4d', hLt: '#5c4a74',
+    hair: 'shaggy', cw: 49, jw: 38, chin: 56,
+    bw: 4.2, eW: 10.8, eH: 7.4, ir: '#4d3f6b', irD: '#231c33', irL: '#8578a0',
+    noseW: 14, mW: 25,
+    lip: '#ae615c', lipD: '#74343a', lipH: '#d38f88',
     cOut: '#452676', cDk: '#6839b1', cMid: '#8a4ae8', cLt: '#ab7ae5', acc: '#d6c0f7',
     band: 1, stubble: 1,
   };
   D.ronathon = {
-    sOut: '#694f53', sDk: '#ab8470', sMid: '#e9b68c', sLt: '#efc8a3', sHi: '#f5d9b9',
-    hOut: '#28143b', hDk: '#351844', hMid: '#401b4d', hLt: '#755875',
-    hair: 'short', fx: 43, fy: 50, fj: 28, fc: 59, cx0: 8,
-    bw: 5.2, bt: -1, eW: 10.4, eH: 10.6, ir: '#5a4460', irD: '#2b2030', irL: '#8b7690',
-    noseL: 24, noseW: 12, noseHk: 4, mW: 21, mBias: 0.02,
-    lip: '#b56760', lipD: '#7e3c3d', lipH: '#d8958c',
+    sOut: '#795442', sDk: '#c08c62', sMid: '#e9b68c', sLt: '#f1cba4', sHi: '#f8dcc0',
+    hOut: '#20102a', hDk: '#2e1538', hMid: '#401b4d', hLt: '#6c4a74',
+    hair: 'short', cw: 44, jw: 29, chin: 58,
+    bw: 3.2, eW: 10.8, eH: 7.6, ir: '#5a4460', irD: '#2a1e30', irL: '#927e98',
+    noseW: 12, mW: 22,
+    lip: '#b56760', lipD: '#78383a', lipH: '#d8958c',
     cOut: '#5a2676', cDk: '#9039b1', cMid: '#c24ae8', cLt: '#d37ae5', acc: '#eac0f7',
     band: 1, mous: 1,
   };
   D.tim = {
-    sOut: '#664b4e', sDk: '#a67d67', sMid: '#e2ac7e', sLt: '#eac199', sHi: '#f2d5b2',
-    hOut: '#291f2d', hDk: '#362b2a', hMid: '#423728', hLt: '#776c5b',
-    hair: 'short', fx: 48, fy: 47, fj: 37, fc: 55, cx0: 7,
-    bw: 6, bt: -1, eW: 10.4, eH: 10.6, ir: '#4c6a7c', irD: '#233642', irL: '#7f9fae',
-    noseL: 21, noseW: 13, mW: 23, mBias: 0.02,
-    lip: '#b4645d', lipD: '#7e393c', lipH: '#d9928a',
+    sOut: '#765241', sDk: '#bb8860', sMid: '#e2ac7e', sLt: '#ecc39b', sHi: '#f5d9ba',
+    hOut: '#241c18', hDk: '#33291e', hMid: '#423728', hLt: '#6f6250',
+    hair: 'short', cw: 48, jw: 37, chin: 55,
+    bw: 3.5, eW: 10.8, eH: 7.6, ir: '#4c6a7c', irD: '#22323e', irL: '#89a8b6',
+    noseW: 13, mW: 24,
+    lip: '#b4645d', lipD: '#78353a', lipH: '#d9928a',
     cOut: '#5d4a46', cDk: '#957a59', cMid: '#c9a86a', cLt: '#d8be8a', acc: '#f2ee4a',
-    helmet: 1, gOut: '#612030', gDk: '#9c2e2f', gMid: '#d43b2f', gLt: '#e06f60',
-    stubble: 1,
+    helmet: 1, stubble: 1,
+    gOut: '#612030', gDk: '#9c2e2f', gMid: '#d43b2f', gLt: '#e06f60',
   };
   D.myah = {
-    sOut: '#6b5359', sDk: '#b08c7c', sMid: '#f0c19c', sLt: '#f4d0ae', sHi: '#f8dec0',
-    hOut: '#2d1438', hDk: '#3c183f', hMid: '#4b1b46', hLt: '#7d5870',
-    hair: 'long', fx: 45, fy: 47, fj: 30, fc: 55, cx0: 7,
-    bw: 3.8, bt: -3, eW: 11.4, eH: 12, ir: '#6b4a5e', irD: '#38242e', irL: '#9d7c8a',
-    noseL: 17, noseW: 10, noseBtn: 1, mW: 20, mBias: 0.11,
-    lip: '#cc6b84', lipD: '#8e3d52', lipH: '#ef9dae',
+    sOut: '#7d5d4e', sDk: '#c69774', sMid: '#f0c19c', sLt: '#f6d3b2', sHi: '#fae3c9',
+    hOut: '#2a1024', hDk: '#3a1430', hMid: '#4b1b46', hLt: '#7c4a68',
+    hair: 'long', cw: 45, jw: 31, chin: 55,
+    bw: 2.4, eW: 11.5, eH: 8.6, ir: '#6b4a5e', irD: '#332430', irL: '#a4838f',
+    noseW: 11, mW: 21,
+    lip: '#cc6b84', lipD: '#8a354c', lipH: '#ef9dae',
     cOut: '#68266d', cDk: '#aa39a0', cMid: '#e84ad0', cLt: '#ee7ad4', acc: '#f7c0ef',
     band: 1, lash: 1,
   };
   D.isla = {
-    sOut: '#6e5961', sDk: '#b5968a', sMid: '#f8d0b0', sLt: '#fadbbd', sHi: '#fce5c9',
-    hOut: '#2e1e37', hDk: '#3e2a3d', hMid: '#4e3542', hLt: '#806b6d',
-    hair: 'none', fx: 52, fy: 50, fj: 38, fc: 50, cx0: 4,
-    bw: 2.6, bt: -3, eW: 14.6, eH: 16, ir: '#4f6b86', irD: '#26364a', irL: '#84a0b6',
-    noseL: 11, noseW: 9, noseBtn: 1, mW: 15, mBias: 0.14, eyeY: 7, eyeSp: 1.06,
-    lip: '#d97d88', lipD: '#964a56', lipH: '#f5a9ac',
+    sOut: '#856155', sDk: '#d2a184', sMid: '#f8d0b0', sLt: '#fbdec1', sHi: '#fdead4',
+    hOut: '#2c1c26', hDk: '#3c2632', hMid: '#4e3542', hLt: '#7d6068',
+    hair: 'wisp', cw: 52, jw: 39, chin: 44,
+    bw: 1.8, eW: 13.6, eH: 10.6, ir: '#4f6b86', irD: '#25334a', irL: '#8dabc0',
+    noseW: 9, mW: 16, eyeY: 7, eyeSp: 1.04,
+    lip: '#d97d88', lipD: '#93414e', lipH: '#f5a9ac',
     cOut: '#6c4867', cDk: '#b17796', cMid: '#f2a3c2', cLt: '#f6baca', acc: '#fadfea',
-    baby: 1, blush: 1, lash: 1, xeye: 1,
+    baby: 1, blush: 1, paci: 1,
   };
   D.hayes = {
-    sOut: '#6c5357', sDk: '#b18b77', sMid: '#f2c096', sLt: '#f6cfaa', sHi: '#f9debd',
-    hOut: '#1d143b', hDk: '#201844', hMid: '#221b4d', hLt: '#605875',
-    hair: 'spiky', fx: 46, fy: 47, fj: 31, fc: 53, cx0: 6,
-    bw: 4.4, bt: -2, eW: 12.4, eH: 13.2, ir: '#4a5c9b', irD: '#232c4c', irL: '#8290c0',
-    noseL: 15, noseW: 10, noseBtn: 1, mW: 19, mBias: 0.10,
-    lip: '#c4707a', lipD: '#88414c', lipH: '#e7a3a6',
+    sOut: '#7e5c4e', sDk: '#c89574', sMid: '#f2c096', sLt: '#f8d2ac', sHi: '#fbe2c4',
+    hOut: '#100e28', hDk: '#171338', hMid: '#221b4d', hLt: '#514a75',
+    hair: 'spiky', cw: 46, jw: 32, chin: 52,
+    bw: 2.7, eW: 12.4, eH: 9.4, ir: '#4a5c9b', irD: '#222a4a', irL: '#8b98c6',
+    noseW: 10, mW: 20, eyeY: 3,
+    lip: '#c4707a', lipD: '#843c48', lipH: '#e7a3a6',
     cOut: '#332676', cDk: '#4839b1', cMid: '#5c4ae8', cLt: '#8a7ae5', acc: '#c6c0f7',
-    band: 1, blush: 1, freckle: 1, xeye: 1,
+    band: 1, blush: 1, freckle: 1,
   };
   D.addi = {
-    sOut: '#6e585e', sDk: '#b49485', sMid: '#f6cdaa', sLt: '#f9d8b8', sHi: '#fbe4c6',
-    hOut: '#25253e', hDk: '#2e3649', hMid: '#364654', hLt: '#6e777a',
-    hair: 'pony', fx: 46, fy: 47, fj: 31, fc: 53, cx0: 6,
-    bw: 3, bt: -5, eW: 13, eH: 14.2, ir: '#5a9cc4', irD: '#2b4c62', irL: '#93c6df',
-    noseL: 14, noseW: 9, noseBtn: 1, mW: 18, mBias: 0.15,
-    lip: '#d0757f', lipD: '#914350', lipH: '#eda6a9',
+    sOut: '#82604f', sDk: '#cd9a78', sMid: '#f6cdaa', sLt: '#fadaba', sHi: '#fce8ce',
+    hOut: '#1c1e2c', hDk: '#28303e', hMid: '#364654', hLt: '#66727a',
+    hair: 'pony', cw: 46, jw: 32, chin: 52,
+    bw: 2.1, eW: 12.8, eH: 9.8, ir: '#5a9cc4', irD: '#2a475c', irL: '#9ccde4',
+    noseW: 9, mW: 19, eyeY: 3,
+    lip: '#d0757f', lipD: '#8c3f4c', lipH: '#eda6a9',
     cOut: '#4d5e7f', cDk: '#779fc1', cMid: '#9fdcff', cLt: '#bae3f5', acc: '#ddf3ff',
-    band: 1, blush: 1, lash: 1, freckle: 1, bow: 1, xeye: 1,
+    band: 1, blush: 1, lash: 1, freckle: 1, bow: 1,
     gOut: '#4d5e7f', gDk: '#779fc1', gMid: '#9fdcff', gLt: '#bae3f5',
   };
   D.brooks = {
-    sOut: '#6d565b', sDk: '#b39180', sMid: '#f4c8a2', sLt: '#f7d5b3', sHi: '#fae1c2',
-    hOut: '#19202a', hDk: '#182d24', hMid: '#173a1f', hLt: '#586f54',
-    hair: 'shaggy', fx: 48, fy: 47, fj: 34, fc: 51, cx0: 5,
-    bw: 3.6, bt: -3, eW: 12.8, eH: 13.6, ir: '#4a7a52', irD: '#233b28', irL: '#82ab86',
-    noseL: 13, noseW: 9, noseBtn: 1, mW: 22, mBias: 0.22,
-    lip: '#cc7078', lipD: '#8e414a', lipH: '#efa2a4',
+    sOut: '#815e4e', sDk: '#cb9776', sMid: '#f4c8a2', sLt: '#f9d7b6', sHi: '#fce5cb',
+    hOut: '#0e1c14', hDk: '#122a19', hMid: '#173a1f', hLt: '#456a4c',
+    hair: 'shaggy', cw: 47, jw: 34, chin: 51,
+    bw: 2.4, eW: 12.6, eH: 9.6, ir: '#4a7a52', irD: '#22381f', irL: '#84b189',
+    noseW: 10, mW: 22, eyeY: 3,
+    lip: '#cc7078', lipD: '#8a3c48', lipH: '#efa2a4',
     cOut: '#254e3a', cDk: '#2e8242', cMid: '#37b34a', cLt: '#6fc673', acc: '#b9e4c0',
-    band: 1, blush: 1, freckle: 1, toothy: 1, xeye: 1,
+    band: 1, blush: 1, freckle: 1, toothy: 1,
   };
   D.dayne = {
-    sOut: '#674e51', sDk: '#a7816d', sMid: '#e4b287', sLt: '#ecc59f', sHi: '#f3d7b6',
-    hOut: '#262037', hDk: '#302e3d', hMid: '#3a3b42', hLt: '#716f6d',
-    hair: 'short', fx: 44, fy: 50, fj: 30, fc: 58, cx0: 8,
-    bw: 3.4, bt: -3, eW: 11.6, eH: 11.4, ir: '#7b8496', irD: '#3c414c', irL: '#a9b0bc',
-    noseL: 20, noseW: 14, noseBtn: 1, mW: 20, mBias: 0.04, eyeSp: 1.14,
-    lip: '#b76e66', lipD: '#804140', lipH: '#da9b91',
+    sOut: '#775444', sDk: '#bd8c64', sMid: '#e4b287', sLt: '#eec7a2', sHi: '#f6dcbf',
+    hOut: '#20202a', hDk: '#2c2c36', hMid: '#3a3b42', hLt: '#67686c',
+    hair: 'short', cw: 45, jw: 31, chin: 57,
+    bw: 2.3, eW: 11.4, eH: 8, ir: '#7b8496', irD: '#3a404c', irL: '#b2b8c4',
+    noseW: 14, mW: 21, eyeSp: 1.08,
+    lip: '#b76e66', lipD: '#7c3e3e', lipH: '#da9b91',
     cOut: '#534f68', cDk: '#838498', cMid: '#b0b6c4', cLt: '#c6c8cb', acc: '#e3e5ea',
-    band: 1, stubble: 1, slack: 1, xeye: 1,
-  };
-  // ---- campaign cast: palettes lifted straight from skins-campaign.js ----
-  D.josh = {
-    sOut: '#684d50', sDk: '#aa806a', sMid: '#e8b083', sLt: '#eec49c', sHi: '#f5d7b5',
-    hOut: '#312029', hDk: '#452d23', hMid: '#57391d', hLt: '#866e53',
-    hair: 'scruff', fx: 43, fy: 50, fj: 26, fc: 60, cx0: 9,
-    bw: 4.6, bt: -2, eW: 10.6, eH: 10.4, ir: '#3a2a18', irD: '#1c140b', irL: '#6d5a3e',
-    noseL: 23, noseW: 10, noseHk: 2, mW: 20, mBias: 0.20, asym: 1, lidBias: 0.20,
-    lip: '#b06861', lipD: '#7a3c3d', lipH: '#d5968d',
-    cOut: '#221a35', cDk: '#292338', cMid: '#2f2b3c', cLt: '#696469', acc: '#ded8e8',
-    print: 1,
-  };
-  D.damon = {
-    sOut: '#614647', sDk: '#9e735a', sMid: '#d69d6c', sLt: '#e1b68c', sHi: '#edceaa',
-    hOut: '#372b39', hDk: '#4f4141', hMid: '#655648', hLt: '#908372',
-    hair: 'comb', fx: 51, fy: 48, fj: 42, fc: 56, cx0: 6,
-    bw: 8.5, bt: 2, eW: 10.4, eH: 9.6, ir: '#ff6a2a', irD: '#a83208', irL: '#ffdcae',
-    noseL: 24, noseW: 16, noseHk: 5, mW: 25, mBias: -0.16,
-    lip: '#a85a52', lipD: '#743336', lipH: '#cd8a80',
-    cOut: '#696170', cDk: '#aba4a6', cMid: '#e9e4d8', cLt: '#efe9d9', acc: '#7e3a44',
-    stubble: 1, glow: 1, baseFlush: 1, brute: 1,
-  };
-  D.petmonster = {
-    sOut: '#37295c', sDk: '#4f3e81', sMid: '#6552a4', sLt: '#9080b4', sHi: '#baacc3',
-    hOut: '#37295c', hDk: '#4f3e81', hMid: '#6552a4', hLt: '#9080b4',
-    hair: 'none', fx: 52, fy: 48, fj: 40, fc: 48, cx0: 3,
-    bw: 5, bt: -2, eW: 15, eH: 15, ir: '#37295c', irD: '#241a42', irL: '#6552a4',
-    noseL: 0, noseW: 0, mW: 26, mBias: 0.3,
-    lip: '#5c2038', lipD: '#3d1526', lipH: '#8a3f56',
-    cOut: '#37295c', cDk: '#4f3e81', cMid: '#6552a4', cLt: '#9080b4', acc: '#ff7d1c',
-    muzzle: 'plush', horns: 1, plushEar: 1, seam: '#4d3c80', xeye: 1,
+    band: 1, stubble: 1,
   };
 
-  // ===================== ascended (finalForm.look) ======================
-  // built once at load — the draw path only ever looks a variant up by id
+  /* ------- campaign cast: ramps lifted from skins-campaign.js ------- */
+  D.josh = {
+    sOut: '#8a5030', sDk: '#c07f4f', sMid: '#e8b083', sLt: '#f0c69e', sHi: '#f7dabb',
+    hOut: '#241609', hDk: '#33210f', hMid: '#57391d', hLt: '#866648',
+    hair: 'scruff', cw: 44, jw: 28, chin: 58,
+    bw: 3, eW: 11, eH: 7.6, ir: '#3a2a18', irD: '#1a1208', irL: '#74603e',
+    noseW: 11, mW: 21,
+    lip: '#b06861', lipD: '#78383a', lipH: '#d5968d',
+    cOut: '#141220', cDk: '#221f2e', cMid: '#2f2b3c', cLt: '#4a4458', acc: '#ded8e8',
+    stubble: 1, print: 1, bolt: '#ffd24a',
+  };
+  D.damon = {
+    sOut: '#71401f', sDk: '#a8703f', sMid: '#d69d6c', sLt: '#e3b78e', sHi: '#efd0ad',
+    hOut: '#2c2320', hDk: '#3d3229', hMid: '#655648', hLt: '#8e8070',
+    hair: 'comb', cw: 51, jw: 42, chin: 56,
+    bw: 4.6, eW: 10.8, eH: 7.2, ir: '#ff6a2a', irD: '#a83208', irL: '#ffd2a0',
+    brow: '#4a3a2a', noseW: 16, mW: 26, nostril: 1,
+    lip: '#a85a52', lipD: '#6e2f32', lipH: '#cd8a80',
+    cOut: '#8f897a', cDk: '#c2bcac', cMid: '#e9e4d8', cLt: '#fbf8f0', acc: '#7e3a44',
+    stubble: 1, glow: 1, baseFlush: 1,
+  };
+  D.petmonster = {
+    sOut: '#241a42', sDk: '#4f3e81', sMid: '#6552a4', sLt: '#8a76c6', sHi: '#a996dd',
+    hOut: '#241a42', hDk: '#3f2f6b', hMid: '#6552a4', hLt: '#8a76c6',
+    hair: 'none', cw: 52, jw: 40, chin: 48,
+    bw: 3.2, eW: 14.5, eH: 11.5, ir: '#3f2f6b', irD: '#1a1230', irL: '#7a68b4',
+    noseW: 0, mW: 26,
+    lip: '#5c2038', lipD: '#3d1526', lipH: '#8a3f56',
+    cOut: '#241a42', cDk: '#3f2f6b', cMid: '#4f3e81', cLt: '#7a68b4', acc: '#ff7d1c',
+    muzzle: 1, muzO: '#9c8455', muzM: '#f2e3bf', muzL: '#fff7e2',
+    horns: 1, plushEar: 1, seam: '#4d3c80', collar: '#ff7d1c',
+  };
+
+  /* ===================== ascended (finalForm.look) ==================== */
   function variant(base, over) {
-    const o = Object.assign({}, base);
-    return Object.assign(o, over);
+    return Object.assign(Object.assign({}, base), over);
   }
   const ASC = {};
-  // THE TODDFATHER — bald, bearded, shirtless
+  // THE TODDFATHER — bald, gloriously bearded, shirtless
   ASC.todd = variant(D.todd, {
     hair: 'none', bald: 1, band: 0, bare: 1, stubble: 0, beard: 1,
-    bOut: '#2d152a', bDk: '#3c1a24', bMid: '#4b1e1f', bLt: '#7d5a54',
-    fj: 40, fc: 57, bw: 7.4,
+    bOut: '#2a1218', bDk: '#3a161a', bMid: '#4b1e1f', bLt: '#7a4a42',
+    jw: 40, chin: 58, bw: 4.4,
   });
   // XANAX SONYA — serene, gently levitating, violet aura
   ASC.sonya = variant(D.sonya, {
-    lidBias: 0.26, floaty: 1, mBias: 0.26,
-    aur1: 'rgba(224,184,255,0.30)', aur2: 'rgba(224,184,255,0.18)', aur3: 'rgba(224,184,255,0.10)',
+    lidBias: 0.26, calm: 1, aura: 1,
+    au1: 'rgba(224,184,255,0.26)', au2: 'rgba(224,184,255,0.15)', au3: 'rgba(224,184,255,0.08)',
   });
   // 3D PRINTER JEROD — the machine frame closes over his head
   ASC.jerod = variant(D.jerod, {
-    band: 0, machine: 1,
+    band: 0, frame: 1,
     gOut: '#4b4760', gDk: '#747588', gMid: '#9aa0ae', gLt: '#b6b8bb',
   });
-  // WRENCHY — golden pipe wrench; the jaws bracket his face
+  // WRENCHY — a golden pipe wrench; the jaws bracket his face
   ASC.jacob = variant(D.jacob, {
-    hair: 'none', band: 0, wrench: 1, bald: 1, stubble: 0,
-    sOut: '#715a3a', sDk: '#ba9842', sMid: '#ffd24a', sLt: '#ffdc73', sHi: '#ffe69b',
-    lip: '#b8862a', lipD: '#7d5a1a', lipH: '#e0b45c',
+    hair: 'none', band: 0, bald: 1, stubble: 0, jaws: 1, aura: 1,
+    sOut: '#715a3a', sDk: '#ba9842', sMid: '#ffd24a', sLt: '#ffdf80', sHi: '#ffeaa8',
+    lip: '#b8862a', lipD: '#7a5418', lipH: '#e0b45c',
     gOut: '#4b4760', gDk: '#747588', gMid: '#9aa0ae', gLt: '#b6b8bb',
-    aur1: 'rgba(255,210,74,0.30)', aur2: 'rgba(255,210,74,0.17)', aur3: 'rgba(255,210,74,0.09)',
+    au1: 'rgba(255,210,74,0.26)', au2: 'rgba(255,210,74,0.14)', au3: 'rgba(255,210,74,0.07)',
   });
-  // GIANT CHICKEN
+  // GIANT CHICKEN — feathers, comb, beak
   ASC.samantha = variant(D.samantha, {
-    hair: 'none', band: 0, lash: 0, muzzle: 'beak', comb: 1, ruff: 1,
-    sOut: '#6e6676', sDk: '#b4aeb1', sMid: '#f6f2e8', sLt: '#f9f3e5', sHi: '#fbf4e2',
-    fx: 46, fy: 46, fj: 30, fc: 46, cx0: 4, bw: 3,
-    ir: '#c9a23a', irD: '#6b5216', irL: '#ecd07a',
+    hair: 'none', band: 0, lash: 0, beak: 1, comb: 1, ruff: 1,
+    sOut: '#7e7364', sDk: '#c9c0ae', sMid: '#f6f2e8', sLt: '#faf6ec', sHi: '#fdfaf2',
+    cw: 47, jw: 33, chin: 50, bw: 2.2,
+    ir: '#c9a23a', irD: '#63500f', irL: '#eed384',
     gOut: '#612030', gDk: '#9c2e2f', gMid: '#d43b2f', gLt: '#e06f60',
   });
-  // LITTLE BEAR SPECIAL — a towering Italian sub
+  // LITTLE BEAR SPECIAL — crowned with a toasted sub loaf
   ASC.cassandra = variant(D.cassandra, {
-    hair: 'none', band: 0, lash: 0, muzzle: 'loaf',
-    sOut: '#654a42', sDk: '#a57a52', sMid: '#e0a860', sLt: '#e9be83', sHi: '#f1d3a5',
-    fx: 50, fy: 44, fj: 44, fc: 44, cx0: 2, bw: 3.4,
-    ir: '#3a2a18', irD: '#1c140b', irL: '#6d5a3e',
-    gOut: '#405442', gDk: '#5f8e51', gMid: '#7dc45f', gLt: '#a1d282',
+    hair: 'none', band: 0, loaf: 1,
+    gOut: '#7a5424', sub: '#e0a860', gDk: '#a57a52', gMid: '#e0a860', gLt: '#f1d3a5',
+    lettuce: '#7dc45f',
   });
-  // RICKMOTHY — smaller, weaker and fatter all at once
+  // RICKMOTHY — smaller, weaker and rounder all at once
   ASC.erika = variant(D.erika, {
-    fx: 52, fy: 45, fj: 46, fc: 48, cx0: 3, jowl: 1,
-    eW: 9.6, eH: 10.4, mW: 14, noseW: 13, noseBtn: 1,
+    cw: 51, jw: 45, chin: 50, jowl: 1,
+    eW: 9.8, eH: 7.4, mW: 15, noseW: 13,
   });
   // LEVIATHAN — the wrecking-crew mop, no headband
-  ASC.levi = variant(D.levi, { hair: 'mop', band: 0, fj: 41, fc: 58, bw: 8, mW: 26 });
+  ASC.levi = variant(D.levi, { hair: 'mop', band: 0, jw: 41, chin: 58, bw: 4.8, mW: 27 });
   // RYAN DUGAN — the eyeglasses alias
-  ASC.ronathon = variant(D.ronathon, { glasses: 1, glassCol: '#2a2a35' });
-  // FIRETRUCK — helmet runs a live light bar
+  ASC.ronathon = variant(D.ronathon, { glasses: 1 });
+  // FIRETRUCK TIM — the helmet runs a live light bar
   ASC.tim = variant(D.tim, { lightbar: 1, baseFlush: 1 });
   // 8 HOURS OF SLEEP MYAH — fully rested, radiant
   ASC.myah = variant(D.myah, {
-    sLt: '#f9dcc2', sHi: '#fdead2', radiant: 1, mBias: 0.24,
-    aur1: 'rgba(255,242,184,0.34)', aur2: 'rgba(255,242,184,0.20)', aur3: 'rgba(255,242,184,0.11)',
+    sLt: '#fadec4', sHi: '#fdedd6', aura: 1,
+    au1: 'rgba(255,242,184,0.28)', au2: 'rgba(255,242,184,0.16)', au3: 'rgba(255,242,184,0.08)',
   });
   // MECHA HAYES — sealed helmet, cyan visor
   ASC.hayes = variant(D.hayes, {
@@ -341,1032 +377,1105 @@
     gOut: '#45415e', gDk: '#686b84', gMid: '#8a92a8', gLt: '#abaeb7',
     vOut: '#2c5d76', vMid: '#4adbe8', vLt: '#7de3e5',
   });
-  // PRINCESS ADDI — coronation crown and glacial aura
+  // PRINCESS ADDI — coronation crown and a glacial aura
   ASC.addi = variant(D.addi, {
-    band: 0, bow: 0, crown: 1,
-    gOut: '#715a3a', gDk: '#ba9842', gMid: '#ffd24a', gLt: '#ffdc73',
-    aur1: 'rgba(191,234,255,0.32)', aur2: 'rgba(191,234,255,0.19)', aur3: 'rgba(191,234,255,0.10)',
+    band: 0, bow: 0, crown: 1, aura: 1,
+    gOut: '#715a3a', gDk: '#ba9842', gMid: '#ffd24a', gLt: '#ffdf80',
+    au1: 'rgba(191,234,255,0.28)', au2: 'rgba(191,234,255,0.16)', au3: 'rgba(191,234,255,0.08)',
   });
   // KANSAS CITY DAYNE — the cap, and he will not stop talking about it
   ASC.dayne = variant(D.dayne, {
     band: 0, cap: 1,
     gOut: '#612030', gDk: '#9c2e2f', gMid: '#d43b2f', gLt: '#e06f60',
   });
+  ASC.isla = variant(D.isla, { wobble: 1 });
 
-  // =========================== expressions =============================
-  // bi/bo  brow inner / outer end dy (+ = pushed down)
-  // lt/lb  upper lid closure, lower lid raise (0..1 of eye height)
-  // pup    pupil scale     eye  eye-open scale
-  // m      mouth kind      mo   how far it opens     mc  curve (+ = smile)
-  // fl     flush   tn  jaw/cheek tension   tr tears  sw sweat  sk shake  bl blinks
+  /* =========================== expressions ============================
+     bi/bo  brow inner / outer end dy (+ pushes DOWN)   bp  inner pinch inward
+     ba     one-brow lift (smug)      lt/lb  upper-lid closure / lower-lid raise
+     pup    pupil scale               ey   eye-open scale
+     m      mouth kind                mo   opening        mc  curve (+ = smile)
+     fl flush   tn jaw tension   tr tears   sw sweat   sk shake   bl blinks   */
   const EXPR = {
-    neutral:    { bi: 0, bo: 0, lt: 0.14, lb: 0.04, pup: 1, eye: 1, m: 'line', mo: 0, mc: 0.10, fl: 0, tn: 0, tr: 0, sw: 0, sk: 0, bl: 1 },
-    angry:      { bi: 8, bo: -6, lt: 0.30, lb: 0.18, pup: 0.86, eye: 0.96, m: 'frown', mo: 0, mc: -0.36, fl: 0.30, tn: 0.55, tr: 0, sw: 0, sk: 0, bl: 1 },
-    rage:       { bi: 13, bo: -10, lt: 0.06, lb: 0.32, pup: 0.52, eye: 1.14, m: 'teeth', mo: 0.85, mc: -0.20, fl: 1, tn: 1, tr: 0, sw: 0.4, sk: 1.3, bl: 0 },
-    scared:     { bi: -11, bo: -3, lt: 0, lb: 0, pup: 0.42, eye: 1.20, m: 'o', mo: 0.72, mc: -0.16, fl: 0, tn: 0.25, tr: 0, sw: 1, sk: 0.9, bl: 0 },
-    smug:       { bi: 2, bo: -9, lt: 0.44, lb: 0.24, pup: 1, eye: 0.94, m: 'smirk', mo: 0, mc: 0.30, fl: 0, tn: 0.20, tr: 0, sw: 0, sk: 0, bl: 1 },
-    hurt:       { bi: -7, bo: 6, lt: 0.92, lb: 0.52, pup: 1, eye: 0.82, m: 'grit', mo: 0.34, mc: -0.30, fl: 0.18, tn: 0.85, tr: 0, sw: 0.5, sk: 0.5, bl: 0 },
-    shout:      { bi: 10, bo: -5, lt: 0.04, lb: 0.10, pup: 0.74, eye: 1.10, m: 'shout', mo: 1, mc: 0, fl: 0.35, tn: 0.75, tr: 0, sw: 0, sk: 0.4, bl: 0 },
-    sad:        { bi: -9, bo: 5, lt: 0.42, lb: 0.10, pup: 1.10, eye: 1.02, m: 'wobble', mo: 0.10, mc: -0.42, fl: 0.10, tn: 0, tr: 1, sw: 0, sk: 0, bl: 1 },
-    determined: { bi: 6, bo: 1, lt: 0.26, lb: 0.22, pup: 0.94, eye: 0.98, m: 'firm', mo: 0, mc: -0.06, fl: 0.10, tn: 0.75, tr: 0, sw: 0, sk: 0, bl: 1 },
-    surprised:  { bi: -13, bo: -12, lt: 0, lb: 0, pup: 0.80, eye: 1.22, m: 'o', mo: 0.58, mc: 0, fl: 0, tn: 0, tr: 0, sw: 0, sk: 0, bl: 0 },
+    neutral: { bi: 0, bo: 0, bp: 0, ba: 0, lt: 0.16, lb: 0.04, pup: 1, ey: 1, m: 'lens', mo: 0, mc: 0.12, fl: 0, tn: 0, tr: 0, sw: 0, sk: 0, bl: 1 },
+    angry: { bi: 9, bo: -7, bp: 2, ba: 0, lt: 0.34, lb: 0.20, pup: 0.82, ey: 0.98, m: 'lens', mo: 0, mc: -0.34, fl: 0.34, tn: 0.55, tr: 0, sw: 0, sk: 0, bl: 1 },
+    rage: { bi: 15, bo: -11, bp: 3, ba: 0, lt: 0.34, lb: 0.36, pup: 0.50, ey: 1.06, m: 'teeth', mo: 0.9, mc: -0.18, fl: 1, tn: 1, tr: 0, sw: 0.5, sk: 1.2, bl: 0 },
+    scared: { bi: -12, bo: -3, bp: 4, ba: 0, lt: 0, lb: 0, pup: 0.42, ey: 1.18, m: 'o', mo: 0.5, mc: -0.2, fl: 0, tn: 0.25, tr: 0, sw: 1, sk: 0.8, bl: 0 },
+    smug: { bi: 3, bo: -8, bp: 0, ba: -8, lt: 0.46, lb: 0.26, pup: 1, ey: 0.95, m: 'smirk', mo: 0, mc: 0.34, fl: 0, tn: 0.2, tr: 0, sw: 0, sk: 0, bl: 1 },
+    hurt: { bi: -13, bo: 9, bp: 4, ba: 0, lt: 1, lb: 0.5, pup: 1, ey: 0.86, m: 'grit', mo: 0.36, mc: -0.28, fl: 0.2, tn: 0.85, tr: 0, sw: 0.5, sk: 0.5, bl: 0 },
+    shout: { bi: 10, bo: -5, bp: 1, ba: 0, lt: 0.06, lb: 0.10, pup: 0.74, ey: 1.1, m: 'shout', mo: 1, mc: 0, fl: 0.38, tn: 0.75, tr: 0, sw: 0, sk: 0.35, bl: 0 },
+    sad: { bi: -10, bo: 6, bp: 3, ba: 0, lt: 0.40, lb: 0.12, pup: 1.12, ey: 1.02, m: 'wobble', mo: 0.1, mc: -0.42, fl: 0.1, tn: 0, tr: 1, sw: 0, sk: 0, bl: 1 },
+    determined: { bi: 6, bo: 1, bp: 1, ba: 0, lt: 0.28, lb: 0.24, pup: 0.92, ey: 0.98, m: 'firm', mo: 0, mc: -0.05, fl: 0.12, tn: 0.75, tr: 0, sw: 0, sk: 0, bl: 1 },
+    surprised: { bi: -13, bo: -12, bp: 2, ba: 0, lt: 0, lb: 0, pup: 0.78, ey: 1.2, m: 'o', mo: 0.55, mc: 0, fl: 0, tn: 0, tr: 0, sw: 0, sk: 0, bl: 0 },
   };
 
   // per-draw scratch — reused, never reallocated
   const S = {
-    d: null, e: null, t: 0, k: 1, v: 1, blink: 0, px: 0, py: 0,
-    breath: 0, tense: 0, flush: 0, cOut: '', cDk: '', cLt: '',
+    d: null, e: null, t: 0, cw: 46, jw: 32, chin: 55, my: 27, nb: 12, mW: 22,
+    ex: 19, ey: -6, lt: 0, closed: 0, gaze: 0, flush: 0,
   };
 
-  // ======================= geometry primitives =========================
-  // egg skull with a controllable jaw width and a forward-shifted chin
-  function headPath(g, rx, ry, jaw, chin, cx) {
+  /* ======================= geometry primitives ======================== */
+  // one rounded skull: wide cranium, soft taper to the jaw and chin.
+  // headSub appends WITHOUT beginPath so two copies can make an evenodd ring —
+  // that ring is the form shadow, and a ring always hugs the contour.
+  function headSub(g, cw, jw, chin, dx, dy, s) {
+    g.moveTo(dx - cw * 0.97 * s, dy + 4 * s);
+    g.bezierCurveTo(dx - (cw + 2) * s, dy - 30 * s, dx - cw * 0.74 * s, dy - 60 * s, dx, dy - 60 * s);
+    g.bezierCurveTo(dx + cw * 0.74 * s, dy - 60 * s, dx + (cw + 2) * s, dy - 30 * s, dx + cw * 0.97 * s, dy + 4 * s);
+    g.bezierCurveTo(dx + cw * 0.92 * s, dy + 30 * s, dx + (jw + 4) * s, dy + (chin - 14) * s, dx, dy + chin * s);
+    g.bezierCurveTo(dx - (jw + 4) * s, dy + (chin - 14) * s, dx - cw * 0.92 * s, dy + 30 * s, dx - cw * 0.97 * s, dy + 4 * s);
+    g.closePath();
+  }
+  function headPath(g, cw, jw, chin) {
     g.beginPath();
-    g.moveTo(-rx, -4);
-    g.bezierCurveTo(-rx, -ry * 1.30, rx, -ry * 1.30, rx, -4);
-    g.bezierCurveTo(rx * 0.99, ry * 0.52, cx + jaw, chin * 0.90, cx, chin);
-    g.bezierCurveTo(cx - jaw, chin * 0.90, -rx * 0.99, ry * 0.52, -rx, -4);
+    headSub(g, cw, jw, chin, 0, 0, 1);
+  }
+  // the inner copy must stay strictly inside the outer one or evenodd flips and
+  // the "shadow" tears open on the key side — hence the offsets scale with 1-s
+  function headRing(g, cw, jw, chin, s) {
+    g.beginPath();
+    headSub(g, cw, jw, chin, 0, 0, 1);
+    headSub(g, cw, jw, chin, -cw * 0.78 * (1 - s), -42 * (1 - s), s);
+    g.fill('evenodd');
+  }
+
+  // symmetric almond: ~2w wide, ~1.9h tall
+  function almond(g, w, h) {
+    g.beginPath();
+    g.moveTo(-w, 0.8);
+    g.bezierCurveTo(-w * 0.52, -h * 1.3, w * 0.52, -h * 1.3, w, -0.8);
+    g.bezierCurveTo(w * 0.52, h * 1.22, -w * 0.52, h * 1.22, -w, 0.8);
     g.closePath();
   }
 
-  // tapered brow: thick at the inner end, thin at the outer
-  function browShape(g, xi, yi, xo, yo, wi, wo) {
-    const mx = (xi + xo) * 0.5, my = (yi + yo) * 0.5;
+  // solid tapered brow: thickness runs along the brow's own normal, so a steep
+  // angle never splits the shape into stray spikes
+  function browShape(g, xi, yi, xo, yo, wi, wo, arch) {
+    const dx = xo - xi, dy = yo - yi;
+    const len = Math.hypot(dx, dy) || 1;
+    let nx = -dy / len, ny = dx / len;
+    if (ny > 0) { nx = -nx; ny = -ny; }
+    const mx = (xi + xo) * 0.5 + nx * arch, my = (yi + yo) * 0.5 + ny * arch;
+    const wm = (wi + wo) * 0.5;
     g.beginPath();
-    g.moveTo(xi, yi - wi);
-    g.quadraticCurveTo(mx, my - wi * 1.25, xo, yo - wo);
-    g.lineTo(xo, yo + wo);
-    g.quadraticCurveTo(mx, my + wo * 0.85, xi, yi + wi);
-    g.closePath(); g.fill();
+    g.moveTo(xi + nx * wi, yi + ny * wi);
+    g.quadraticCurveTo(mx + nx * wm, my + ny * wm, xo + nx * wo, yo + ny * wo);
+    g.quadraticCurveTo(xo + (nx - ny) * wo * 1.3, yo + (ny + nx) * wo * 1.3, xo - nx * wo, yo - ny * wo);
+    g.quadraticCurveTo(mx - nx * wm * 0.9, my - ny * wm * 0.9, xi - nx * wi, yi - ny * wi);
+    g.quadraticCurveTo(xi - (nx + ny) * wi * 1.2, yi - (ny - nx) * wi * 1.2, xi + nx * wi, yi + ny * wi);
+    g.closePath();
   }
 
-  // ============================== hair =================================
-  // volume that sits BEHIND the shoulders — depth only, darkest shade
-  function hairBack(g, d, sway) {
-    const h = d.hair;
-    if (h === 'none' || h === 'short' || h === 'comb') return;
-    g.fillStyle = d.hOut;
-    if (h === 'pony') {
-      g.beginPath();
-      g.ellipse(-d.fx - 14 + sway * 0.5, 22, 20, 40, 0.34, 0, 7);
-      g.fill();
-      g.beginPath();
-      g.ellipse(-d.fx - 22 + sway * 1.6, 62, 13, 26, 0.5 + sway * 0.02, 0, 7);
-      g.fill();
-    } else if (h === 'long') {
-      g.beginPath();
-      g.moveTo(-d.fx - 6, -10);
-      g.quadraticCurveTo(-d.fx - 30 + sway, 60, -d.fx - 22 + sway * 1.4, 150);
-      g.lineTo(d.fx + 24 - sway * 1.4, 150);
-      g.quadraticCurveTo(d.fx + 30 - sway, 60, d.fx + 4, -10);
-      g.closePath(); g.fill();
-    } else {
-      g.beginPath();
-      g.ellipse(-4, -6, d.fx + 11, d.fy + 9, 0, 0, 7);
-      g.fill();
-    }
-  }
-
-  // the mass on the skull, its clumps, and one highlight band on the key side
-  function hairFront(g, d, sway, t) {
-    const h = d.hair;
-    if (h === 'none') return;
-    const fx = d.fx, fy = d.fy;
-    if (h === 'comb') { // thinning: a band hugging the skull, bare crown, rake
-      g.fillStyle = d.hMid;
-      g.beginPath();
-      g.moveTo(-fx - 1, -fy * 0.24);
-      g.quadraticCurveTo(-fx - 6, -fy * 1.10, -6, -fy * 1.30);
-      g.quadraticCurveTo(fx * 0.72, -fy * 1.22, fx + 1, -fy * 0.30);
-      g.quadraticCurveTo(fx * 0.62, -fy * 0.92, 0, -fy * 1.02);
-      g.quadraticCurveTo(-fx * 0.62, -fy * 1.00, -fx - 1, -fy * 0.24);
-      g.closePath(); g.fill();
-      g.strokeStyle = d.hDk; g.lineWidth = 2.4;
-      g.beginPath();
-      g.moveTo(-fx * 0.68, -fy * 1.10); g.quadraticCurveTo(0, -fy * 1.30, fx * 0.70, -fy * 1.06);
-      g.moveTo(-fx * 0.60, -fy * 0.98); g.quadraticCurveTo(2, -fy * 1.18, fx * 0.76, -fy * 0.92);
-      g.stroke();
-      g.strokeStyle = d.hMid; g.lineWidth = 3.4; // sideburns, clear of the eyes
-      g.beginPath();
-      g.moveTo(-fx - 1, -fy * 0.28); g.lineTo(-fx + 1, fy * 0.16);
-      g.moveTo(fx + 1, -fy * 0.30); g.lineTo(fx - 1, fy * 0.08);
-      g.stroke();
-      return;
-    }
-    // shared cap: crown mass with a fringe carved out above the brows
-    g.fillStyle = d.hMid; g.strokeStyle = d.hOut; g.lineWidth = 4;
-    g.beginPath();
-    g.moveTo(-fx - 4, fy * 0.24);
-    g.bezierCurveTo(-fx - 10, -fy * 0.92, -fx * 0.44, -fy * 1.46, 5, -fy * 1.44);
-    g.bezierCurveTo(fx * 0.72, -fy * 1.40, fx + 5, -fy * 0.62, fx * 0.95, -fy * 0.30);
-    if (h === 'scruff') { // josh: the fringe hangs down onto the brow
-      g.quadraticCurveTo(fx * 0.60, -fy * 0.40, 2, -fy * 0.36);
-      g.quadraticCurveTo(-fx * 0.52, -fy * 0.34, -fx * 0.90, fy * 0.10);
-    } else {
-      g.quadraticCurveTo(fx * 0.56, -fy * 0.70, 2, -fy * 0.66);
-      g.quadraticCurveTo(-fx * 0.52, -fy * 0.62, -fx * 0.88, -fy * 0.16);
-    }
-    g.closePath(); g.fill(); g.stroke();
-
-    g.fillStyle = d.hMid;
-    if (h === 'spiky') {
-      for (let i = 0; i < 10; i += 2) {
-        const bx = SPIKES[i] * (fx / 46), by = SPIKES[i + 1] * (fy / 47);
-        g.beginPath();
-        g.moveTo(bx - 11, by * 0.72);
-        g.lineTo(bx + 3 + sway * 0.6, by);
-        g.lineTo(bx + 11, by * 0.70);
-        g.closePath(); g.fill();
-      }
-    } else if (h === 'shaggy' || h === 'mop') {
-      const A = h === 'mop' ? MOP : SHAG;
-      for (let i = 0; i < A.length; i += 3) {
-        g.beginPath();
-        g.arc(A[i] * (fx / 46) + sway * 0.3, A[i + 1] * (fy / 47), A[i + 2], 0, 7);
-        g.fill();
-      }
-    } else if (h === 'scruff') { // broad clumps, fill only — outlines read as ears
-      g.beginPath(); g.moveTo(-fx * 0.86, -fy * 1.08); g.lineTo(-fx * 0.98, -fy * 1.34); g.lineTo(-fx * 0.16, -fy * 1.32); g.closePath(); g.fill();
-      g.beginPath(); g.moveTo(-fx * 0.22, -fy * 1.34); g.lineTo(fx * 0.06, -fy * 1.50); g.lineTo(fx * 0.54, -fy * 1.36); g.closePath(); g.fill();
-      g.beginPath(); g.moveTo(fx * 0.52, -fy * 1.28); g.lineTo(fx * 1.06, -fy * 1.32); g.lineTo(fx * 0.98, -fy * 0.98); g.closePath(); g.fill();
-      g.fillStyle = d.hDk; // parting shade instead of an outline
-      g.beginPath();
-      g.moveTo(-fx * 0.78, -fy * 1.00);
-      g.quadraticCurveTo(-fx * 1.02, -fy * 1.28, -fx * 0.88, -fy * 0.30);
-      g.quadraticCurveTo(-fx * 0.68, -fy * 0.86, -fx * 0.48, -fy * 1.02);
-      g.closePath(); g.fill();
-    }
-    if (h === 'pony') { // gathered band at the back
-      g.fillStyle = d.hDk;
-      g.beginPath(); g.ellipse(-fx - 4, fy * 0.10, 9, 15, 0.3, 0, 7); g.fill();
-    }
-    if (h === 'long') { // two falls in front of the shoulders
-      g.fillStyle = d.hMid;
-      g.beginPath();
-      g.moveTo(-fx - 2, -fy * 0.30);
-      g.quadraticCurveTo(-fx - 20 + sway, fy * 1.30, -fx - 10 + sway * 1.3, fy * 2.60);
-      g.lineTo(-fx + 12, fy * 2.60);
-      g.quadraticCurveTo(-fx + 6, fy * 1.10, -fx + 6, -fy * 0.30);
-      g.closePath(); g.fill();
-      g.beginPath();
-      g.moveTo(fx + 1, -fy * 0.30);
-      g.quadraticCurveTo(fx + 16 - sway, fy * 1.20, fx + 8 - sway * 1.2, fy * 2.30);
-      g.lineTo(fx - 8, fy * 2.30);
-      g.quadraticCurveTo(fx - 6, fy * 1.00, fx - 4, -fy * 0.30);
-      g.closePath(); g.fill();
-    }
-    // one highlight band, sun side
-    g.strokeStyle = d.hLt; g.lineWidth = 5;
-    g.beginPath();
-    g.arc(0, -8, fx * 0.80, Math.PI * 1.06, Math.PI * 1.54);
-    g.stroke();
-    g.lineWidth = 2.4;
-    g.beginPath();
-    g.arc(0, -8, fx * 0.98, Math.PI * 1.14, Math.PI * 1.40);
-    g.stroke();
-    if (h === 'pony' || h === 'long') { // strand threads down the fall
-      g.lineWidth = 2.2;
-      g.beginPath();
-      g.moveTo(-fx - 8, fy * 0.20); g.quadraticCurveTo(-fx - 16 + sway, fy * 0.90, -fx - 14 + sway, fy * 1.60);
-      g.stroke();
-    }
-  }
-
-  // ============================== eyes =================================
-  function drawEye(g, d, e, cx, cy, w, h, open, front) {
-    if (open <= 0.06) { // lids shut: one lash-weighted line with a crease
-      g.strokeStyle = d.sOut; g.lineWidth = 3.2;
-      g.beginPath(); g.moveTo(cx - w, cy - 1); g.quadraticCurveTo(cx, cy + 2.6, cx + w, cy - 1); g.stroke();
-      g.strokeStyle = d.sDk; g.lineWidth = 1.6;
-      g.beginPath(); g.moveTo(cx - w * 0.8, cy - 6); g.quadraticCurveTo(cx, cy - 8, cx + w * 0.8, cy - 5.6); g.stroke();
-      return;
-    }
-    const hh = h * open;
-    // socket: the eye sits IN the skull, not on it
+  /* ============================== bust ================================ */
+  // shoulders + neck, behind the head
+  function drawBody(g, d) {
+    const nw = S.jw * 0.6;
+    // neck (always one plane darker than the lit face)
     g.fillStyle = d.sDk;
-    g.beginPath(); g.ellipse(cx, cy - hh * 0.18, w + 4.4, hh + 4.2, 0, 0, 7); g.fill();
-    g.fillStyle = EYEW;
-    g.beginPath(); g.ellipse(cx, cy, w, hh, 0, 0, 7); g.fill();
+    g.beginPath();
+    g.moveTo(-nw, S.chin - 22);
+    g.bezierCurveTo(-nw - 2, S.chin + 18, -nw - 5, 78, -nw - 8, 96);
+    g.lineTo(nw + 8, 96);
+    g.bezierCurveTo(nw + 5, 78, nw + 2, S.chin + 18, nw, S.chin - 22);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = d.sOut; g.lineWidth = 2.6; g.stroke();
+    // the chin's cast shadow across the throat
+    g.fillStyle = NECKSH;
+    g.beginPath();
+    g.ellipse(0, S.chin - 4, nw + 3, 15, 0, 0, 7);
+    g.fill();
+    // shoulders running off the bottom of the frame
+    g.fillStyle = d.bare ? d.sMid : d.cMid;
+    g.beginPath();
+    g.moveTo(-150, 168);
+    g.bezierCurveTo(-132, 108, -92, 80, -44, 76);
+    g.lineTo(44, 76);
+    g.bezierCurveTo(92, 80, 132, 108, 150, 168);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = d.bare ? d.sOut : d.cOut; g.lineWidth = 3; g.stroke();
+    // right shoulder in shadow, left shoulder catching the key
     g.save();
-    g.beginPath(); g.ellipse(cx, cy, w, hh, 0, 0, 7); g.clip();
-    const ir = hh * 0.80;
-    const ix = cx + S.px * (front ? 1 : 0.86), iy = cy + S.py + hh * 0.06;
-    g.fillStyle = d.ir;
-    g.beginPath(); g.arc(ix, iy, ir, 0, 7); g.fill();
-    g.fillStyle = d.irD; // iris shading: dark under the lid, dark limbal edge
-    g.beginPath(); g.arc(ix, iy - ir * 0.34, ir * 0.86, 0, 7); g.fill();
-    g.fillStyle = d.irL; // light pooling at the bottom of the iris
-    g.beginPath(); g.arc(ix, iy + ir * 0.40, ir * 0.52, 0, 7); g.fill();
-    g.fillStyle = INK;
-    g.beginPath(); g.arc(ix, iy, ir * 0.46 * e.pup, 0, 7); g.fill();
-    g.fillStyle = LID_SHADE; // upper lid casts across the white
-    g.beginPath(); g.ellipse(cx, cy - hh * 1.28, w * 1.2, hh * 0.72, 0, 0, 7); g.fill();
-    // lids, painted in skin so they close over the eye
-    const ltop = e.lt + (d.lidBias || 0) + S.tense * 0.10;
-    if (ltop > 0.01) {
-      g.fillStyle = d.sMid;
-      g.beginPath(); g.ellipse(cx, cy - hh - 1 + hh * 2 * ltop, w * 1.35, hh, 0, 0, 7); g.fill();
-    }
-    if (e.lb > 0.01) { // lower lid rides up on a squint / a cheek push
-      g.fillStyle = d.sDk;
-      g.beginPath(); g.ellipse(cx, cy + hh + 1 - hh * 2 * e.lb, w * 1.3, hh * 0.9, 0, 0, 7); g.fill();
+    g.beginPath();
+    g.moveTo(-150, 168);
+    g.bezierCurveTo(-132, 108, -92, 80, -44, 76);
+    g.lineTo(44, 76);
+    g.bezierCurveTo(92, 80, 132, 108, 150, 168);
+    g.closePath();
+    g.clip();
+    g.fillStyle = SHADE;
+    g.beginPath(); g.arc(120, 130, 96, 0, 7); g.fill();
+    g.fillStyle = d.bare ? d.sLt : d.cLt;
+    g.beginPath(); g.ellipse(-88, 106, 40, 20, -0.45, 0, 7); g.fill();
+    if (d.print) {
+      g.fillStyle = d.acc;
+      g.beginPath(); g.ellipse(0, 150, 34, 22, 0, 0, 7); g.fill();
+      g.fillStyle = d.bolt;
+      g.beginPath();
+      g.moveTo(2, 132); g.lineTo(-9, 152); g.lineTo(0, 152); g.lineTo(-3, 168);
+      g.lineTo(11, 146); g.lineTo(2, 146);
+      g.closePath(); g.fill();
     }
     g.restore();
-    // catchlights — the whole reason for drawing an eye this big
-    g.fillStyle = CATCH;
-    g.beginPath(); g.arc(ix - ir * 0.42, iy - ir * 0.46, ir * 0.28, 0, 7); g.fill();
-    g.fillStyle = CATCH2;
-    g.beginPath(); g.arc(ix + ir * 0.40, iy + ir * 0.38, ir * 0.16, 0, 7); g.fill();
-    // lash line + crease
-    g.strokeStyle = d.sOut; g.lineWidth = d.lash ? 3.6 : 2.6;
-    g.beginPath();
-    g.moveTo(cx - w - 1, cy - hh * 0.34);
-    g.quadraticCurveTo(cx, cy - hh * 1.32, cx + w + 1, cy - hh * 0.30);
-    g.stroke();
-    g.strokeStyle = d.sDk; g.lineWidth = 1.8;
-    g.beginPath();
-    g.moveTo(cx - w * 0.86, cy - hh - 6.5);
-    g.quadraticCurveTo(cx, cy - hh - 9.5, cx + w * 0.86, cy - hh - 6);
-    g.stroke();
-    if (d.lash) { // three flicks off the outer corner
-      g.strokeStyle = INK; g.lineWidth = 2.2;
-      const s = front ? 1 : -1;
+    // collar
+    if (!d.bare) {
+      g.strokeStyle = d.cDk; g.lineWidth = 5;
       g.beginPath();
-      g.moveTo(cx + s * w * 0.86, cy - hh * 0.62); g.lineTo(cx + s * (w + 8), cy - hh * 1.16);
-      g.moveTo(cx + s * w * 0.60, cy - hh * 0.86); g.lineTo(cx + s * (w + 4), cy - hh * 1.44);
-      g.moveTo(cx + s * w * 1.00, cy - hh * 0.26); g.lineTo(cx + s * (w + 9), cy - hh * 0.62);
+      g.moveTo(-46, 78);
+      g.quadraticCurveTo(0, 104, 46, 78);
       g.stroke();
     }
+    if (d.collar) {
+      g.fillStyle = d.collar; g.strokeStyle = d.cOut; g.lineWidth = 2.4;
+      g.beginPath(); g.roundRect(-52, 74, 104, 16, 7); g.fill(); g.stroke();
+    }
   }
 
-  function deadEye(g, d, cx, cy, w, h, x) {
-    g.strokeStyle = d.sOut; g.lineWidth = 4;
+  // one ear, authored on the right and mirrored by sd
+  function drawEar(g, d, sd) {
+    g.save();
+    g.translate(sd * (S.cw - 4), 2);
+    g.scale(sd, 1);
+    g.fillStyle = d.sMid; g.strokeStyle = d.sOut; g.lineWidth = 2.8;
     g.beginPath();
-    if (x) {
-      g.moveTo(cx - w * 0.8, cy - h * 0.7); g.lineTo(cx + w * 0.8, cy + h * 0.7);
-      g.moveTo(cx + w * 0.8, cy - h * 0.7); g.lineTo(cx - w * 0.8, cy + h * 0.7);
-    } else { // squeezed shut
-      g.moveTo(cx - w, cy + h * 0.5);
-      g.quadraticCurveTo(cx, cy - h * 0.9, cx + w, cy + h * 0.5);
-    }
+    g.moveTo(-4, -13);
+    g.bezierCurveTo(11, -15, 14, 3, 6, 14);
+    g.bezierCurveTo(1, 19, -5, 15, -5, 10);
+    g.closePath();
+    g.fill(); g.stroke();
+    g.strokeStyle = d.sDk; g.lineWidth = 2.6;
+    g.beginPath();
+    g.moveTo(-1, -6);
+    g.quadraticCurveTo(8, -2, 4, 8);
     g.stroke();
+    g.restore();
   }
 
-  // ============================== nose =================================
-  function drawNose(g, d, bx, by) {
-    if (!d.noseL) return;
-    const l = d.noseL, w = d.noseW, hk = d.noseHk || 0;
-    g.fillStyle = d.sDk; g.strokeStyle = d.sOut; g.lineWidth = 2.4;
-    g.beginPath();
-    g.moveTo(bx - 2, by);
-    g.quadraticCurveTo(bx + l * 0.72 + hk, by + l * 0.42, bx + l * 0.50, by + l);
-    g.quadraticCurveTo(bx + l * 0.10, by + l * 1.16, bx - w * 0.62, by + l * 0.96);
-    g.closePath(); g.fill(); g.stroke();
-    if (d.noseBtn) { // button tip: a soft ball instead of a wedge
-      g.fillStyle = d.sLt;
-      g.beginPath(); g.arc(bx + l * 0.36, by + l * 0.80, w * 0.40, 0, 7); g.fill();
-    }
-    g.fillStyle = d.sHi; // bridge highlight, key side
-    g.beginPath(); g.ellipse(bx - 3, by + l * 0.34, 3.2, l * 0.34, -0.24, 0, 7); g.fill();
-    g.fillStyle = d.sOut; // nostril, flared under tension
-    g.beginPath();
-    g.ellipse(bx + l * 0.18, by + l * 0.92, 3.2 + S.tense * 1.6, 2 + S.tense * 0.7, 0.24, 0, 7);
+  // plush ears for the monster
+  function drawPlushEar(g, d, sd) {
+    g.fillStyle = d.sDk; g.strokeStyle = d.sOut; g.lineWidth = 3;
+    g.beginPath(); g.ellipse(sd * (S.cw - 4), -22, 13, 17, sd * 0.3, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = d.hLt;
+    g.beginPath(); g.ellipse(sd * (S.cw - 6), -24, 6, 9, sd * 0.3, 0, 7); g.fill();
+  }
+
+  // skull: flat base, form shadow right + under the jaw, key light upper-left
+  function drawHead(g, d) {
+    const cw = S.cw, jw = S.jw, chin = S.chin;
+    headPath(g, cw, jw, chin);
+    g.fillStyle = d.sMid;
     g.fill();
-    g.fillStyle = SHADE; // cast shadow, down and away from the key
-    g.beginPath(); g.ellipse(bx + l * 0.10, by + l * 1.22, w * 0.66, 4.2, 0.12, 0, 7); g.fill();
+    g.save();
+    headPath(g, cw, jw, chin);
+    g.clip();
+    // form shadow: two contour rings, offset up-left so the mass falls to the
+    // right and under the jaw. Rings never cut a hard edge across the cheek.
+    g.fillStyle = SHADE;
+    headRing(g, cw, jw, chin, 0.945);
+    headRing(g, cw, jw, chin, 0.86);
+    // ONE lit accent on the brow ridge — everything else is left flat, because
+    // stacking translucent patches is what makes a face look quilted
+    g.fillStyle = d.sLt;
+    g.beginPath(); g.ellipse(-9, -33, cw * 0.48, 12, -0.13, 0, 7); g.fill();
+    g.fillStyle = d.sHi;
+    g.beginPath(); g.ellipse(-14, -36, cw * 0.28, 6, -0.15, 0, 7); g.fill();
+    // brow ridge casts over the eyes and seats them in the skull
+    g.fillStyle = CREASE;
+    g.beginPath(); g.ellipse(-S.ex, S.ey - 9, 15, 7, 0, 0, 7); g.fill();
+    g.beginPath(); g.ellipse(S.ex, S.ey - 9, 15, 7, 0, 0, 7); g.fill();
+    // jowls read as weight, not a second chin
+    if (d.jowl) {
+      g.fillStyle = JAWSH;
+      g.beginPath(); g.ellipse(-jw + 2, chin - 20, 15, 13, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(jw - 2, chin - 20, 15, 13, 0, 0, 7); g.fill();
+    }
+    // beard shadow: ONE tinted region over the jaw, kept clear of the nose
+    if (d.stubble) {
+      g.fillStyle = STUB;
+      g.beginPath();
+      g.moveTo(-jw - 8, 4);
+      g.quadraticCurveTo(-jw - 6, chin, 0, chin + 6);
+      g.quadraticCurveTo(jw + 6, chin, jw + 8, 4);
+      g.quadraticCurveTo(0, S.nb + 12, -jw - 8, 4);
+      g.closePath();
+      g.fill();
+      // moustache shadow sits under the nose, never on it
+      g.beginPath();
+      g.ellipse(0, S.my - 7, S.mW * 0.74, 6, 0, 0, 7);
+      g.fill();
+    }
+    // cheek colour
+    if (d.blush) {
+      g.fillStyle = BLUSH;
+      g.beginPath(); g.ellipse(-27, 20, 12, 8, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(27, 20, 12, 8, 0, 0, 7); g.fill();
+    }
+    if (S.flush > 0) {
+      // flushed skin covers the whole face — an ellipse would show its own edge
+      g.fillStyle = S.flush > 0.6 ? FLUSH2 : FLUSH1;
+      g.fillRect(-cw - 4, -66, cw * 2 + 8, chin + 74);
+      g.fillStyle = FLUSH1;
+      g.beginPath(); g.ellipse(-26, 12, 16, 10, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(26, 12, 16, 10, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(0, S.nb - 2, 12, 9, 0, 0, 7); g.fill();
+    }
+    if (d.freckle) {
+      g.fillStyle = FRECK;
+      for (let i = 0; i < FRECKLES.length; i += 2) {
+        g.beginPath(); g.arc(FRECKLES[i], FRECKLES[i + 1] + S.ey + 6, 1.7, 0, 7); g.fill();
+      }
+    }
+    // warm rim, upper-left
+    g.strokeStyle = RIM; g.lineWidth = 5;
+    g.beginPath(); g.arc(0, -14, cw - 3, 3.3, 4.5); g.stroke();
+    g.restore();
+    headPath(g, cw, jw, chin);
+    g.strokeStyle = d.sOut; g.lineWidth = 3; g.stroke();
+    if (d.seam) {
+      g.strokeStyle = d.seam; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(0, -58); g.lineTo(0, -40); g.stroke();
+    }
   }
 
-  // ============================= mouth =================================
-  function drawMouth(g, d, cx, cy, t) {
-    const e = S.e;
-    const w = d.mW, curve = e.mc + (d.mBias || 0);
-    const open = e.mo * (d.slack ? 1.15 : 1);
-    const kind = e.m;
-    const dy = curve * w * 0.55;
-    g.lineCap = 'round';
-    if (kind === 'o') { // scared / surprised: a held oval
-      const oh = 9 + open * 15, ow = w * (0.44 + open * 0.14);
-      g.fillStyle = GUM;
-      g.beginPath(); g.ellipse(cx, cy + 4, ow, oh, 0, 0, 7); g.fill();
-      g.fillStyle = d.lipD; g.lineWidth = 3;
-      g.strokeStyle = d.lipD;
-      g.beginPath(); g.ellipse(cx, cy + 4, ow, oh, 0, 0, 7); g.stroke();
-      g.fillStyle = TONGUE;
-      g.beginPath(); g.ellipse(cx, cy + 4 + oh * 0.56, ow * 0.62, oh * 0.32, 0, 0, 7); g.fill();
-      g.fillStyle = d.lipH;
-      g.beginPath(); g.ellipse(cx - ow * 0.40, cy + 4 - oh * 0.70, ow * 0.26, 2, 0, 0, 7); g.fill();
-      return;
-    }
-    if (kind === 'shout') { // jaw fully dropped, tongue and lower teeth
-      const oh = 26, ow = w * 0.92;
-      g.fillStyle = GUM_HOT;
-      g.beginPath();
-      g.moveTo(cx - ow, cy - 4);
-      g.quadraticCurveTo(cx, cy - 12, cx + ow, cy - 4);
-      g.quadraticCurveTo(cx + ow * 0.72, cy + oh, cx, cy + oh);
-      g.quadraticCurveTo(cx - ow * 0.72, cy + oh, cx - ow, cy - 4);
-      g.closePath(); g.fill();
-      g.fillStyle = TEETH; // upper row follows the lip
-      g.beginPath();
-      g.moveTo(cx - ow * 0.86, cy - 4.6); g.lineTo(cx + ow * 0.86, cy - 4.6);
-      g.lineTo(cx + ow * 0.80, cy + 3.4); g.lineTo(cx - ow * 0.80, cy + 3.4);
-      g.closePath(); g.fill();
-      g.fillStyle = TONGUE;
-      g.beginPath(); g.ellipse(cx, cy + oh * 0.66, ow * 0.58, oh * 0.30, 0, 0, 7); g.fill();
-      g.strokeStyle = d.lipD; g.lineWidth = 3.4;
-      g.beginPath();
-      g.moveTo(cx - ow, cy - 4); g.quadraticCurveTo(cx, cy - 12, cx + ow, cy - 4);
-      g.stroke();
-      return;
-    }
-    if (kind === 'teeth') { // rage: lip peeled back off a bared row
-      const ow = w * 0.98;
-      g.fillStyle = GUM_HOT;
-      g.beginPath();
-      g.moveTo(cx - ow, cy - 2);
-      g.quadraticCurveTo(cx, cy - 13, cx + ow, cy - 2);
-      g.quadraticCurveTo(cx, cy + 17, cx - ow, cy - 2);
-      g.closePath(); g.fill();
-      g.fillStyle = TEETH; // upper zigzag: real teeth, not a bar
-      g.beginPath();
-      g.moveTo(cx - ow * 0.88, cy - 4);
-      g.lineTo(cx + ow * 0.88, cy - 4);
-      g.lineTo(cx + ow * 0.72, cy + 4.6);
-      g.lineTo(cx + ow * 0.44, cy - 1.4);
-      g.lineTo(cx + ow * 0.14, cy + 5.2);
-      g.lineTo(cx - ow * 0.18, cy - 1.4);
-      g.lineTo(cx - ow * 0.48, cy + 5);
-      g.lineTo(cx - ow * 0.74, cy - 1);
-      g.closePath(); g.fill();
-      g.fillStyle = TEETH_DK;
-      g.beginPath();
-      g.moveTo(cx - ow * 0.64, cy + 12.4); g.lineTo(cx + ow * 0.64, cy + 12.4);
-      g.lineTo(cx + ow * 0.50, cy + 7.4); g.lineTo(cx - ow * 0.50, cy + 7.4);
-      g.closePath(); g.fill();
-      g.strokeStyle = d.lipD; g.lineWidth = 3.6;
-      g.beginPath();
-      g.moveTo(cx - ow, cy - 2); g.quadraticCurveTo(cx, cy - 13, cx + ow, cy - 2);
-      g.stroke();
-      return;
-    }
-    if (kind === 'grit') { // hurt: clenched, teeth showing through
-      g.fillStyle = GUM;
-      g.beginPath();
-      g.moveTo(cx - w * 0.9, cy - 6);
-      g.quadraticCurveTo(cx, cy - 2, cx + w * 0.9, cy - 6);
-      g.quadraticCurveTo(cx, cy + 12, cx - w * 0.9, cy - 6);
-      g.closePath(); g.fill();
-      g.fillStyle = TEETH;
-      g.beginPath(); g.rect(cx - w * 0.80, cy - 5.4, w * 1.60, 8.4); g.fill();
-      g.strokeStyle = TEETH_DK; g.lineWidth = 1.4;
-      for (let i = -2; i <= 2; i++) {
-        g.beginPath();
-        g.moveTo(cx + i * w * 0.30, cy - 5.4); g.lineTo(cx + i * w * 0.30, cy + 3);
-        g.stroke();
-      }
-      g.strokeStyle = d.lipD; g.lineWidth = 3.2;
-      g.beginPath();
-      g.moveTo(cx - w * 0.94, cy - 6); g.quadraticCurveTo(cx, cy - 1, cx + w * 0.94, cy - 6);
-      g.stroke();
-      return;
-    }
-    // the curve family: line / frown / smile / firm / smirk / wobble
-    let lx = cx - w, rx = cx + w;
-    let ly = cy, ry = cy;
-    if (kind === 'smirk' || d.asym) { ry = cy - Math.abs(dy) * 1.5; ly = cy + 2; }
-    if (kind === 'frown') { ly = cy - Math.abs(dy) * 0.5; ry = cy - Math.abs(dy) * 0.5; }
-    g.strokeStyle = d.lipD; g.lineWidth = kind === 'firm' ? 5 : 4;
+  /* =============================== eyes =============================== */
+  // squeezed-shut / blinking eye: a curved line, never a bare circle
+  function closedEye(g, d, w, h, bow, sd) {
+    g.strokeStyle = d.hOut; g.lineWidth = 3.4; g.lineCap = 'round';
     g.beginPath();
-    if (kind === 'wobble') { // sad: a trembling line, not a frown
-      const q = Math.sin(t * 9) * 1.4;
-      g.moveTo(lx, ly - dy * 0.4);
-      g.quadraticCurveTo(cx - w * 0.5, cy + 5 + q, cx, cy + 1);
-      g.quadraticCurveTo(cx + w * 0.5, cy - 3 - q, rx, ry - dy * 0.4);
+    if (bow > 0) {
+      // squeezed shut: a hard clenched crease, outer end dragged down
+      g.lineJoin = 'round';
+      g.moveTo(-sd * w, 1);
+      g.lineTo(-sd * w * 0.15, -h * 0.9);
+      g.lineTo(sd * (w + 1), 5);
     } else {
-      g.moveTo(lx, ly);
-      g.quadraticCurveTo(cx, cy + dy * 2, rx, ry);
+      g.moveTo(-w, -1);
+      g.quadraticCurveTo(0, h * 1.5, w, -1);
     }
     g.stroke();
-    if (open > 0.02) { // parted lips
-      g.fillStyle = GUM;
+    if (bow > 0) {
+      g.strokeStyle = CREASE; g.lineWidth = 2;
       g.beginPath();
-      g.moveTo(lx, ly);
-      g.quadraticCurveTo(cx, cy + dy * 2, rx, ry);
-      g.quadraticCurveTo(cx, cy + dy * 2 + open * 22, lx, ly);
+      g.moveTo(sd * (w + 4), 4); g.lineTo(sd * (w + 9), 1);
+      g.moveTo(sd * (w + 4), 9); g.lineTo(sd * (w + 8), 7);
+      g.stroke();
+    }
+  }
+
+  // ONE eye construction, mirrored about x=0 by sd. Light stays upper-left.
+  function drawEye(g, d, e, sd) {
+    const w = d.eW * e.ey, h = d.eH * e.ey;
+    g.save();
+    g.translate(sd * S.ex, S.ey);
+    g.rotate(sd * 0.06);
+    // socket: seats the eye in the skull
+    g.fillStyle = CREASE;
+    g.beginPath(); g.ellipse(0, -1, w + 4, h + 5, 0, 0, 7); g.fill();
+    if (S.closed) {
+      closedEye(g, d, w, h, S.closed, sd);
+      g.restore();
+      return;
+    }
+    // 1 sclera
+    almond(g, w, h);
+    g.fillStyle = EYEW;
+    g.fill();
+    g.save();
+    g.clip();
+    g.fillStyle = LID_SH;
+    g.fillRect(-w - 2, -h * 1.5, w * 2 + 4, h * 0.85);
+    // 2 iris, sitting on the sclera's lower middle
+    const ir = h * 0.9, iy = h * 0.2, ix = S.gaze;
+    g.fillStyle = d.ir;
+    g.beginPath(); g.arc(ix, iy, ir, 0, 7); g.fill();
+    g.fillStyle = d.irL;
+    g.beginPath(); g.arc(ix, iy + ir * 0.3, ir * 0.66, 0, 7); g.fill();
+    g.fillStyle = d.ir;
+    g.beginPath(); g.arc(ix, iy - ir * 0.1, ir * 0.72, 0, 7); g.fill();
+    g.strokeStyle = d.irD; g.lineWidth = 1.6;
+    g.beginPath(); g.arc(ix, iy, ir - 0.7, 0, 7); g.stroke();
+    // 3 pupil
+    g.fillStyle = INK;
+    g.beginPath(); g.arc(ix, iy, ir * 0.46 * e.pup, 0, 7); g.fill();
+    // 4 ONE catchlight at the iris's upper-left
+    g.fillStyle = CATCH;
+    g.beginPath(); g.arc(ix - ir * 0.36, iy - ir * 0.4, ir * 0.3, 0, 7); g.fill();
+    g.fillStyle = CATCH2;
+    g.beginPath(); g.arc(ix + ir * 0.4, iy + ir * 0.34, ir * 0.16, 0, 7); g.fill();
+    // 5 upper eyelid — filled skin that CUTS the sclera
+    const ly = -h + S.lt * (h * 2.05);
+    g.fillStyle = d.sLt;
+    g.beginPath();
+    g.moveTo(-w - 3, ly - 1.6);
+    g.quadraticCurveTo(0, ly + 2.8, w + 3, ly - 1.6);
+    g.lineTo(w + 3, -h * 2 - 6);
+    g.lineTo(-w - 3, -h * 2 - 6);
+    g.closePath();
+    g.fill();
+    // lower lid
+    if (e.lb > 0) {
+      const by = h - e.lb * (h * 1.4);
+      g.fillStyle = d.sMid;
+      g.beginPath();
+      g.moveTo(-w - 3, by + 1.6);
+      g.quadraticCurveTo(0, by - 2.6, w + 3, by + 1.6);
+      g.lineTo(w + 3, h * 2 + 6);
+      g.lineTo(-w - 3, h * 2 + 6);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+    // lash line along the lid's lower edge
+    g.strokeStyle = d.hOut;
+    g.lineWidth = d.lash ? 3.6 : 2.6;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-w - 1, ly - 1.6);
+    g.quadraticCurveTo(0, ly + 2.8, w + 1, ly - 1.6);
+    g.stroke();
+    if (d.lash) {
+      g.fillStyle = d.hOut;
+      g.beginPath();
+      g.moveTo(sd * w, ly - 1);
+      g.lineTo(sd * (w + 7), ly - 6);
+      g.lineTo(sd * (w - 1), ly + 2.4);
       g.closePath(); g.fill();
-      if (d.toothy) { // brooks: the teeth ARE the character
-        g.fillStyle = TEETH;
-        g.beginPath(); g.rect(cx - w * 0.62, cy + dy * 0.9, w * 1.24, 9); g.fill();
-        g.strokeStyle = TEETH_DK; g.lineWidth = 1.3;
+    }
+    // lid crease + lower rim
+    g.strokeStyle = CREASE; g.lineWidth = 1.8;
+    g.beginPath();
+    g.moveTo(-w + 1, ly - 6.5);
+    g.quadraticCurveTo(0, ly - 2.6, w - 1, ly - 6.5);
+    g.stroke();
+    g.strokeStyle = LOWLID; g.lineWidth = 1.8;
+    g.beginPath();
+    g.moveTo(-w + 2, h * 0.78);
+    g.quadraticCurveTo(0, h * 1.24, w - 2, h * 0.78);
+    g.stroke();
+    if (d.glow) {
+      g.fillStyle = EYEGLOW;
+      g.beginPath(); g.arc(0, h * 0.16, h * 1.5, 0, 7); g.fill();
+    }
+    g.restore();
+  }
+
+  function drawBrow(g, d, e, sd) {
+    const bc = d.brow || d.hDk;
+    const lift = sd > 0 ? e.ba : 0;
+    const xi = sd * (S.ex - 12 + e.bp), xo = sd * (S.ex + 12);
+    const y0 = S.ey - 15 + (d.eH - 8) * 0.9;
+    g.fillStyle = bc;
+    browShape(g, xi, y0 + e.bi + lift, xo, y0 + e.bo + lift, d.bw, d.bw * 0.42, 2.4);
+    g.fill();
+  }
+
+  /* =============================== nose =============================== */
+  function drawNose(g, d) {
+    if (!d.noseW) return;
+    const nw = d.noseW * 0.5, nb = S.nb;
+    // one small filled wedge, narrow at the bridge, rounded at the tip
+    g.fillStyle = d.sDk;
+    g.beginPath();
+    g.moveTo(-1.8, nb - 13);
+    g.bezierCurveTo(-nw * 0.6, nb - 7, -nw, nb - 4, -nw, nb);
+    g.bezierCurveTo(-nw, nb + 4.6, nw, nb + 4.6, nw, nb);
+    g.bezierCurveTo(nw, nb - 4, nw * 0.6, nb - 7, 1.8, nb - 13);
+    g.closePath();
+    g.fill();
+    // ONE soft shadow down the right side, plus the tip's cast shadow
+    g.fillStyle = NOSE_SH;
+    g.beginPath();
+    g.moveTo(0.4, nb - 12);
+    g.bezierCurveTo(nw * 0.62, nb - 6, nw, nb - 4, nw, nb);
+    g.bezierCurveTo(nw, nb + 4.6, 0.4, nb + 4.6, 0.4, nb + 4.6);
+    g.closePath();
+    g.fill();
+    g.beginPath();
+    g.ellipse(0, nb + 5.4, nw * 1.02, 2.6, 0, 0, 7);
+    g.fill();
+    // rounded tip catching the key light
+    g.fillStyle = NOSE_HI;
+    g.beginPath(); g.ellipse(-nw * 0.28, nb - 0.6, nw * 0.44, 2.8, -0.28, 0, 7); g.fill();
+    if (d.nostril) {
+      g.fillStyle = d.sOut;
+      g.beginPath(); g.ellipse(-nw * 0.6, nb + 1.4, 2.2, 1.4, 0.35, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(nw * 0.6, nb + 1.4, 2.2, 1.4, -0.35, 0, 7); g.fill();
+    }
+  }
+
+  /* =============================== mouth ============================== */
+  function lipShine(g, hw, my, th) {
+    g.fillStyle = LIPHI;
+    g.beginPath();
+    g.moveTo(-hw * 0.66, my + th * 0.7);
+    g.quadraticCurveTo(0, my + th + 4, hw * 0.66, my + th * 0.7);
+    g.quadraticCurveTo(0, my + th + 1, -hw * 0.66, my + th * 0.7);
+    g.closePath();
+    g.fill();
+  }
+
+  function drawMouth(g, d, e) {
+    const hw = d.mW * 0.5, my = S.my;
+    const k = e.m;
+    if (k === 'lens' || k === 'firm' || k === 'smirk') {
+      const th = k === 'firm' ? 4 : 3.3;
+      const l1 = k === 'smirk' ? e.mc * hw * 0.7 : e.mc * hw * 0.45;
+      const l2 = k === 'smirk' ? -e.mc * hw * 0.1 : e.mc * hw * 0.45;
+      // upper lip plane, then the mouth line itself sits inside it
+      g.fillStyle = d.lip;
+      g.beginPath();
+      g.moveTo(-hw - 1, my - l1);
+      g.quadraticCurveTo(0, my - th - 5.5, hw + 1, my - l2);
+      g.quadraticCurveTo(0, my - th * 0.4, -hw - 1, my - l1);
+      g.closePath();
+      g.fill();
+      g.fillStyle = d.lipD;
+      g.beginPath();
+      g.moveTo(-hw, my - l1);
+      g.quadraticCurveTo(0, my + th, hw, my - l2);
+      g.quadraticCurveTo(0, my - th * 0.55, -hw, my - l1);
+      g.closePath();
+      g.fill();
+      lipShine(g, hw, my, th);
+      if (k === 'smirk') {
+        g.strokeStyle = CREASE; g.lineWidth = 2.2; g.lineCap = 'round';
         g.beginPath();
-        g.moveTo(cx, cy + dy * 0.9); g.lineTo(cx, cy + dy * 0.9 + 9);
+        g.moveTo(-hw - 1, my - l1 - 1);
+        g.quadraticCurveTo(-hw - 5, my - l1 - 5, -hw - 5, my - l1 - 9);
         g.stroke();
       }
+      return;
     }
-    // lower lip volume + one highlight, top-left key
-    g.fillStyle = d.lip;
-    g.beginPath();
-    g.moveTo(lx + 2, ly + 1);
-    g.quadraticCurveTo(cx, cy + dy * 2 + 9, rx - 2, ry + 1);
-    g.quadraticCurveTo(cx, cy + dy * 2 + 2, lx + 2, ly + 1);
-    g.closePath(); g.fill();
-    g.fillStyle = d.lipH;
-    g.beginPath(); g.ellipse(cx - w * 0.26, cy + dy * 2 + 4.4, w * 0.24, 2, -0.1, 0, 7); g.fill();
-  }
-
-  // ==================== creature muzzles (campaign / forms) ============
-  function plushMuzzle(g, d, t) {
-    const e = S.e;
-    g.fillStyle = '#f2e3bf'; g.strokeStyle = '#9c8455'; g.lineWidth = 3.4;
-    g.beginPath(); g.ellipse(20, 18, 34, 27, 0, 0, 7); g.fill(); g.stroke();
-    g.fillStyle = '#fff7e2';
-    g.beginPath(); g.ellipse(8, 6, 15, 9, -0.3, 0, 7); g.fill();
-    g.fillStyle = '#d8c69c';
-    g.beginPath(); g.ellipse(31, 35, 15, 8, 0.3, 0, 7); g.fill();
-    g.fillStyle = '#9c8455';
-    g.beginPath(); g.ellipse(28, 1, 7, 4.6, 0, 0, 7); g.fill();
-    const grin = e.m === 'frown' || e.m === 'wobble' ? -1 : 1;
-    g.fillStyle = '#5c2038';
-    g.beginPath();
-    g.moveTo(-4, 14);
-    g.quadraticCurveTo(26, 9, 56, 17);
-    g.quadraticCurveTo(28, 17 + grin * 30, -4, 14);
-    g.closePath(); g.fill();
-    g.fillStyle = TEETH;
-    g.beginPath();
-    g.moveTo(0, 9); g.lineTo(52, 12); g.lineTo(50, 20);
-    g.lineTo(43, 12); g.lineTo(35, 21); g.lineTo(27, 11);
-    g.lineTo(19, 21); g.lineTo(11, 10); g.lineTo(3, 18);
-    g.closePath(); g.fill();
-    g.fillStyle = TEETH; g.strokeStyle = TEETH_DK; g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(7, 34); g.lineTo(8, 16);
-    g.quadraticCurveTo(15, 13, 19, 17); g.lineTo(21, 34);
-    g.closePath(); g.fill(); g.stroke();
-    g.beginPath();
-    g.moveTo(33, 33); g.lineTo(34, 15);
-    g.quadraticCurveTo(41, 12, 45, 16); g.lineTo(47, 33);
-    g.closePath(); g.fill(); g.stroke();
-  }
-
-  function beakMuzzle(g, d, t) {
-    const e = S.e;
-    const gape = e.mo * 13;
-    g.fillStyle = '#e8a020'; g.strokeStyle = '#68472a'; g.lineWidth = 3;
-    g.beginPath();
-    g.moveTo(14, 4); g.lineTo(66, 14 - gape * 0.4); g.lineTo(16, 24 - gape * 0.2);
-    g.closePath(); g.fill(); g.stroke();
-    g.beginPath();
-    g.moveTo(16, 26 + gape * 0.5); g.lineTo(58, 22 + gape); g.lineTo(16, 38 + gape * 0.8);
-    g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = '#f5cf88';
-    g.beginPath(); g.moveTo(16, 7); g.lineTo(46, 13); g.lineTo(17, 16); g.closePath(); g.fill();
-    g.fillStyle = '#68472a';
-    g.beginPath(); g.ellipse(24, 10, 3, 2, 0, 0, 7); g.fill();
-    g.fillStyle = '#d43b2f'; g.strokeStyle = '#612030'; g.lineWidth = 2.4; // wattle
-    g.beginPath(); g.ellipse(24, 46, 8, 13, 0.2, 0, 7); g.fill(); g.stroke();
-  }
-
-  function loafMuzzle(g, d, t) {
-    g.fillStyle = '#f1d3a5'; // sesame seeds
-    for (let i = 0; i < SEEDS.length; i += 2) {
-      g.beginPath(); g.ellipse(SEEDS[i], SEEDS[i + 1], 3.4, 2.2, 0.5, 0, 7); g.fill();
-    }
-    g.strokeStyle = '#a57a52'; g.lineWidth = 3; // bake split across the crust
-    g.beginPath();
-    g.moveTo(-34, -12); g.quadraticCurveTo(0, -22, 36, -10);
-    g.stroke();
-    drawMouth(g, d, 16, 22, S.t);
-  }
-
-  // ============================= headgear ==============================
-  function drawGear(g, d, t) {
-    const fx = d.fx, fy = d.fy;
-    if (d.band) { // the gameplay headband, in the character's own colour
-      g.fillStyle = S.cDk;
+    if (k === 'wobble') {
+      const l = e.mc * hw * 0.5;
+      g.fillStyle = d.lipD;
       g.beginPath();
-      g.moveTo(-fx - 3, -fy * 0.44);
-      g.quadraticCurveTo(0, -fy * 1.06, fx + 3, -fy * 0.40);
-      g.lineTo(fx + 2, -fy * 0.14);
-      g.quadraticCurveTo(0, -fy * 0.80, -fx - 2, -fy * 0.18);
-      g.closePath(); g.fill();
+      g.moveTo(-hw, my - l);
+      g.quadraticCurveTo(-hw * 0.5, my + 5.5, 0, my + 2.6);
+      g.quadraticCurveTo(hw * 0.5, my + 0.2, hw, my - l);
+      g.quadraticCurveTo(hw * 0.5, my - 4.4, 0, my - 2);
+      g.quadraticCurveTo(-hw * 0.5, my + 0.4, -hw, my - l);
+      g.closePath();
+      g.fill();
+      lipShine(g, hw, my, 3);
+      return;
+    }
+    if (k === 'o') {
+      const oh = 5 + e.mo * 11;
+      g.fillStyle = d.lipD;
+      g.beginPath(); g.ellipse(0, my + 2, hw * 0.46, oh, 0, 0, 7); g.fill();
+      g.fillStyle = MOUTH_IN;
+      g.beginPath(); g.ellipse(0, my + 2.4, hw * 0.46 - 2.6, oh - 2.6, 0, 0, 7); g.fill();
+      g.fillStyle = TONGUE;
+      g.beginPath(); g.ellipse(0, my + oh - 1.5, hw * 0.28, oh * 0.3, 0, 0, 7); g.fill();
+      lipShine(g, hw * 0.7, my + oh - 1, 2.2);
+      return;
+    }
+    if (k === 'shout') {
+      const oh = 12 + e.mo * 12;
+      g.fillStyle = d.lipD;
+      g.beginPath();
+      g.moveTo(-hw, my - 8);
+      g.quadraticCurveTo(0, my - 12, hw, my - 8);
+      g.quadraticCurveTo(hw * 0.7, my + oh, 0, my + oh);
+      g.quadraticCurveTo(-hw * 0.7, my + oh, -hw, my - 8);
+      g.closePath();
+      g.fill();
+      g.save();
+      g.clip();
+      g.fillStyle = MOUTH_IN;
+      g.fillRect(-hw, my - 6, hw * 2, oh + 12);
+      // ONE rounded rect of upper teeth, tucked under the lip
+      g.fillStyle = TEETH;
+      g.beginPath(); g.roundRect(-hw * 0.7, my - 11, hw * 1.4, 9, 3); g.fill();
+      g.fillStyle = TEETH_SH;
+      g.fillRect(-hw * 0.7, my - 3.4, hw * 1.4, 1.4);
+      g.fillStyle = TONGUE;
+      g.beginPath(); g.ellipse(0, my + oh + 3, hw * 0.62, oh * 0.5, 0, 0, 7); g.fill();
+      g.restore();
+      return;
+    }
+    if (k === 'teeth') {
+      const oh = 8 + e.mo * 9;
+      g.fillStyle = d.lipD;
+      g.beginPath();
+      g.moveTo(-hw - 2, my - 5);
+      g.quadraticCurveTo(0, my - 11, hw + 2, my - 5);
+      g.quadraticCurveTo(hw * 0.6, my + oh + 5, 0, my + oh + 3);
+      g.quadraticCurveTo(-hw * 0.6, my + oh + 5, -hw - 2, my - 5);
+      g.closePath();
+      g.fill();
+      g.save();
+      g.clip();
+      g.fillStyle = MOUTH_IN;
+      g.fillRect(-hw - 2, my - 8, hw * 2 + 4, oh + 16);
+      g.fillStyle = TEETH;
+      g.beginPath(); g.roundRect(-hw * 0.8, my - 11, hw * 1.6, 10, 3); g.fill();
+      g.beginPath(); g.roundRect(-hw * 0.62, my + oh - 1, hw * 1.24, 8, 3); g.fill();
+      g.fillStyle = TEETH_SH;
+      g.fillRect(-hw * 0.8, my - 2.6, hw * 1.6, 1.6);
+      g.restore();
+      return;
+    }
+    // grit — a wide clenched grimace: corners level, one tooth row, teeth met
+    const oh = 4 + e.mo * 5;
+    g.fillStyle = d.lipD;
+    g.beginPath();
+    g.moveTo(-hw - 5, my + 7);
+    g.quadraticCurveTo(0, my - oh - 4, hw + 5, my + 7);
+    g.quadraticCurveTo(hw * 0.5, my + oh + 8, 0, my + oh + 8);
+    g.quadraticCurveTo(-hw * 0.5, my + oh + 8, -hw - 5, my + 7);
+    g.closePath();
+    g.fill();
+    g.save();
+    g.clip();
+    g.fillStyle = MOUTH_IN;
+    g.fillRect(-hw - 6, my - oh - 6, hw * 2 + 12, oh * 2 + 20);
+    g.fillStyle = TEETH;
+    g.beginPath(); g.roundRect(-hw * 0.66, my - oh + 1, hw * 1.32, oh + 3, 2); g.fill();
+    g.fillStyle = TEETH_SH;
+    g.fillRect(-hw * 0.66, my + 1.4, hw * 1.32, 1.8);
+    g.restore();
+    // corner pull: the lips are dragged back, not smiling
+    g.strokeStyle = CREASE; g.lineWidth = 2.2; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-hw - 5, my + 7); g.lineTo(-hw - 11, my + 12);
+    g.moveTo(hw + 5, my + 7); g.lineTo(hw + 11, my + 12);
+    g.stroke();
+  }
+
+  /* =========================== facial hair ============================ */
+  // a moustache sits ON the upper lip, so it draws AFTER the mouth
+  function drawMoustache(g, d, col, out, lit, w) {
+    g.fillStyle = col; g.strokeStyle = out; g.lineWidth = 2.2;
+    g.beginPath();
+    g.moveTo(-w, S.my - 11);
+    g.quadraticCurveTo(-w * 0.42, S.my - 14, 0, S.my - 7);
+    g.quadraticCurveTo(w * 0.42, S.my - 14, w, S.my - 11);
+    g.quadraticCurveTo(w * 0.6, S.my - 1, 0, S.my - 3);
+    g.quadraticCurveTo(-w * 0.6, S.my - 1, -w, S.my - 11);
+    g.closePath();
+    g.fill(); g.stroke();
+    g.fillStyle = lit;
+    g.beginPath(); g.ellipse(-w * 0.46, S.my - 9, 5, 1.8, -0.22, 0, 7); g.fill();
+  }
+
+  function drawFacialHair(g, d) {
+    if (d.beard) {
+      g.fillStyle = d.bOut;
+      g.beginPath();
+      g.moveTo(-S.jw - 12, 0);
+      g.bezierCurveTo(-S.jw - 14, S.chin + 4, -20, S.chin + 26, 0, S.chin + 26);
+      g.bezierCurveTo(20, S.chin + 26, S.jw + 14, S.chin + 4, S.jw + 12, 0);
+      g.quadraticCurveTo(S.jw * 0.5, 16, 0, 12);
+      g.quadraticCurveTo(-S.jw * 0.5, 16, -S.jw - 12, 0);
+      g.closePath();
+      g.fill();
+      g.fillStyle = d.bMid;
+      g.beginPath();
+      g.moveTo(-S.jw - 8, 2);
+      g.bezierCurveTo(-S.jw - 10, S.chin + 2, -18, S.chin + 21, 0, S.chin + 21);
+      g.bezierCurveTo(18, S.chin + 21, S.jw + 10, S.chin + 2, S.jw + 8, 2);
+      g.quadraticCurveTo(S.jw * 0.5, 18, 0, 14);
+      g.quadraticCurveTo(-S.jw * 0.5, 18, -S.jw - 8, 2);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = d.bLt; g.lineWidth = 6; g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(-S.jw - 2, 10);
+      g.quadraticCurveTo(-S.jw + 2, S.chin - 2, -14, S.chin + 12);
+      g.stroke();
+    }
+  }
+
+  /* =============================== hair =============================== */
+  // back mass, drawn behind the head
+  function drawHairBack(g, d) {
+    const st = d.hair;
+    if (st === 'pony') {
+      g.fillStyle = d.hDk; g.strokeStyle = d.hOut; g.lineWidth = 3;
+      g.beginPath(); g.ellipse(-S.cw - 12, 18, 15, 32, 0.28, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = d.hMid;
+      g.beginPath(); g.ellipse(-S.cw - 13, 12, 9, 21, 0.28, 0, 7); g.fill();
+    } else if (st === 'long') {
+      g.fillStyle = d.hDk; g.strokeStyle = d.hOut; g.lineWidth = 3;
+      g.beginPath(); g.ellipse(-S.cw - 4, 30, 19, 48, 0.1, 0, 7); g.fill(); g.stroke();
+      g.beginPath(); g.ellipse(S.cw + 4, 32, 18, 46, -0.1, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = d.hMid;
+      g.beginPath(); g.ellipse(-S.cw - 6, 24, 12, 36, 0.1, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(S.cw + 5, 26, 11, 34, -0.1, 0, 7); g.fill();
+    }
+  }
+
+  // the dome + a swept, asymmetric hairline. Never two matched top points.
+  function hairCap(g, cw, pad, hl) {
+    const w = cw + pad;
+    g.beginPath();
+    g.moveTo(-w, 6);
+    g.bezierCurveTo(-w - 2, -32, -w * 0.74, -62 - pad, 0, -62 - pad);
+    g.bezierCurveTo(w * 0.74, -62 - pad, w + 2, -32, w, 6);
+    g.lineTo(w - 8, -4);
+    g.quadraticCurveTo(w - 14, -24, 6, hl);
+    g.quadraticCurveTo(-14, hl - 3, -w + 18, -13);
+    g.quadraticCurveTo(-w + 8, -6, -w + 2, 2);
+    g.closePath();
+  }
+
+  function clumps(g, arr, k, off) {
+    for (let i = 0; i < arr.length; i += 3) {
+      g.beginPath();
+      g.arc(arr[i] * k, arr[i + 1], arr[i + 2] + off, 0, 7);
+      g.fill();
+    }
+  }
+
+  function drawHair(g, d) {
+    const st = d.hair;
+    if (st === 'none') {
+      if (d.bald) {
+        g.strokeStyle = SHEEN; g.lineWidth = 5;
+        g.beginPath(); g.arc(-4, -22, S.cw - 12, 3.5, 4.4); g.stroke();
+      }
+      return;
+    }
+    const cw = S.cw, k = cw / 46;
+    const hl = st === 'comb' ? -36 : -30;
+    // outline halo, then the mass
+    g.fillStyle = d.hOut;
+    if (st === 'spiky') {
+      for (let i = 0; i < SPIKE.length; i += 5) {
+        const bx = SPIKE[i] * k, by = SPIKE[i + 1], tx = SPIKE[i + 2] * k, ty = SPIKE[i + 3], hwd = SPIKE[i + 4] + 2.5;
+        g.beginPath();
+        g.moveTo(bx - hwd, by + 3);
+        g.quadraticCurveTo(bx - hwd * 0.2, (by + ty) * 0.5, tx, ty);
+        g.quadraticCurveTo(bx + hwd * 0.6, (by + ty) * 0.5 + 5, bx + hwd, by + 5);
+        g.closePath();
+        g.fill();
+      }
+    } else if (st === 'shaggy') clumps(g, SHAG, k, 3);
+    else if (st === 'mop') clumps(g, MOP, k, 3);
+    else if (st === 'scruff') clumps(g, SCRUFF, k, 3);
+    else if (st === 'wisp') {
+      g.strokeStyle = d.hOut; g.lineWidth = 7; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(-4, -46); g.quadraticCurveTo(6, -62, -6, -66); g.stroke();
+    } else clumps(g, BUMP, k, 3);
+    if (st !== 'wisp') {
+      hairCap(g, cw, 3.5, hl + 2);
+      g.fill();
+    }
+    // the mass
+    g.fillStyle = d.hMid;
+    if (st !== 'wisp') {
+      hairCap(g, cw, 0, hl);
+      g.fill();
+    }
+    if (st === 'spiky') {
+      for (let i = 0; i < SPIKE.length; i += 5) {
+        const bx = SPIKE[i] * k, by = SPIKE[i + 1], tx = SPIKE[i + 2] * k, ty = SPIKE[i + 3], hwd = SPIKE[i + 4];
+        g.beginPath();
+        g.moveTo(bx - hwd, by + 3);
+        g.quadraticCurveTo(bx - hwd * 0.2, (by + ty) * 0.5, tx, ty);
+        g.quadraticCurveTo(bx + hwd * 0.6, (by + ty) * 0.5 + 5, bx + hwd, by + 5);
+        g.closePath();
+        g.fill();
+      }
+    } else if (st === 'shaggy') clumps(g, SHAG, k, 0);
+    else if (st === 'mop') clumps(g, MOP, k, 0);
+    else if (st === 'scruff') clumps(g, SCRUFF, k, 0);
+    else if (st === 'wisp') {
+      g.strokeStyle = d.hMid; g.lineWidth = 4; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(-4, -45); g.quadraticCurveTo(5, -60, -5, -64); g.stroke();
+    } else clumps(g, BUMP, k, 0);
+    if (st === 'pony') {
+      // gathered sweep + the tie
+      g.fillStyle = d.hMid;
+      g.beginPath(); g.ellipse(-cw + 4, -14, 12, 20, 0.35, 0, 7); g.fill();
+      g.fillStyle = d.cMid; g.strokeStyle = d.cOut; g.lineWidth = 2;
+      g.beginPath(); g.ellipse(-cw - 4, -2, 7, 5, 0.5, 0, 7); g.fill(); g.stroke();
+    }
+    if (st === 'comb') {
+      // combed over: one strong sweep, a visible part on the key side
+      g.strokeStyle = d.hDk; g.lineWidth = 3; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(-cw + 14, -40); g.quadraticCurveTo(0, -52, cw - 16, -32); g.stroke();
+      g.beginPath(); g.moveTo(-cw + 12, -30); g.quadraticCurveTo(-4, -44, cw - 14, -24); g.stroke();
+    }
+    if (st === 'wisp') return;
+    // ONE lighter highlight band across the top-left
+    g.save();
+    hairCap(g, cw, 3.5, hl + 2);
+    g.clip();
+    g.strokeStyle = d.hLt; g.lineWidth = 7; g.lineCap = 'round';
+    g.beginPath(); g.arc(-2, -20, cw - 6, 3.46, 4.36); g.stroke();
+    g.fillStyle = HAIRSH;
+    g.beginPath(); g.arc(cw * 0.85, -22, cw * 0.7, 0, 7); g.fill();
+    g.restore();
+  }
+
+  /* =========================== accessories ============================ */
+  function drawGear(g, d) {
+    const cw = S.cw;
+    if (d.band) {
       g.fillStyle = d.cMid;
       g.beginPath();
-      g.moveTo(-fx - 3, -fy * 0.44);
-      g.quadraticCurveTo(0, -fy * 1.06, fx + 3, -fy * 0.40);
-      g.lineTo(fx + 2, -fy * 0.26);
-      g.quadraticCurveTo(0, -fy * 0.92, -fx - 2, -fy * 0.30);
-      g.closePath(); g.fill();
-      g.fillStyle = S.cLt; // key-side band highlight
-      g.beginPath(); g.ellipse(-fx * 0.46, -fy * 0.80, 12, 4, -0.42, 0, 7); g.fill();
-      g.fillStyle = d.cMid; // band tail, streaming behind
+      g.moveTo(-cw - 1, -18);
+      g.quadraticCurveTo(0, -56, cw + 1, -18);
+      g.lineTo(cw + 1, -28);
+      g.quadraticCurveTo(0, -64, -cw - 1, -28);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = d.cOut; g.lineWidth = 2.6; g.stroke();
+      g.save();
       g.beginPath();
-      g.moveTo(-fx - 1, -fy * 0.42);
-      g.quadraticCurveTo(-fx - 22, fy * 0.10, -fx - 16 + Math.sin(t * 1.6) * 4, fy * 0.72);
-      g.lineTo(-fx - 5 + Math.sin(t * 1.6) * 3, fy * 0.66);
-      g.quadraticCurveTo(-fx - 8, fy * 0.06, -fx + 5, -fy * 0.28);
-      g.closePath(); g.fill();
+      g.moveTo(-cw - 1, -18);
+      g.quadraticCurveTo(0, -56, cw + 1, -18);
+      g.lineTo(cw + 1, -28);
+      g.quadraticCurveTo(0, -64, -cw - 1, -28);
+      g.closePath();
+      g.clip();
+      g.fillStyle = d.cLt;
+      g.beginPath(); g.ellipse(-24, -48, 20, 6, 0.28, 0, 7); g.fill();
+      g.fillStyle = SHADE;
+      g.beginPath(); g.arc(cw, -22, 26, 0, 7); g.fill();
+      g.restore();
+      // knot + one tail hanging off the key side
+      g.fillStyle = d.cDk; g.strokeStyle = d.cOut; g.lineWidth = 2.4;
+      g.beginPath();
+      g.moveTo(-cw - 1, -32);
+      g.quadraticCurveTo(-cw - 12, -22, -cw - 14, -4);
+      g.lineTo(-cw - 4, -2);
+      g.quadraticCurveTo(-cw - 2, -16, -cw + 4, -24);
+      g.closePath();
+      g.fill(); g.stroke();
+      g.fillStyle = d.cMid;
+      g.beginPath(); g.ellipse(-cw - 2, -28, 8, 7, 0.5, 0, 7); g.fill(); g.stroke();
+    }
+    if (d.bow) {
+      g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 2.4;
+      g.beginPath();
+      g.moveTo(-cw + 6, -44);
+      g.lineTo(-cw - 16, -56); g.lineTo(-cw - 14, -36);
+      g.closePath(); g.fill(); g.stroke();
+      g.beginPath();
+      g.moveTo(-cw + 6, -44);
+      g.lineTo(-cw + 20, -60); g.lineTo(-cw + 24, -42);
+      g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = d.gLt;
+      g.beginPath(); g.arc(-cw + 6, -46, 5, 0, 7); g.fill();
+      g.strokeStyle = d.gOut; g.lineWidth = 2; g.stroke();
+    }
+    if (d.helmet) {
+      // wide brim first, then the dome sits on it
+      g.fillStyle = d.gDk; g.strokeStyle = d.gOut; g.lineWidth = 3;
+      g.beginPath();
+      g.moveTo(-cw - 15, -30);
+      g.quadraticCurveTo(0, -20, cw + 15, -30);
+      g.quadraticCurveTo(0, -48, -cw - 15, -30);
+      g.closePath();
+      g.fill(); g.stroke();
+      g.fillStyle = d.gMid;
+      g.beginPath();
+      g.moveTo(-cw - 1, -38);
+      g.bezierCurveTo(-cw + 1, -74, cw - 1, -74, cw + 1, -38);
+      g.quadraticCurveTo(0, -30, -cw - 1, -38);
+      g.closePath();
+      g.fill(); g.stroke();
+      g.fillStyle = d.gLt;
+      g.beginPath(); g.ellipse(-19, -56, 14, 6, 0.32, 0, 7); g.fill();
+      // front shield
+      g.fillStyle = d.acc; g.strokeStyle = d.gOut; g.lineWidth = 2.2;
+      g.beginPath();
+      g.moveTo(-11, -62); g.lineTo(11, -62);
+      g.quadraticCurveTo(11, -44, 0, -39);
+      g.quadraticCurveTo(-11, -44, -11, -62);
+      g.closePath();
+      g.fill(); g.stroke();
+      if (d.lightbar) {
+        g.fillStyle = ((S.t * 5) | 0) % 2 ? BAR_A : BAR_B;
+        g.beginPath(); g.roundRect(-16, -78, 32, 9, 4); g.fill();
+        g.strokeStyle = d.gOut; g.lineWidth = 2; g.stroke();
+      }
     }
     if (d.cap) {
       g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 3;
-      g.beginPath(); g.ellipse(0, -fy * 0.38, fx + 5, fy * 0.98, 0, Math.PI, 7); g.fill(); g.stroke();
+      g.beginPath();
+      g.moveTo(-cw - 6, -22);
+      g.bezierCurveTo(-cw - 4, -62, cw + 4, -62, cw + 6, -22);
+      g.quadraticCurveTo(0, -12, -cw - 6, -22);
+      g.closePath();
+      g.fill(); g.stroke();
       g.fillStyle = d.gDk;
       g.beginPath();
-      g.moveTo(fx * 0.10, -fy * 0.50);
-      g.quadraticCurveTo(fx + 40, -fy * 0.70, fx + 46, -fy * 0.26);
-      g.quadraticCurveTo(fx + 20, -fy * 0.18, fx * 0.10, -fy * 0.34);
-      g.closePath(); g.fill();
+      g.moveTo(2, -26);
+      g.bezierCurveTo(cw + 22, -28, cw + 26, -14, cw + 10, -10);
+      g.quadraticCurveTo(cw - 6, -14, 2, -18);
+      g.closePath();
+      g.fill(); g.stroke();
       g.fillStyle = d.gLt;
-      g.beginPath(); g.ellipse(-fx * 0.40, -fy * 0.92, 14, 7, -0.4, 0, 7); g.fill();
-      g.fillStyle = d.gOut;
-      g.beginPath(); g.arc(0, -fy * 1.30, 4.4, 0, 7); g.fill();
-    }
-    if (d.helmet) { // firefighter shell: dome, wide front brim, front shield
-      g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 3.4;
-      g.beginPath(); g.ellipse(0, -fy * 0.30, fx + 7, fy * 1.06, 0, Math.PI, 7); g.fill(); g.stroke();
-      g.fillStyle = d.gDk;
-      g.beginPath();
-      g.moveTo(-fx - 16, -fy * 0.34);
-      g.quadraticCurveTo(0, -fy * 0.62, fx + 30, -fy * 0.36);
-      g.quadraticCurveTo(fx + 34, -fy * 0.06, fx + 12, -fy * 0.10);
-      g.quadraticCurveTo(0, -fy * 0.34, -fx - 12, -fy * 0.12);
-      g.closePath(); g.fill();
-      g.fillStyle = d.gLt;
-      g.beginPath(); g.ellipse(-fx * 0.42, -fy * 0.96, 16, 8, -0.4, 0, 7); g.fill();
-      g.fillStyle = d.acc; // hi-vis front shield
-      g.beginPath();
-      g.moveTo(4, -fy * 1.16); g.lineTo(20, -fy * 1.00); g.lineTo(12, -fy * 0.62);
-      g.lineTo(-2, -fy * 0.70);
-      g.closePath(); g.fill();
-      g.fillStyle = d.gOut;
-      g.beginPath(); g.arc(9, -fy * 0.92, 3.4, 0, 7); g.fill();
-      if (d.lightbar) { // FIRETRUCK: the shell runs live emergency lights
-        const on = Math.floor(t * 5) % 2 === 0;
-        g.fillStyle = on ? '#ff4a3a' : '#4a86e8';
-        g.beginPath(); g.rect(-fx * 0.66, -fy * 1.34, 16, 8); g.fill();
-        g.fillStyle = on ? '#4a86e8' : '#ff4a3a';
-        g.beginPath(); g.rect(fx * 0.24, -fy * 1.34, 16, 8); g.fill();
-      }
-      g.strokeStyle = d.sDk; g.lineWidth = 3; // chin strap
-      g.beginPath();
-      g.moveTo(-fx - 2, -fy * 0.10); g.quadraticCurveTo(d.cx0, d.fc + 6, fx - 2, -fy * 0.06);
-      g.stroke();
+      g.beginPath(); g.ellipse(-20, -46, 16, 7, 0.3, 0, 7); g.fill();
+      g.fillStyle = d.acc;
+      g.beginPath(); g.arc(-2, -44, 4, 0, 7); g.fill();
     }
     if (d.crown) {
       g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 3;
       g.beginPath();
       g.moveTo(CROWN[0], CROWN[1]);
       for (let i = 2; i < CROWN.length; i += 2) g.lineTo(CROWN[i], CROWN[i + 1]);
-      g.closePath(); g.fill(); g.stroke();
+      g.closePath();
+      g.fill(); g.stroke();
       g.fillStyle = d.gLt;
-      g.beginPath(); g.rect(-30, -52, 62, 4); g.fill();
+      g.fillRect(-28, -50, 20, 4);
+      g.fillStyle = d.acc;
+      g.beginPath(); g.arc(0, -55, 4.5, 0, 7); g.fill();
+    }
+    if (d.frame) {
+      g.strokeStyle = d.gMid; g.lineWidth = 7;
+      g.beginPath();
+      g.moveTo(-cw - 14, 40); g.lineTo(-cw - 14, -56); g.lineTo(cw + 14, -56); g.lineTo(cw + 14, 40);
+      g.stroke();
+      g.strokeStyle = d.gLt; g.lineWidth = 2.4;
+      g.beginPath();
+      g.moveTo(-cw - 12, 38); g.lineTo(-cw - 12, -54); g.lineTo(cw - 4, -54);
+      g.stroke();
+      g.fillStyle = d.gDk; g.strokeStyle = d.gOut; g.lineWidth = 2.4;
+      g.beginPath(); g.roundRect(-14, -66, 28, 16, 4); g.fill(); g.stroke();
       g.fillStyle = d.cMid;
-      g.beginPath(); g.arc(2, -58, 5.4, 0, 7); g.fill();
-      g.beginPath(); g.arc(-19, -50, 3.6, 0, 7); g.fill();
-      g.beginPath(); g.arc(23, -50, 3.6, 0, 7); g.fill();
+      g.beginPath(); g.arc(0, -48, 3.4, 0, 7); g.fill();
     }
-    if (d.bow) { // addi's hair bow, riding the pony band
-      g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 2.6;
-      g.beginPath(); g.ellipse(-fx - 14, -fy * 0.20, 13, 9, -0.5, 0, 7); g.fill(); g.stroke();
-      g.beginPath(); g.ellipse(-fx - 2, fy * 0.10, 12, 9, -0.5, 0, 7); g.fill(); g.stroke();
-      g.fillStyle = d.gLt;
-      g.beginPath(); g.arc(-fx - 8, -fy * 0.04, 4.6, 0, 7); g.fill();
-    }
-    if (d.visor) { // MECHA HAYES: sealed plate, cyan bar
-      g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 3.4;
-      g.beginPath(); g.roundRect(-fx - 4, -fy * 1.16, fx * 2 + 8, fy * 1.62, 12); g.fill(); g.stroke();
-      g.fillStyle = d.gDk;
-      g.beginPath(); g.roundRect(-fx - 10, -fy * 0.50, 14, 30, 5); g.fill();
-      g.beginPath(); g.roundRect(fx - 4, -fy * 0.50, 14, 30, 5); g.fill();
-      g.fillStyle = d.vOut;
-      g.beginPath(); g.roundRect(-fx * 0.72, -fy * 0.42, fx * 1.5, 26, 6); g.fill();
-      g.fillStyle = d.vMid;
-      g.beginPath(); g.roundRect(-fx * 0.66, -fy * 0.38, fx * 1.4, 20, 5); g.fill();
-      g.fillStyle = d.vLt;
-      g.beginPath(); g.rect(-fx * 0.58, -fy * 0.32, fx * 0.7, 5); g.fill();
-      g.fillStyle = d.gLt;
-      g.beginPath(); g.rect(-fx * 0.30, -fy * 1.02, 30, 6); g.fill();
-    }
-    if (d.machine) { // 3D PRINTER JEROD: gantry frame + a hot extruder
+    if (d.jaws) {
       g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 3;
-      g.beginPath(); g.rect(-fx - 16, -fy * 1.42, 12, fy * 2.5); g.fill(); g.stroke();
-      g.beginPath(); g.rect(fx + 4, -fy * 1.42, 12, fy * 2.5); g.fill(); g.stroke();
-      g.beginPath(); g.rect(-fx - 16, -fy * 1.52, fx * 2 + 32, 13); g.fill(); g.stroke();
+      g.beginPath(); g.roundRect(-cw - 22, -50, 16, 96, 5); g.fill(); g.stroke();
+      g.beginPath(); g.roundRect(cw + 6, -50, 16, 96, 5); g.fill(); g.stroke();
       g.fillStyle = d.gLt;
-      g.beginPath(); g.rect(-fx - 13, -fy * 1.49, fx * 1.1, 4); g.fill();
-      g.fillStyle = '#4a505c';
-      g.beginPath(); g.rect(fx * 0.10, -fy * 1.36, 20, 16); g.fill();
-      g.fillStyle = '#ff7a2c';
+      g.fillRect(-cw - 19, -46, 5, 88);
+    }
+    if (d.visor) {
+      // a SEALED helmet — it has to reach the jaw or it reads as a headband
+      g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 3;
       g.beginPath();
-      g.moveTo(fx * 0.10 + 6, -fy * 1.20); g.lineTo(fx * 0.10 + 14, -fy * 1.20);
-      g.lineTo(fx * 0.10 + 10, -fy * 1.06);
-      g.closePath(); g.fill();
-      g.fillStyle = d.cMid;
-      g.beginPath(); g.rect(fx * 0.10 + 8.6, -fy * 1.06, 3, 14); g.fill();
-    }
-    if (d.wrench) { // WRENCHY: the jaws bracket his face
-      g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 3.4;
-      g.beginPath(); g.roundRect(-fx - 22, -fy * 1.34, 18, fy * 1.10, 5); g.fill(); g.stroke();
-      g.beginPath(); g.roundRect(fx + 6, -fy * 1.34, 18, fy * 1.10, 5); g.fill(); g.stroke();
-      g.beginPath(); g.roundRect(-fx - 22, -fy * 1.46, fx * 2 + 46, 16, 5); g.fill(); g.stroke();
+      g.moveTo(-cw - 6, 10);
+      g.bezierCurveTo(-cw - 10, -94, cw + 10, -94, cw + 6, 10);
+      g.bezierCurveTo(cw + 2, S.chin - 2, S.jw, S.chin + 12, 0, S.chin + 12);
+      g.bezierCurveTo(-S.jw, S.chin + 12, -cw - 2, S.chin - 2, -cw - 6, 10);
+      g.closePath();
+      g.fill(); g.stroke();
       g.fillStyle = d.gLt;
-      g.beginPath(); g.rect(-fx - 18, -fy * 1.42, fx * 1.2, 5); g.fill();
-      g.fillStyle = d.sDk;
-      g.beginPath(); g.arc(-fx - 13, -fy * 0.50, 5, 0, 7); g.fill();
-      g.beginPath(); g.arc(fx + 15, -fy * 0.50, 5, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(-20, -42, 16, 8, 0.3, 0, 7); g.fill();
+      g.fillStyle = d.vOut; g.strokeStyle = d.vOut; g.lineWidth = 3;
+      g.beginPath(); g.roundRect(-cw + 4, -22, cw * 2 - 8, 28, 10); g.fill(); g.stroke();
+      g.fillStyle = d.vMid;
+      g.beginPath(); g.roundRect(-cw + 7, -19, cw * 2 - 14, 22, 8); g.fill();
+      g.fillStyle = d.vLt;
+      g.beginPath(); g.ellipse(-16, -12, 14, 4, -0.2, 0, 7); g.fill();
+      // breather grille where the mouth would be
+      g.fillStyle = d.gDk; g.strokeStyle = d.gOut; g.lineWidth = 2.4;
+      g.beginPath(); g.roundRect(-16, S.my - 6, 32, 15, 5); g.fill(); g.stroke();
+      g.fillStyle = d.gOut;
+      g.fillRect(-11, S.my - 2, 22, 2.4);
+      g.fillRect(-11, S.my + 3, 22, 2.4);
     }
-    if (d.comb) { // GIANT CHICKEN: comb over the crown
+    if (d.glasses) {
+      g.strokeStyle = GLASSR; g.lineWidth = 3.4;
+      g.fillStyle = GLASSF;
+      g.beginPath(); g.arc(-S.ex, S.ey, 15, 0, 7); g.fill(); g.stroke();
+      g.beginPath(); g.arc(S.ex, S.ey, 15, 0, 7); g.fill(); g.stroke();
+      g.beginPath();
+      g.moveTo(-S.ex + 15, S.ey - 1); g.lineTo(S.ex - 15, S.ey - 1);
+      g.moveTo(-S.ex - 15, S.ey - 2); g.lineTo(-S.cw + 2, S.ey - 6);
+      g.moveTo(S.ex + 15, S.ey - 2); g.lineTo(S.cw - 2, S.ey - 6);
+      g.stroke();
+      g.strokeStyle = SHEEN; g.lineWidth = 3;
+      g.beginPath(); g.arc(-S.ex, S.ey, 10, 3.5, 4.4); g.stroke();
+      g.beginPath(); g.arc(S.ex, S.ey, 10, 3.5, 4.4); g.stroke();
+    }
+    if (d.comb) {
       g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 2.6;
       g.beginPath();
-      g.moveTo(-22, -fy * 0.90);
-      g.quadraticCurveTo(-16, -fy * 1.44, -6, -fy * 0.96);
-      g.quadraticCurveTo(2, -fy * 1.52, 12, -fy * 0.94);
-      g.quadraticCurveTo(20, -fy * 1.42, 28, -fy * 0.86);
-      g.closePath(); g.fill(); g.stroke();
+      g.moveTo(-20, -50);
+      g.quadraticCurveTo(-14, -70, -4, -54);
+      g.quadraticCurveTo(4, -74, 12, -52);
+      g.quadraticCurveTo(20, -68, 24, -46);
+      g.closePath();
+      g.fill(); g.stroke();
+    }
+    if (d.ruff) {
+      g.fillStyle = d.sLt; g.strokeStyle = d.sOut; g.lineWidth = 2.6;
+      g.beginPath(); g.arc(-40, 74, 17, 0, 7); g.fill(); g.stroke();
+      g.beginPath(); g.arc(-12, 82, 19, 0, 7); g.fill(); g.stroke();
+      g.beginPath(); g.arc(18, 80, 18, 0, 7); g.fill(); g.stroke();
+      g.beginPath(); g.arc(44, 72, 16, 0, 7); g.fill(); g.stroke();
+    }
+    if (d.loaf) {
+      g.fillStyle = d.gMid; g.strokeStyle = d.gOut; g.lineWidth = 3;
+      g.beginPath(); g.ellipse(0, -52, cw + 8, 22, 0, 0, 7); g.fill(); g.stroke();
       g.fillStyle = d.gLt;
-      g.beginPath(); g.ellipse(-12, -fy * 1.16, 5, 3.4, -0.4, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(-16, -58, 22, 8, 0.1, 0, 7); g.fill();
+      g.fillStyle = d.lettuce;
+      g.beginPath(); g.arc(-30, -34, 11, 0, 7); g.fill();
+      g.beginPath(); g.arc(-6, -30, 12, 0, 7); g.fill();
+      g.beginPath(); g.arc(20, -33, 11, 0, 7); g.fill();
     }
-    if (d.horns) { // petmonster
-      g.fillStyle = '#e0cf9e'; g.strokeStyle = '#8a7548'; g.lineWidth = 3;
-      g.beginPath(); g.moveTo(-34, -34); g.lineTo(-24, -56); g.lineTo(-4, -38); g.closePath(); g.fill(); g.stroke();
-      g.beginPath(); g.moveTo(22, -38); g.lineTo(38, -56); g.lineTo(48, -32); g.closePath(); g.fill(); g.stroke();
-      g.fillStyle = '#f6ecc8';
-      g.beginPath(); g.moveTo(-34, -34); g.lineTo(-24, -56); g.lineTo(-18, -38); g.closePath(); g.fill();
-      g.beginPath(); g.moveTo(22, -38); g.lineTo(38, -56); g.lineTo(38, -36); g.closePath(); g.fill();
-    }
-    if (d.glasses) { // RYAN DUGAN
-      g.strokeStyle = d.glassCol || '#2a2a35'; g.lineWidth = 3.4;
-      g.beginPath(); g.arc(-3 * S.k, -3, 17, 0, 7); g.stroke();
-      g.beginPath(); g.arc(29 * S.k, -3, 17, 0, 7); g.stroke();
+    if (d.horns) {
+      g.fillStyle = HORN; g.strokeStyle = HORN_OUT; g.lineWidth = 2.6;
       g.beginPath();
-      g.moveTo(-3 * S.k + 17, -5); g.lineTo(29 * S.k - 17, -5);
-      g.moveTo(-3 * S.k - 17, -5); g.lineTo(-d.fx - 2, -10);
-      g.stroke();
-      g.strokeStyle = RIM_SOFT; g.lineWidth = 4; // lens glare, key side
-      g.beginPath(); g.moveTo(-11 * S.k, -12); g.lineTo(-1 * S.k, -1); g.stroke();
-      g.beginPath(); g.moveTo(21 * S.k, -12); g.lineTo(31 * S.k, -1); g.stroke();
-    }
-    if (d.baby) { // isla: one proud curl and the pacifier she wants back
-      g.strokeStyle = d.hMid; g.lineWidth = 6; g.lineCap = 'round';
-      g.beginPath(); g.arc(-4, -fy * 1.10, 13, Math.PI * 0.15, Math.PI * 1.45); g.stroke();
-      g.strokeStyle = d.hLt; g.lineWidth = 2.4;
-      g.beginPath(); g.arc(-4, -fy * 1.10, 13, Math.PI * 0.9, Math.PI * 1.35); g.stroke();
-    }
-  }
-
-  // =============================== bust ================================
-  function drawBust(g, d, t) {
-    const top = d.fc + 4;
-    // shoulders / chest — a broad wedge running off the bottom of the frame
-    const fill = d.bare ? d.sMid : d.cMid;
-    const dk = d.bare ? d.sDk : S.cDk;
-    const lt = d.bare ? d.sLt : S.cLt;
-    const out = d.bare ? d.sOut : S.cOut;
-    g.fillStyle = fill; g.strokeStyle = out; g.lineWidth = 4;
-    g.beginPath();
-    g.moveTo(-118, 176);
-    g.quadraticCurveTo(-112, 96, -40, top + 30);
-    g.lineTo(42, top + 30);
-    g.quadraticCurveTo(114, 96, 120, 176);
-    g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = dk; // shaded flank, away from the key
-    g.beginPath();
-    g.moveTo(52, top + 34);
-    g.quadraticCurveTo(114, 100, 120, 176);
-    g.lineTo(72, 176);
-    g.quadraticCurveTo(74, 108, 34, top + 40);
-    g.closePath(); g.fill();
-    g.strokeStyle = lt; g.lineWidth = 5; // lit trapezius edge, top-left key
-    g.beginPath();
-    g.moveTo(-104, 168); g.quadraticCurveTo(-100, 102, -44, top + 38);
-    g.stroke();
-
-    // neck, then its shadow under the jaw
-    g.fillStyle = d.sMid; g.strokeStyle = d.sOut; g.lineWidth = 3.4;
-    g.beginPath();
-    g.moveTo(-30, top - 22);
-    g.quadraticCurveTo(-34, top + 26, -40, top + 44);
-    g.lineTo(42, top + 44);
-    g.quadraticCurveTo(34, top + 24, 30, top - 22);
-    g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = d.sDk;
-    g.beginPath();
-    g.moveTo(6, top - 6); g.quadraticCurveTo(30, top + 4, 32, top + 30);
-    g.lineTo(42, top + 32); g.lineTo(40, top - 10);
-    g.closePath(); g.fill();
-    g.fillStyle = NECK_SHADE; // the jaw casts onto the throat
-    g.beginPath(); g.ellipse(d.cx0, top - 12, 34, 15, 0, 0, 7); g.fill();
-    g.strokeStyle = d.sOut; g.lineWidth = 2.6; // sternocleidomastoid
-    g.beginPath(); g.moveTo(-14, top - 14); g.quadraticCurveTo(-6, top + 16, 6, top + 40); g.stroke();
-
-    // collar over the neck root, then a collarbone hint
-    if (!d.bare) {
-      g.fillStyle = d.cMid; g.strokeStyle = S.cOut; g.lineWidth = 3.4;
-      g.beginPath();
-      g.moveTo(-64, top + 26);
-      g.quadraticCurveTo(-30, top + 30, -22, top + 40);
-      g.quadraticCurveTo(d.cx0, top + 74, 26, top + 40);
-      g.quadraticCurveTo(34, top + 30, 68, top + 26);
-      g.lineTo(74, top + 52);
-      g.quadraticCurveTo(d.cx0, top + 100, -70, top + 52);
+      g.moveTo(-30, -42); g.quadraticCurveTo(-46, -58, -34, -72);
+      g.quadraticCurveTo(-28, -60, -20, -48);
       g.closePath(); g.fill(); g.stroke();
-      g.fillStyle = S.cLt;
-      g.beginPath(); g.ellipse(-52, top + 40, 16, 6, 0.24, 0, 7); g.fill();
-      if (d.print) { // josh's band tee
-        g.fillStyle = d.acc;
-        g.beginPath(); g.rect(-26, top + 84, 56, 9); g.fill();
-        g.fillStyle = '#ffd24a';
-        g.beginPath();
-        g.moveTo(2, top + 74); g.lineTo(16, top + 74); g.lineTo(6, top + 84);
-        g.lineTo(18, top + 84); g.lineTo(0, top + 100); g.lineTo(6, top + 86);
-        g.closePath(); g.fill();
-      }
-    } else { // shirtless: collarbone and pec shelf instead of a collar
-      g.strokeStyle = d.sDk; g.lineWidth = 4;
       g.beginPath();
-      g.moveTo(-72, top + 44); g.quadraticCurveTo(-32, top + 34, -8, top + 46);
-      g.moveTo(74, top + 42); g.quadraticCurveTo(36, top + 32, 12, top + 44);
-      g.stroke();
-      g.beginPath();
-      g.moveTo(-78, top + 92); g.quadraticCurveTo(d.cx0, top + 74, 80, top + 90);
-      g.stroke();
-      g.strokeStyle = d.sLt; g.lineWidth = 3;
-      g.beginPath();
-      g.moveTo(-74, top + 50); g.quadraticCurveTo(-34, top + 40, -10, top + 52);
-      g.stroke();
-    }
-    if (d.ruff) { // GIANT CHICKEN: feather ruff instead of a collar
-      g.fillStyle = d.sLt; g.strokeStyle = d.sOut; g.lineWidth = 2.4;
-      for (let i = -5; i <= 5; i++) {
-        g.beginPath();
-        g.ellipse(i * 19, top + 40 + Math.abs(i) * 4, 15, 24, i * 0.14, 0, 7);
-        g.fill(); g.stroke();
-      }
+      g.moveTo(30, -42); g.quadraticCurveTo(46, -58, 34, -72);
+      g.quadraticCurveTo(28, -60, 20, -48);
+      g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = HORN_LT;
+      g.beginPath(); g.ellipse(-33, -58, 3, 8, 0.4, 0, 7); g.fill();
     }
   }
 
-  // ============================ main draw ==============================
+  // the monster's plush muzzle carries its own nose + mouth
+  function drawMuzzle(g, d) {
+    g.fillStyle = d.muzM; g.strokeStyle = d.muzO; g.lineWidth = 3;
+    g.beginPath(); g.ellipse(0, 19, 27, 20, 0, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = d.muzL;
+    g.beginPath(); g.ellipse(-10, 10, 12, 7, -0.25, 0, 7); g.fill();
+    g.fillStyle = d.sOut;
+    g.beginPath();
+    g.moveTo(-8, 2); g.quadraticCurveTo(0, 13, 8, 2);
+    g.quadraticCurveTo(0, -3, -8, 2);
+    g.closePath(); g.fill();
+  }
+
+  /* ================================ fx ================================ */
+  function drawFx(g, d, e) {
+    if (e.fl >= 1) {
+      g.lineCap = 'round';
+      for (let i = 0; i < HEAT.length; i += 4) {
+        const bx = HEAT[i] * (S.cw + HEAT[i + 1]), by = HEAT[i + 2];
+        const wob = Math.sin(S.t * 3.4 + HEAT[i + 3]) * 7;
+        g.strokeStyle = HEAT_A; g.lineWidth = 3.4;
+        g.beginPath();
+        g.moveTo(bx, by);
+        g.bezierCurveTo(bx + wob, by - 7, bx - wob, by - 13, bx + wob * 0.4, by - 20);
+        g.stroke();
+        g.strokeStyle = HEAT_B; g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(bx + wob * 0.4, by - 21);
+        g.bezierCurveTo(bx - wob * 0.6, by - 26, bx + wob * 0.6, by - 30, bx, by - 35);
+        g.stroke();
+      }
+    }
+    if (e.tr > 0) {
+      const fall = (S.t * 22) % 46;
+      g.fillStyle = TEAR;
+      g.beginPath(); g.ellipse(-S.ex - 9, S.ey + 10 + fall, 3.4, 5, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(S.ex + 9, S.ey + 6 + fall * 0.8, 3.2, 4.6, 0, 0, 7); g.fill();
+      g.fillStyle = TEAR_HI;
+      g.beginPath(); g.arc(-S.ex - 10, S.ey + 9 + fall, 1.2, 0, 7); g.fill();
+    }
+    if (e.sw > 0) {
+      g.fillStyle = SWEAT; g.strokeStyle = SWEAT_OUT; g.lineWidth = 1.6;
+      const bob = Math.sin(S.t * 3) * 2;
+      g.beginPath();
+      g.moveTo(-S.cw - 6, -38 + bob);
+      g.quadraticCurveTo(-S.cw - 14, -28 + bob, -S.cw - 6, -24 + bob);
+      g.quadraticCurveTo(-S.cw + 2, -28 + bob, -S.cw - 6, -38 + bob);
+      g.closePath(); g.fill(); g.stroke();
+      g.beginPath();
+      g.moveTo(S.cw + 8, -30 - bob);
+      g.quadraticCurveTo(S.cw + 1, -21 - bob, S.cw + 8, -17 - bob);
+      g.quadraticCurveTo(S.cw + 15, -21 - bob, S.cw + 8, -30 - bob);
+      g.closePath(); g.fill(); g.stroke();
+    }
+  }
+
+  function drawAura(g, d) {
+    for (let i = 0; i < AURA.length; i += 2) {
+      g.fillStyle = AURA[i + 1] === 0 ? d.au1 : (AURA[i + 1] === 1 ? d.au2 : d.au3);
+      g.beginPath();
+      g.ellipse(0, 6, AURA[i] * 0.92, AURA[i] * 1.06, 0, 0, 7);
+      g.fill();
+    }
+  }
+
+  /* =============================== draw =============================== */
   F.has = function (id) { return !!D[id]; };
 
   F.draw = function (g, spec) {
-    const id = spec.id;
-    const d = (spec.ascended && ASC[id]) || D[id];
+    const d = (spec.ascended && ASC[spec.id]) ? ASC[spec.id] : D[spec.id];
     if (!d) return;
     const e = EXPR[spec.expr] || EXPR.neutral;
     const t = spec.t || 0;
 
-    // the shirt follows the game's own memoised ramp when the caller hands it
-    // over, so a close-up torso and the gameplay torso are the same four tones
-    S.cOut = d.cOut; S.cDk = d.cDk; S.cLt = d.cLt;
-    if (spec.ramp && d.cMid) {
-      const r = spec.ramp(d.cMid);
-      S.cOut = r.out; S.cDk = r.dk; S.cLt = r.lt;
-    }
     S.d = d; S.e = e; S.t = t;
-    S.k = d.fx / 46; S.v = d.fy / 47;
-    S.tense = e.tn;
+    S.cw = d.cw; S.jw = d.jw; S.chin = d.chin;
+    S.my = d.chin * 0.48;
+    S.nb = S.my - 15;
+    S.mW = d.mW;
+    S.ex = 19 * (d.eyeSp || 1);
+    S.ey = -6 + (d.eyeY || 0);
+    S.lt = Math.min(1, e.lt + (d.lidBias || 0));
+    S.flush = e.fl + (d.baseFlush ? 0.4 : 0);
+    S.gaze = Math.sin(t * 0.7) * 0.9;
 
-    // idle life: breathing, an irregular blink, a slow pupil drift, hair settle
-    const breath = Math.sin(t * 1.15) * 1.5 + (d.floaty ? Math.sin(t * 0.7) * 3 : 0);
-    const bClock = t * 0.43 + Math.sin(t * 0.21) * 0.7;
-    const bFrac = bClock - Math.floor(bClock);
-    const blink = e.bl && bFrac < 0.055 ? 1 - Math.abs(bFrac - 0.0275) / 0.0275 : 0;
-    S.px = (Math.sin(t * 0.7) * 1.5 + Math.sin(t * 0.23) * 1.1) * (e.pup < 0.6 ? 0.3 : 1);
-    S.py = Math.sin(t * 0.53) * 0.9;
-    const sway = Math.sin(t * 1.3) * 2 + Math.sin(t * 0.47) * 1.4;
-    const shake = e.sk ? Math.sin(t * 47) * e.sk : 0;
+    const blink = e.bl && ((t * 0.85) % 4.4) < 0.14;
+    S.closed = S.lt >= 0.86 ? 1 : (blink ? -1 : 0);
 
     g.save();
-    g.lineCap = 'round'; g.lineJoin = 'round';
+    g.lineJoin = 'round';
     if (spec.facing < 0) g.scale(-1, 1);
-    g.translate(shake, breath * 0.4);
+    // breath, plus the shake that anger and fear carry
+    const sk = e.sk;
+    g.translate(
+      sk ? Math.sin(t * 41) * sk * 1.5 : 0,
+      Math.sin(t * 1.5) * 0.8 + (d.calm ? Math.sin(t * 0.9) * 2.5 : 0) + (sk ? Math.cos(t * 37) * sk : 0)
+    );
 
-    // ---- ascended aura, behind everything (flat rings, never a gradient) ----
-    if (d.aur1) {
-      const pulse = 6 + Math.sin(t * 1.4) * 4;
-      g.lineWidth = 9;
-      g.strokeStyle = d.aur1;
-      g.beginPath(); g.arc(0, 8, d.fx + 26 + pulse * 0.4, 0, 7); g.stroke();
-      g.strokeStyle = d.aur2;
-      g.beginPath(); g.arc(0, 8, d.fx + 46 + pulse * 0.7, 0, 7); g.stroke();
-      g.strokeStyle = d.aur3;
-      g.beginPath(); g.arc(0, 8, d.fx + 68 + pulse, 0, 7); g.stroke();
-      g.fillStyle = d.aur1;
-      for (let i = 0; i < MOTES.length; i += 3) {
-        const my = MOTES[i + 1] + Math.sin(t * 0.9 + MOTES[i + 2]) * 9;
-        g.beginPath(); g.arc(MOTES[i], my, 3.4, 0, 7); g.fill();
-      }
-    }
-
-    hairBack(g, d, sway);
-    drawBust(g, d, t);
-    g.translate(0, breath * 0.5); // the head rides the breath a beat later
-
-    // ---- head ----
-    headPath(g, d.fx, d.fy, d.fj, d.fc, d.cx0);
-    g.fillStyle = d.sMid; g.fill();
-    g.strokeStyle = d.sOut; g.lineWidth = 3.6; g.stroke();
-    g.save();
-    headPath(g, d.fx, d.fy, d.fj, d.fc, d.cx0);
-    g.clip();
-    g.fillStyle = SHADE; // back plane falls away from the light
-    g.beginPath(); g.rect(-d.fx - 4, -d.fy * 1.4, d.fx * 0.44, d.fc * 2.4); g.fill();
-    g.fillStyle = SHADE_HARD; // under the jaw and the cheekbone
-    g.beginPath(); g.ellipse(d.cx0 + 4, d.fc * 0.82, d.fj * 0.92, 13, 0, 0, 7); g.fill();
-    g.fillStyle = d.sLt; // form light: forehead and front cheekbone
-    g.beginPath(); g.ellipse(-2, -d.fy * 0.72, d.fx * 0.56, 15, -0.16, 0, 7); g.fill();
-    g.beginPath(); g.ellipse(d.fx * 0.52, d.fy * 0.30, 15, 11, -0.3, 0, 7); g.fill();
-    g.fillStyle = d.sHi;
-    g.beginPath(); g.ellipse(-d.fx * 0.26, -d.fy * 0.86, 16, 6.4, -0.24, 0, 7); g.fill();
-    if (d.jowl) { // RICKMOTHY: the jaw gives up
-      g.fillStyle = d.sDk;
-      g.beginPath(); g.ellipse(-d.fx * 0.5, d.fc * 0.74, 16, 12, 0.2, 0, 7); g.fill();
-      g.beginPath(); g.ellipse(d.fx * 0.58, d.fc * 0.70, 16, 12, -0.2, 0, 7); g.fill();
-    }
-    if (S.tense > 0.4) { // jaw muscle bunches at the hinge
-      g.fillStyle = d.sDk;
-      g.beginPath(); g.ellipse(-d.fx * 0.62, d.fy * 0.42, 9, 13 * S.tense, 0.2, 0, 7); g.fill();
-    }
-    // flush: overlapping bands stack into a smoother ramp than one fill
-    const fl = e.fl + (d.baseFlush ? 0.4 : 0);
-    if (fl > 0.05) {
-      g.fillStyle = FLUSH_LO;
-      g.beginPath(); g.ellipse(d.cx0, d.fy * 0.44, d.fx, 17, 0, 0, 7); g.fill();
-      if (fl > 0.28) {
-        g.fillStyle = FLUSH_MID;
-        g.beginPath(); g.ellipse(d.cx0, d.fy * 0.18, d.fx, 20, 0, 0, 7); g.fill();
-      }
-      if (fl > 0.7) {
-        g.fillStyle = FLUSH_HOT;
-        g.beginPath(); g.ellipse(d.cx0, -d.fy * 0.16, d.fx, 22, 0, 0, 7); g.fill();
-        g.fillStyle = FLUSH_MID;
-        g.beginPath(); g.ellipse(d.cx0, -d.fy * 0.62, d.fx * 0.96, 18, 0, 0, 7); g.fill();
-      }
-    }
-    if (d.blush || d.baby) {
-      g.fillStyle = fl > 0.5 ? BLUSH_HOT : BLUSH;
-      g.beginPath(); g.ellipse(-d.fx * 0.52, d.fy * 0.34, 13, 8, -0.14, 0, 7); g.fill();
-      g.beginPath(); g.ellipse(d.fx * 0.56, d.fy * 0.30, 14, 8.6, -0.14, 0, 7); g.fill();
-    }
-    if (d.stubble) {
-      g.fillStyle = STUB;
-      for (let i = 0; i < STUBBLE.length; i += 2) {
-        g.beginPath(); g.arc(STUBBLE[i] * S.k + d.cx0 * 0.4, STUBBLE[i + 1] * S.v, 2.1, 0, 7); g.fill();
-      }
-    }
-    if (d.freckle) {
-      g.fillStyle = FRECK;
-      for (let i = 0; i < FRECKLES.length; i += 2) {
-        g.beginPath(); g.arc(FRECKLES[i] * S.k, FRECKLES[i + 1] * S.v, 2.2, 0, 7); g.fill();
-      }
-    }
-    g.restore();
-    // warm sun rim on the upper-left edge, riding just inside the outline
-    g.strokeStyle = RIM; g.lineWidth = 4;
-    g.beginPath(); g.arc(0, -4, d.fx - 2, Math.PI * 1.04, Math.PI * 1.60); g.stroke();
-
-    // ear, before the hair so low styles overlap it
-    if (!d.visor && !d.helmet && !d.muzzle) {
-      g.fillStyle = d.sMid; g.strokeStyle = d.sOut; g.lineWidth = 2.6;
-      g.beginPath(); g.ellipse(-d.fx * 0.94, 6, 8, 13, -0.12, 0, 7); g.fill(); g.stroke();
-      g.strokeStyle = d.sDk; g.lineWidth = 2.4;
-      g.beginPath(); g.arc(-d.fx * 0.94 + 1, 6, 5, Math.PI * 0.35, Math.PI * 1.55); g.stroke();
-    }
-    if (d.plushEar) {
-      g.fillStyle = d.sDk; g.strokeStyle = d.sOut; g.lineWidth = 3;
-      g.beginPath(); g.arc(-d.fx - 4, -14, 15, 0, 7); g.fill(); g.stroke();
-      g.beginPath(); g.arc(d.fx + 6, -18, 15, 0, 7); g.fill(); g.stroke();
-    }
-    hairFront(g, d, sway, t);
-    if (d.bald) { // the Toddfather shine
-      g.strokeStyle = RIM; g.lineWidth = 5;
-      g.beginPath(); g.arc(-4, -6, d.fx * 0.62, Math.PI * 1.16, Math.PI * 1.58); g.stroke();
-    }
-    if (d.seam) { // petmonster stitching
-      g.strokeStyle = d.seam; g.lineWidth = 2.4;
-      g.beginPath();
-      g.moveTo(-24, -32); g.lineTo(-16, -24);
-      g.moveTo(-8, -18); g.lineTo(-2, -10);
-      g.stroke();
-    }
-
-    // ---- face ----
-    const eSp = (d.eyeSp || 1) * S.k;
-    const e1x = -3 * eSp, e2x = 27 * eSp;
-    const eY = -4 * S.v + (d.eyeY || 0);
-    const eh = d.eH * e.eye;
-    const open = Math.max(0, 1 - blink);
+    if (d.aura) drawAura(g, d);
+    drawHairBack(g, d);
+    drawBody(g, d);
+    if (d.plushEar) { drawPlushEar(g, d, -1); drawPlushEar(g, d, 1); }
+    else if (!d.visor && !d.jaws && !d.beak) { drawEar(g, d, -1); drawEar(g, d, 1); }
+    drawHead(g, d);
     if (!d.visor) {
-      if (e.m === 'grit' && e.lt > 0.85) { // hurt: the eyes give out entirely
-        deadEye(g, d, e1x, eY, d.eW, eh, d.xeye);
-        deadEye(g, d, e2x, eY, d.eW, eh, d.xeye);
-      } else {
-        drawEye(g, d, e, e1x, eY, d.eW * 0.94, eh, open, 0);
-        drawEye(g, d, e, e2x, eY, d.eW, eh, open, 1);
-        if (d.glow) { // damon's eyes are lit from inside
-          g.fillStyle = 'rgba(255,72,28,0.34)';
-          g.beginPath(); g.arc(e1x, eY, d.eW * 1.1, 0, 7); g.fill();
-          g.beginPath(); g.arc(e2x, eY, d.eW * 1.1, 0, 7); g.fill();
-        }
-      }
-      // brows last over the lids — inner ends carry the expression
-      const bY = -25 * S.v;
-      const bi = e.bi + (d.bt || 0) * 0.2, bo = e.bo;
-      g.fillStyle = d.beard ? d.bMid : d.hMid;
-      // back eye: its inner end is the +x one
-      browShape(g, e1x + d.eW + 3, bY + bi, e1x - d.eW - 6, bY + bo + (d.bt || 0), d.bw, d.bw * 0.52);
-      // front eye: inner end is the -x one
-      browShape(g, e2x - d.eW - 3, bY + bi, e2x + d.eW + 7, bY + bo + (d.bt || 0), d.bw, d.bw * 0.52);
-      if (e.fl > 0.7) { // rage: the brow ridge bulges and a vein pops
-        g.fillStyle = d.sDk;
-        g.beginPath(); g.ellipse(e2x - 4, bY + 9, d.eW * 1.3, 7, -0.16, 0, 7); g.fill();
-        g.strokeStyle = VEIN; g.lineWidth = 3;
+      drawEye(g, d, e, -1);
+      drawEye(g, d, e, 1);
+      drawBrow(g, d, e, -1);
+      drawBrow(g, d, e, 1);
+      if (d.muzzle) {
+        drawMuzzle(g, d);
+        drawMouth(g, d, e);
+      } else if (d.beak) {
+        g.fillStyle = BEAK; g.strokeStyle = BEAK_OUT; g.lineWidth = 2.6;
         g.beginPath();
-        g.moveTo(-d.fx * 0.50, -d.fy * 0.86);
-        g.lineTo(-d.fx * 0.34, -d.fy * 0.66);
-        g.lineTo(-d.fx * 0.52, -d.fy * 0.50);
-        g.stroke();
-      }
-      if (e.bi < -6) { // scared / sad: forehead creases
-        g.strokeStyle = d.sDk; g.lineWidth = 2.4;
-        g.beginPath();
-        g.moveTo(-d.fx * 0.5, bY - 16); g.quadraticCurveTo(d.cx0, bY - 22, d.fx * 0.66, bY - 14);
-        g.moveTo(-d.fx * 0.44, bY - 8); g.quadraticCurveTo(d.cx0, bY - 14, d.fx * 0.60, bY - 7);
-        g.stroke();
-      }
-    }
-
-    // nose, beard, mouth
-    if (d.muzzle === 'plush') plushMuzzle(g, d, t);
-    else if (d.muzzle === 'beak') beakMuzzle(g, d, t);
-    else if (d.muzzle === 'loaf') loafMuzzle(g, d, t);
-    else if (!d.visor) {
-      drawNose(g, d, 24 * S.k, -6 * S.v);
-      if (d.beard) { // mass first, the mouth cuts back into it
-        g.fillStyle = d.bMid; g.strokeStyle = d.bOut; g.lineWidth = 3.4;
-        g.beginPath();
-        g.moveTo(-d.fx * 0.96, -2);
-        g.quadraticCurveTo(-d.fx * 0.88, d.fc + 34, d.cx0, d.fc + 40);
-        g.quadraticCurveTo(d.fx * 0.94, d.fc + 30, d.fx * 0.92, -6);
-        g.quadraticCurveTo(d.fx * 0.66, d.fy * 0.46, d.cx0, d.fy * 0.34);
-        g.quadraticCurveTo(-d.fx * 0.62, d.fy * 0.42, -d.fx * 0.96, -2);
+        g.moveTo(-15, S.my - 12); g.lineTo(15, S.my - 12);
+        g.quadraticCurveTo(10, S.my + 16, 0, S.my + 18);
+        g.quadraticCurveTo(-10, S.my + 16, -15, S.my - 12);
         g.closePath(); g.fill(); g.stroke();
-        g.strokeStyle = d.bLt; g.lineWidth = 2.6; // strand clumps
-        g.beginPath();
-        g.moveTo(-d.fx * 0.5, d.fy * 0.62); g.lineTo(-d.fx * 0.42, d.fc + 26);
-        g.moveTo(d.cx0, d.fy * 0.66); g.lineTo(d.cx0 + 2, d.fc + 32);
-        g.moveTo(d.fx * 0.52, d.fy * 0.60); g.lineTo(d.fx * 0.56, d.fc + 22);
-        g.stroke();
-      }
-      drawMouth(g, d, 16 * S.k, 30 * S.v, t);
-      if (d.mous || d.beard) { // moustache over the upper lip
-        g.fillStyle = d.beard ? d.bMid : d.hMid;
-        g.beginPath();
-        g.moveTo(16 * S.k - d.mW - 4, 20 * S.v);
-        g.quadraticCurveTo(16 * S.k, 10 * S.v, 16 * S.k + d.mW + 6, 19 * S.v);
-        g.quadraticCurveTo(16 * S.k + d.mW * 0.4, 26 * S.v, 16 * S.k, 24 * S.v);
-        g.quadraticCurveTo(16 * S.k - d.mW * 0.5, 27 * S.v, 16 * S.k - d.mW - 4, 20 * S.v);
-        g.closePath(); g.fill();
-      }
-      if (S.tense > 0.5) { // nasolabial crease under real jaw tension
-        g.strokeStyle = d.sDk; g.lineWidth = 2.6;
-        g.beginPath();
-        g.moveTo(34 * S.k, 6 * S.v); g.quadraticCurveTo(40 * S.k, 24 * S.v, 33 * S.k, 38 * S.v);
-        g.stroke();
+        g.strokeStyle = BEAK_OUT; g.lineWidth = 2.2;
+        g.beginPath(); g.moveTo(-13, S.my + 1); g.quadraticCurveTo(0, S.my + 5, 13, S.my + 1); g.stroke();
+      } else {
+        drawNose(g, d);
+        drawFacialHair(g, d);
+        drawMouth(g, d, e);
+        if (d.beard) drawMoustache(g, d, d.bMid, d.bOut, d.bLt, d.mW * 0.72);
+        else if (d.mous) drawMoustache(g, d, d.hMid, d.hOut, d.hLt, d.mW * 0.6);
       }
     }
+    drawHair(g, d);
+    drawGear(g, d);
+    if (d.paci) {
+      g.fillStyle = PACI; g.strokeStyle = PACI_OUT; g.lineWidth = 2.4;
+      g.beginPath(); g.ellipse(S.mW * 0.5 + 7, S.my + 4, 10, 8, -0.3, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = PACI_LT;
+      g.beginPath(); g.ellipse(S.mW * 0.5 + 4, S.my + 1, 4, 3, -0.3, 0, 7); g.fill();
+      g.strokeStyle = PACI_RING; g.lineWidth = 2.6;
+      g.beginPath(); g.arc(S.mW * 0.5 + 17, S.my + 8, 5.5, 0, 7); g.stroke();
+    }
+    drawFx(g, d, e);
 
-    drawGear(g, d, t);
-
-    // ---- expression FX ----
-    if (e.tr > 0) { // tears run on their own clock
-      const run = (t * 0.55) % 1;
-      g.fillStyle = TEAR;
-      g.beginPath(); g.ellipse(e1x - 2, eY + 14 + run * 44, 4.6, 7 + run * 3, 0, 0, 7); g.fill();
-      g.beginPath(); g.ellipse(e2x + 2, eY + 12 + ((run + 0.4) % 1) * 44, 4.6, 7, 0, 0, 7); g.fill();
-      g.fillStyle = TEAR_HI;
-      g.beginPath(); g.arc(e1x - 3.4, eY + 12 + run * 44, 1.8, 0, 7); g.fill();
-    }
-    if (e.sw > 0.3) { // cold sweat on the temple
-      g.fillStyle = SWEAT;
-      const drip = (t * 0.8) % 1;
-      g.beginPath(); g.ellipse(-d.fx * 0.62, -d.fy * 0.70 + drip * 34, 4.4, 7, 0, 0, 7); g.fill();
-      g.fillStyle = TEAR_HI;
-      g.beginPath(); g.arc(-d.fx * 0.66, -d.fy * 0.74 + drip * 34, 1.6, 0, 7); g.fill();
-    }
-    if (e.fl > 0.7 || (d.brute && e.fl > 0.25)) { // heat shimmer off the head
-      g.lineWidth = 4.6;
-      for (let i = 0; i < HEAT_ST.length; i += 2) {
-        const hx = HEAT_ST[i], ph = HEAT_ST[i + 1];
-        g.strokeStyle = i % 4 === 0 ? HEAT_A : HEAT_B;
-        g.beginPath();
-        g.moveTo(hx, -d.fy * 1.3);
-        g.quadraticCurveTo(hx + Math.sin(t * 5 + ph) * 9, -d.fy * 1.7, hx + Math.sin(t * 5 + ph + 1) * 7, -d.fy * 2.1);
-        g.stroke();
-      }
-    }
-
-    g.restore();
     g.globalAlpha = 1;
+    g.shadowBlur = 0;
+    g.restore();
   };
+
+  F.ids = Object.keys(D);
 })();
