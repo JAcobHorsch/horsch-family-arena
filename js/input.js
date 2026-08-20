@@ -35,7 +35,7 @@ const Input = {
   window.addEventListener('keydown', (e) => {
     if (!window.Game || !Game.inCutscene) return;
     if (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyJ') { Game.cutTap(-1, -1); e.preventDefault(); }
-    if (e.code === 'Escape') { Game.cutTap(1e9, 1e9); e.preventDefault(); }
+    if (e.code === 'Escape') { Cut.skip(); e.preventDefault(); } // sentinel coords miss hitSkip's bounds
   });
 
   for (const [id, prop] of Object.entries(holdMap)) {

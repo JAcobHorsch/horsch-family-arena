@@ -219,8 +219,9 @@ const Game = (() => {
     // beats, not arena levels — they must not push arena progression.
     if (!(plan && plan.campaign)) Save.data.level += 1;
     let sub = '+$' + earned + ' earned';
-    // bounty: win any level as the wanted fighter
-    const b = Save.data.bounty;
+    // bounty: win any ARENA level as the wanted fighter. Campaign fights are
+    // story beats and must not claim or reroll it.
+    const b = (plan && plan.campaign) ? null : Save.data.bounty;
     if (b && lastCharId === b.charId) {
       Save.data.money += b.reward;
       earned += b.reward;
@@ -1296,6 +1297,10 @@ const Game = (() => {
       Cut.update(dt);
       camX = clamp(Cut.camX, 0, Math.max(0, STAGE_W - viewW));
       if (Cut.shake > 0) { shakeT = Math.max(shakeT, Cut.shake * 0.25); shakeMag = 8; }
+      // the normal decay lives past this early return, so run it here or the
+      // first shake of a scene rattles for the rest of it
+      else if (shakeT > 0) shakeT = Math.max(0, shakeT - dt);
+      if (flashFxT > 0) flashFxT -= dt;
       updateFx(dt);
       return;
     }
@@ -1348,15 +1353,18 @@ const Game = (() => {
       if (endTimer <= 0 && !endFired) {
         endFired = true;
         timeScale = 1;
+        // the PLAN decides which mode this fight belonged to; the campaign
+        // runner being live is not enough, or an arena fight gets hijacked
+        const wasCampaign = !!(plan && plan.campaign) && !!campaign;
         if (mode === 'victory') {
           Save.write();
           mode = 'idle';
-          if (campaign) nextBeat(); // straight into the next story beat
+          if (wasCampaign) nextBeat(); // straight into the next story beat
           else UI.toShop('LEVEL ' + plan.level + ' CLEARED  —  +$' + earned + ' earned this run', lastCharId);
         } else {
           Save.write();
           mode = 'idle';
-          if (campaign) {
+          if (wasCampaign) {
             // bank the beat so the retry starts at the fight that beat you
             Save.data.campaignAt = { ch: campaign.ch.id, beat: campaign.beat };
             Save.write();
@@ -3313,6 +3321,7 @@ const Game = (() => {
   // fast-parallax foreground silhouettes: the depth seller
   function drawForeground() {
     if (!plan) return;
+    if (plan.world.interior) return; // rooms own their own foreground props
     const g = rctx;
     g.setTransform(lowW / viewW, 0, 0, lowW / viewW, 0, 0);
     const period = 320;
@@ -3818,7 +3827,7 @@ const Game = (() => {
       g.fillText(plan.levelName.toUpperCase(), cx, 18);
       g.font = "700 10px 'Segoe UI', sans-serif";
       g.fillStyle = '#9a927e';
-      g.fillText((plan.campaign ? plan.levelName : 'LEVEL ' + plan.level) +
+      g.fillText((plan.campaign ? plan.world.name : 'LEVEL ' + plan.level) +
         '  —  WAVE ' + Math.min(waveIdx, plan.waves.length) + ' / ' + plan.waves.length, cx, 34);
       if (plan.event) {
         g.font = "700 9px 'Segoe UI', sans-serif";
@@ -3953,14 +3962,16 @@ const Game = (() => {
     campaign.beat++;
     const ch = campaign.ch;
     if (campaign.beat >= ch.beats.length) {
-      // chapter cleared: bank the unlock and hand back to the campaign screen
+      // chapter cleared: bank the unlock and hand back to the campaign screen.
+      // A replay shouldn't re-announce an unlock the player already has.
+      const firstTime = !Save.data.campaignDone[ch.id];
       Save.data.campaignDone[ch.id] = true;
       if (ch.unlocks) Save.data.unlocked[ch.unlocks] = true;
       Save.data.campaignAt = null;
       Save.write();
       campaign = null;
       mode = 'idle';
-      UI.toCampaign(ch.unlocks);
+      UI.toCampaign(firstTime ? ch.unlocks : null);
       return;
     }
     const b = ch.beats[campaign.beat];
@@ -3971,8 +3982,10 @@ const Game = (() => {
       mode = 'cutscene';
       paused = false;
       camX = 0;
+      UI.combatControls(false); // the dpad would swallow taps meant for dialogue
       if (!Cut.play(b.name, nextBeat)) nextBeat();
     } else {
+      UI.combatControls(true);
       startLevel(ch.char, campaignPlan(ch, b));
     }
   }
@@ -3991,22 +4004,28 @@ const Game = (() => {
     // --- far pass: soft (tilt-shift) background layers ---
     let ox = 0, oy = 0;
     if (shakeT > 0) { ox = rand(-1, 1) * shakeMag * shakeT * 4; oy = rand(-1, 1) * shakeMag * shakeT * 4; }
+    // cutscene shots zoom the whole world about the frame centre
+    const cz = mode === 'cutscene' ? Cut.zoom : 1;
+    const ctx0 = camX + viewW / 2, cty0 = -worldOffY + viewH / 2;
+    const ctxX = -(ctx0 - viewW / (2 * cz));
+    const ctxY = -(cty0 - viewH / (2 * cz));
+
     rctx = bctx;
-    const k2 = bgW / viewW;
+    const k2 = (bgW / viewW) * cz;
     bctx.setTransform(1, 0, 0, 1, 0, 0);
     bctx.clearRect(0, 0, bgW, bgH);
     bctx.setTransform(k2, 0, 0, k2, 0, 0);
-    bctx.translate(-camX + ox * 0.5, worldOffY + oy * 0.5);
+    bctx.translate(ctxX + ox * 0.5, ctxY + oy * 0.5);
     drawBackgroundFar();
 
     // --- near pass: sharp pixel world ---
     rctx = lctx;
-    const k = lowW / viewW;
+    const k = (lowW / viewW) * cz;
     lctx.setTransform(1, 0, 0, 1, 0, 0);
     lctx.imageSmoothingEnabled = true;
     lctx.drawImage(bgCvs, 0, 0, bgW, bgH, 0, 0, lowW, lowH);
     lctx.setTransform(k, 0, 0, k, 0, 0);
-    lctx.translate(-camX + ox, worldOffY + oy);
+    lctx.translate(ctxX + ox, ctxY + oy);
     drawBackground();
     if (mode === 'cutscene') drawCutActors();
     if (mode !== 'idle' && mode !== 'cutscene') drawEntities();
@@ -4017,7 +4036,11 @@ const Game = (() => {
       lctx.fillStyle = fg;
       lctx.fillRect(camX - 20, -worldOffY - 20, viewW + 40, viewH + 40);
     }
-    if (mode === 'cutscene') { Cut.drawWorld(lctx); Cut.drawBubble(lctx, camX, viewW); }
+    // during a close-up the speech box belongs on screen, not over the world
+    if (mode === 'cutscene') {
+      Cut.drawWorld(lctx);
+      if (Cut.shotKind !== 'face') Cut.drawBubble(lctx, camX, viewW);
+    }
     drawForeground();
     rctx = ctx;
 
@@ -4037,7 +4060,10 @@ const Game = (() => {
       ctx.fillStyle = 'rgba(255,255,255,' + Math.min(0.85, flashFxT * 2.6).toFixed(3) + ')';
       ctx.fillRect(0, 0, w, h);
     }
-    if (mode === 'cutscene') Cut.drawUI(ctx, w, h);
+    if (mode === 'cutscene') {
+      Cut.drawCloseup(ctx, w, h, ramp); // close-ups sit above the graded scene
+      Cut.drawUI(ctx, w, h);
+    }
     else if (mode !== 'idle') drawHUD();
   }
 
@@ -4082,7 +4108,18 @@ const Game = (() => {
   }
 
   function setPaused(v) { paused = v; if (!v) last = performance.now(); }
-  function quit() { mode = 'idle'; paused = false; Save.write(); }
+  function quit() {
+    // abandoning must also end the chapter run, or the runner stays live and
+    // eats the next arena result as a story beat
+    if (campaign) {
+      Save.data.campaignAt = { ch: campaign.ch.id, beat: campaign.beat };
+      campaign = null;
+    }
+    mode = 'idle'; paused = false;
+    if (Cut.active) Cut.skip();
+    Save.write();
+  }
+  function inCampaign() { return !!campaign; }
 
   schedule();
   UI.init();
@@ -4110,7 +4147,7 @@ const Game = (() => {
 
   return {
     startLevel, drawPortrait, setPaused, quit, debug,
-    startCampaign, cutTap,
+    startCampaign, cutTap, inCampaign,
     // test hook: clear the current fight so a chapter can be driven end to end
     debugClearWave() {
       if (mode !== 'playing') return false;

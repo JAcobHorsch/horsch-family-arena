@@ -7,7 +7,7 @@ const Save = {
   fresh() {
     const chars = {};
     for (const c of CHARACTERS) chars[c.id] = { weapon: 0, ranged: 0, armor: 0, ability: 0, ascended: false };
-    return { money: 0, level: 1, chars, unlocked: {}, campaignDone: {} };
+    return { money: 0, level: 1, chars, unlocked: {}, campaignDone: {}, campaignMigrated: true };
   },
   load() {
     try {
@@ -42,7 +42,8 @@ const Save = {
 // Erika and Dayne pay triple — someone has to play them.
 function ensureBounty() {
   if (Save.data.bounty) return;
-  const pool = CHARACTERS.filter(c => c.id !== Save.data.lastBountyChar);
+  const pool = CHARACTERS.filter(c => c.id !== Save.data.lastBountyChar && Save.isUnlocked(c.id));
+  if (!pool.length) return;
   const c = pool[Math.floor(Math.random() * pool.length)];
   const hard = c.id === 'erika' || c.id === 'dayne';
   Save.data.bounty = { charId: c.id, reward: (300 + Save.data.level * 100) * (hard ? 3 : 1) };
@@ -58,8 +59,13 @@ const UI = (() => {
   function show(name) {
     for (const s of screens) $('screen-' + s).classList.toggle('hidden', s !== name);
     const inGame = name === null;
-    $('controls').classList.toggle('hidden', !inGame);
-    $('pauseBtn').classList.toggle('hidden', !inGame);
+    combatControls(inGame);
+  }
+  // cutscenes need the canvas to themselves — the dpad sits over the scene and
+  // would eat the taps that advance dialogue
+  function combatControls(on) {
+    $('controls').classList.toggle('hidden', !on);
+    $('pauseBtn').classList.toggle('hidden', !on);
   }
 
   // ---------- Character select ----------
@@ -119,6 +125,7 @@ const UI = (() => {
     const tabs = $('shopCharTabs');
     tabs.innerHTML = '';
     for (const c of CHARACTERS) {
+      if (!Save.isUnlocked(c.id)) continue;
       const b = document.createElement('button');
       b.className = 'shop-tab' + (shopChar === c.id ? ' active' : '');
       b.style.setProperty('--cc', c.color);
@@ -230,8 +237,13 @@ const UI = (() => {
   function toSelect() { buildSelect(); show('select'); }
   function toShop(earnedText, charId) {
     shopEarnedText = earnedText || 'Spend your winnings, then return to the arena.';
-    if (charId) shopChar = charId;
-    if (!shopChar) shopChar = CHARACTERS[0].id;
+    if (charId && Save.isUnlocked(charId)) shopChar = charId;
+    // never land the shop on a fighter the player cannot use
+    if (!shopChar || !Save.isUnlocked(shopChar)) {
+      const first = CHARACTERS.find(c => Save.isUnlocked(c.id));
+      shopChar = first ? first.id : null;
+    }
+    if (!shopChar) { toCampaign(null); return; }
     buildShop(); show('shop');
   }
   let defeatChapter = null;
@@ -270,9 +282,15 @@ const UI = (() => {
     });
     $('pauseBtn').addEventListener('click', () => { Game.setPaused(true); show('pause'); });
     $('pauseResume').addEventListener('click', () => { show(null); Game.setPaused(false); });
-    $('pauseQuit').addEventListener('click', () => { Game.quit(); toSelect(); });
+    $('pauseQuit').addEventListener('click', () => {
+      // abandoning a chapter belongs back in the campaign, not on an arena
+      // roster a new player has nothing unlocked in
+      const wasCampaign = Game.inCampaign();
+      Game.quit();
+      if (wasCampaign) toCampaign(null); else toSelect();
+    });
     show('title');
   }
 
-  return { init, show, toSelect, toShop, toDefeat, toCampaign };
+  return { init, show, toSelect, toShop, toDefeat, toCampaign, combatControls };
 })();

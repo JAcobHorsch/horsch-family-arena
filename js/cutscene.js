@@ -35,6 +35,17 @@ const Cut = (() => {
   let shake = 0, flash = 0, flashCol = '#ffffff';
   let letterbox = 0;      // 0..1 bar slide-in
   let ended = false;
+  // The shot is the cinematic layer: a hard cut resets it, and it holds
+  // its own framing, push, and per-shot grade for the duration of the take.
+  let shot = {
+    kind: 'world',        // 'world' = staged scene, 'face' = close-up bust
+    on: null,             // actor the shot is framed on
+    expr: 'neutral',
+    zoom: 1, zoomTo: 1,   // slow push-in over the take
+    dim: 0,               // how far the scene behind a close-up is pushed down
+    warm: null,           // per-shot colour grade
+    cutT: 0,              // seconds since the cut (drives the snap)
+  };
 
   const EASE = (u) => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
   const clamp01 = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
@@ -50,7 +61,15 @@ const Cut = (() => {
   function reset() {
     idx = 0; stepT = 0; actors = {}; fx.length = 0;
     bubble = null; card = null; shake = 0; flash = 0; letterbox = 0; ended = false;
+    shot.kind = 'world'; shot.on = null; shot.expr = 'neutral';
+    shot.zoom = 1; shot.zoomTo = 1; shot.dim = 0; shot.warm = null; shot.cutT = 0;
   }
+
+  // Shot sizes, as a multiplier on the scene's base framing. Restrained and
+  // heavy: takes hold, pushes are slow, and cuts are hard rather than blended.
+  // never below 1: interiors only paint the room, and pulling back past the
+  // default framing shows the world outside it
+  const SHOT_ZOOM = { wide: 1, full: 1.16, med: 1.45, mcu: 1.8, cu: 2.3 };
 
   function play(name, onDone) {
     const script = window.CUTSCENES && window.CUTSCENES[name];
@@ -112,6 +131,29 @@ const Cut = (() => {
         if (s.move.facing != null) a.facing = s.move.facing;
         if (s.move.pose !== undefined) a.pose = s.move.pose;
       }
+    } else if (s.shot) {
+      // a hard cut: framing, subject and grade all change on the same frame
+      const sh = s.shot;
+      shot.kind = sh.face ? 'face' : 'world';
+      shot.on = sh.on || shot.on;
+      shot.expr = sh.expr || 'neutral';
+      const base = SHOT_ZOOM[sh.size] || 1;
+      shot.zoom = base;
+      shot.zoomTo = sh.push ? base * (1 + sh.push) : base;
+      shot.dim = sh.dim == null ? (shot.kind === 'face' ? 0.55 : 0) : sh.dim;
+      shot.warm = sh.warm || null;
+      shot.cutT = 0;
+      // frame the world camera on the subject unless the shot names an x
+      const a = actors[shot.on];
+      if (shot.kind === 'world') {
+        cam.fromX = cam.x;
+        cam.toX = sh.x != null ? sh.x : (a ? a.x - 240 / base : cam.x);
+        cam.fromZ = cam.zoom; cam.toZ = base;
+        cam.dur = sh.ease ? (sh.ease || 0.5) : 0; // 0 = instant cut
+        cam.t = 0;
+        if (!cam.dur) { cam.x = cam.toX; cam.zoom = base; }
+      }
+      if (sh.sfx && Sfx[sh.sfx]) Sfx[sh.sfx]();
     } else if (s.cam) {
       cam.fromX = cam.x; cam.toX = s.cam.x == null ? cam.x : s.cam.x;
       cam.fromZ = cam.zoom; cam.toZ = s.cam.zoom == null ? cam.zoom : s.cam.zoom;
@@ -203,6 +245,14 @@ const Cut = (() => {
       } else {
         bubble.hold += dt;
       }
+    }
+    // the take breathes: a slow push that never snaps back
+    shot.cutT += dt;
+    if (shot.zoom !== shot.zoomTo) {
+      const d = shot.zoomTo - shot.zoom;
+      shot.zoom += d * Math.min(1, dt * 0.22);
+      if (Math.abs(shot.zoomTo - shot.zoom) < 0.002) shot.zoom = shot.zoomTo;
+      if (shot.kind === 'world') cam.zoom = shot.zoom;
     }
     if (card) card.t += dt;
     if (shake > 0) shake = Math.max(0, shake - dt * 1.8);
@@ -358,9 +408,47 @@ const Cut = (() => {
     }
   }
 
+  // The close-up layer, drawn in SCREEN space over a dimmed scene. Faces come
+  // from js/faces.js because the gameplay bodies carry no detail at this size.
+  const faceSpec = { id: '', expr: 'neutral', t: 0, facing: 1, ascended: false, ramp: null };
+  function drawCloseup(g, SW, SH, rampFn) {
+    if (!sc || shot.kind !== 'face') return false;
+    const a = actors[shot.on];
+    const id = a ? a.char : shot.on;
+    if (!window.FACES || !window.FACES.has || !window.FACES.has(id)) return false;
+    // push the staged scene back so the face reads as the subject
+    if (shot.dim > 0) {
+      g.fillStyle = 'rgba(8,7,14,' + shot.dim.toFixed(2) + ')';
+      g.fillRect(0, 0, SW, SH);
+    }
+    const bar = 46 * letterbox;
+    const frameH = SH - bar * 2;
+    // head fills a consistent share of the frame regardless of screen shape
+    const s = (frameH / 300) * shot.zoom;
+    g.save();
+    g.translate(SW * 0.5, bar + frameH * 0.46);
+    g.scale(s, s);
+    faceSpec.id = id;
+    faceSpec.expr = shot.expr;
+    faceSpec.t = a ? a.t : 0;
+    faceSpec.facing = a ? a.facing : 1;
+    faceSpec.ascended = !!(a && a.ascended);
+    faceSpec.ramp = rampFn || null;
+    window.FACES.draw(g, faceSpec);
+    g.restore();
+    return true;
+  }
+
   // ---- rendering: screen space ----
   function drawUI(g, SW, SH) {
     if (!sc) return;
+    // per-shot grade: a wash that colours the whole take
+    if (shot.warm) {
+      g.globalAlpha = 0.22;
+      g.fillStyle = shot.warm;
+      g.fillRect(0, 0, SW, SH);
+      g.globalAlpha = 1;
+    }
     const bar = 46 * letterbox;
     g.fillStyle = '#0b0a12';
     g.fillRect(0, 0, SW, bar);
@@ -387,6 +475,41 @@ const Cut = (() => {
       }
       g.globalAlpha = 1;
     }
+    // during a close-up the line reads as a subtitle plate under the face
+    if (shot.kind === 'face' && bubble) {
+      const txt = bubble.text.slice(0, bubble.shown);
+      const plateH = 84, plateY = SH - bar - plateH - 10;
+      g.fillStyle = 'rgba(12,10,20,0.86)';
+      g.fillRect(0, plateY, SW, plateH);
+      g.fillStyle = 'rgba(255,210,74,0.85)';
+      g.fillRect(0, plateY, SW, 2);
+      g.textAlign = 'left';
+      const nm = bubble.who === 'narrator' ? '' : bubble.who.toUpperCase();
+      if (nm) {
+        g.font = '800 12px Verdana, sans-serif';
+        g.fillStyle = '#ffd24a';
+        g.fillText(nm, 26, plateY + 24);
+      }
+      g.font = '700 17px Verdana, sans-serif';
+      g.fillStyle = '#f2ede0';
+      // wrap to the plate width
+      const maxW = SW - 52;
+      let line = '', y = plateY + 50;
+      const words = txt.split(' ');
+      for (let i = 0; i < words.length; i++) {
+        const probe = line ? line + ' ' + words[i] : words[i];
+        if (g.measureText(probe).width > maxW && line) { g.fillText(line, 26, y); y += 21; line = words[i]; }
+        else line = probe;
+      }
+      if (line) g.fillText(line, 26, y);
+      if (bubble.shown >= bubble.text.length) {
+        g.fillStyle = '#ffd24a';
+        const bob = Math.sin(bubble.hold * 7) * 1.6;
+        g.beginPath();
+        g.moveTo(SW - 34, plateY + plateH - 20 + bob); g.lineTo(SW - 22, plateY + plateH - 20 + bob); g.lineTo(SW - 28, plateY + plateH - 12 + bob);
+        g.closePath(); g.fill();
+      }
+    }
     // skip affordance
     g.globalAlpha = 0.75 * letterbox;
     g.font = '700 11px Verdana, sans-serif';
@@ -403,7 +526,8 @@ const Cut = (() => {
   }
 
   return {
-    play, update, tap, skip, drawWorld, drawBubble, drawUI, hitSkip,
+    play, update, tap, skip, drawWorld, drawBubble, drawUI, hitSkip, drawCloseup,
+    get shotKind() { return shot.kind; },
     get dbg() { return { idx: idx, step: sc ? JSON.stringify(sc.steps[idx]) : null, bubble: bubble && { who: bubble.who, shown: bubble.shown, len: bubble.text.length, hold: +bubble.hold.toFixed(2), dur: bubble.dur } }; },
     get active() { return !!sc; },
     get stage() { return sc ? sc.stage : null; },
