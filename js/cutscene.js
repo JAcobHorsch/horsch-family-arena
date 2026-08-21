@@ -35,6 +35,10 @@ const Cut = (() => {
   let shake = 0, flash = 0, flashCol = '#ffffff';
   let letterbox = 0;      // 0..1 bar slide-in
   let ended = false;
+  // the editorial layer: transitions between shots, impact frames, handheld
+  let trans = null;       // {kind:'fade'|'whip'|'iris', t, dur, dir}
+  let impactT = 0, impactDur = 0;
+  let swayPhase = 0;      // handheld camera clock
   // The shot is the cinematic layer: a hard cut resets it, and it holds
   // its own framing, push, and per-shot grade for the duration of the take.
   let shot = {
@@ -52,6 +56,10 @@ const Cut = (() => {
   const EASE = (u) => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
   const clamp01 = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
 
+  // scratch canvas + reused spec for the dialogue-bar portrait chip
+  const chipCvs = document.createElement('canvas');
+  const chipSpec = { id: null, expr: 'neutral', facing: 1, t: 0, ramp: null, ascended: false };
+
   // characters speak at their own pitch, Undertale-style
   const VOICE = {
     todd: 150, josh: 210, damon: 96, sonya: 260, jordan: 230, jerod: 170,
@@ -67,6 +75,8 @@ const Cut = (() => {
     shot.kind = 'world'; shot.on = null; shot.expr = 'neutral';
     shot.size = 'full'; shot.base = 1; shot.faceId = null;
     shot.zoom = 1; shot.zoomTo = 1; shot.dim = 0; shot.warm = null; shot.cutT = 0;
+    shot.sway = 0; shot.dutch = 0; shot.focus = 0;
+    trans = null; impactT = 0; impactDur = 0; swayPhase = 0;
   }
 
   // Shot sizes, as a multiplier on the scene's base framing. Restrained and
@@ -102,6 +112,10 @@ const Cut = (() => {
     cam.x = cam.fromX = cam.toX = sc.camX || 0;
     cam.zoom = cam.fromZ = cam.toZ = sc.zoom || 1;
     cam.t = 0; cam.dur = 0;
+    if (window.MUSIC) {
+      if (sc.music) MUSIC.play(sc.music);
+      if (sc.amb) MUSIC.ambience(sc.amb);
+    }
     return true;
   }
 
@@ -109,6 +123,7 @@ const Cut = (() => {
     if (ended) return;
     ended = true;
     sc = null;
+    if (window.MUSIC) MUSIC.duck(false);
     const cb = done; done = null;
     if (cb) cb();
   }
@@ -183,6 +198,12 @@ const Cut = (() => {
       shot.dim = sh.dim == null ? (shot.kind === 'face' ? 0.55 : 0) : sh.dim;
       shot.warm = sh.warm || null;
       shot.cutT = 0;
+      // the cinematography of the take: handheld nerves, a tilted horizon,
+      // a defocused background — all held for the shot's duration
+      shot.sway = sh.sway || 0;
+      shot.dutch = sh.dutch || 0;
+      shot.focus = sh.focus || 0;
+      if (sh.cut) trans = { kind: sh.cut, t: 0, dur: sh.cut === 'fade' ? 0.55 : sh.cut === 'iris' ? 0.7 : 0.24, dir: sh.cutDir || 1 };
       // Always frame the world camera on the subject — a close-up draws over
       // the scene, so if its face is missing the shot beneath must still be
       // pointed at the right person rather than wherever the last cut left it.
@@ -201,8 +222,18 @@ const Cut = (() => {
       cam.dur = s.cam.dur || 0.6; cam.t = 0;
     } else if (s.say) {
       const txt = s.text || '';
-      bubble = { who: s.say, text: txt, shown: 0, t: 0, dur: s.dur || (1.1 + txt.length * 0.045), hold: 0 };
+      bubble = { who: s.say, text: txt, shown: 0, t: 0, dur: s.dur || (1.1 + txt.length * 0.045), hold: 0, expr: s.expr || null };
       Sfx.unlock();
+      if (window.MUSIC) MUSIC.duck(true);
+    } else if (s.impact != null) {
+      // the frame itself flinches: brief inverted frames on a hit
+      impactT = impactDur = s.impact || 0.12;
+    } else if (s.music) {
+      if (window.MUSIC) { MUSIC.unlock(); MUSIC.play(s.music); }
+    } else if (s.sting) {
+      if (window.MUSIC) MUSIC.sting(s.sting);
+    } else if (s.amb) {
+      if (window.MUSIC) MUSIC.ambience(s.amb);
     } else if (s.shake != null) {
       shake = s.shake;
     } else if (s.flash) {
@@ -392,9 +423,14 @@ const Cut = (() => {
       if (f.t >= f.dur + (f.kind === 'knife' ? 0.25 : 0)) fx.splice(i, 1);
     }
 
+    // editorial clocks
+    if (trans) { trans.t += dt; if (trans.t >= trans.dur) trans = null; }
+    if (impactT > 0) impactT -= dt;
+    swayPhase += dt;
+
     const s = sc.steps[idx];
     if (stepDone(s, dt)) {
-      if (s.say) bubble = null;
+      if (s.say) { bubble = null; if (window.MUSIC) MUSIC.duck(false); }
       if (s.title) card = null;
       idx++;
       if (begin()) return;
@@ -521,9 +557,10 @@ const Cut = (() => {
     }
   }
 
-  // speech bubble, drawn in world space above the speaker
+  // speech bubble, drawn in world space above the speaker — opt-in per scene
+  // now that the lower-third bar is the default presentation
   function drawBubble(g, viewL, viewW) {
-    if (!sc || !bubble) return;
+    if (!sc || !bubble || sc.style !== 'bubble') return;
     const a = actors[bubble.who];
     const txt = bubble.text.slice(0, bubble.shown);
     const cx = a ? a.x : cam.x + 240;
@@ -637,48 +674,97 @@ const Cut = (() => {
       g.globalAlpha = 1;
     }
     if (card) {
-      const u = clamp01(card.t / 0.35), o = clamp01((card.dur - card.t) / 0.35);
-      g.globalAlpha = Math.min(u, o);
-      g.fillStyle = 'rgba(11,10,18,0.78)';
-      g.fillRect(0, SH * 0.34, SW, 96);
+      // title typography that MOVES: rule lines sweep out from center, the
+      // headline tracks open letter by letter, the subtitle settles in late
+      const u = clamp01(card.t / 0.5), o = clamp01((card.dur - card.t) / 0.4);
+      const a = Math.min(EASE(u), o);
+      const cy = SH * 0.34;
+      g.globalAlpha = a * 0.82;
+      g.fillStyle = 'rgba(11,10,18,0.9)';
+      g.fillRect(0, cy, SW, 100);
+      // sweeping rules
+      const sw2 = EASE(u) * SW * 0.42;
+      g.fillStyle = '#ffd24a';
+      g.globalAlpha = a;
+      g.fillRect(SW / 2 - sw2, cy, sw2 * 2, 2);
+      g.fillRect(SW / 2 - sw2 * 0.7, cy + 98, sw2 * 1.4, 2);
+      // tracked headline
+      const trk = 2 + (1 - EASE(u)) * 26; // letters slide together as it lands
       g.textAlign = 'center';
-      g.fillStyle = '#f2ede0';
       g.font = '800 30px Verdana, sans-serif';
-      g.fillText(card.text, SW / 2, SH * 0.34 + 44);
+      const chars = card.text.split('');
+      let total = 0;
+      for (const ch of chars) total += g.measureText(ch).width + trk;
+      let cx2 = SW / 2 - total / 2;
+      g.fillStyle = '#f2ede0';
+      for (let i = 0; i < chars.length; i++) {
+        const chW = g.measureText(chars[i]).width;
+        const la = clamp01(u * chars.length * 1.6 - i * 0.55);
+        g.globalAlpha = a * la;
+        g.fillText(chars[i], cx2 + chW / 2, cy + 48);
+        cx2 += chW + trk;
+      }
       if (card.sub) {
+        g.globalAlpha = a * clamp01((card.t - 0.4) / 0.3);
         g.font = '600 14px Verdana, sans-serif';
         g.fillStyle = '#c9c2b0';
-        g.fillText(card.sub, SW / 2, SH * 0.34 + 70);
+        g.fillText(card.sub, SW / 2, cy + 76);
       }
       g.globalAlpha = 1;
     }
-    // during a close-up the line reads as a subtitle plate under the face
-    if (shot.kind === 'face' && bubble) {
+    // every line reads on a cinematic lower-third — the floating comic bubble
+    // is opt-in per scene now (style: 'bubble'), because it read cheap
+    if (bubble && (!sc || sc.style !== 'bubble')) {
+      const isFace = shot.kind === 'face';
       const txt = bubble.text.slice(0, bubble.shown);
       const plateH = 84, plateY = SH - bar - plateH - 10;
+      // portrait chip on world shots (a face shot already IS the portrait)
+      let tx0 = 26;
+      const chipId = !isFace && bubble.who !== 'narrator' && window.FACES &&
+        (FACES.has(bubble.who) ? bubble.who : null);
       g.fillStyle = 'rgba(12,10,20,0.86)';
       g.fillRect(0, plateY, SW, plateH);
       g.fillStyle = 'rgba(255,210,74,0.85)';
       g.fillRect(0, plateY, SW, 2);
+      if (chipId) {
+        const cs = plateH - 16;
+        chipCvs.width = 150; chipCvs.height = 150;
+        const q = chipCvs.getContext('2d');
+        chipSpec.id = chipId;
+        chipSpec.expr = bubble.expr || 'neutral';
+        chipSpec.t = bubble.hold + bubble.shown * 0.03;
+        q.save();
+        q.translate(75, 96); q.scale(0.52, 0.52); q.translate(-75, -96);
+        FACES.draw(q, chipSpec);
+        q.restore();
+        g.save();
+        g.beginPath(); g.arc(26 + cs / 2, plateY + 8 + cs / 2, cs / 2, 0, 7); g.clip();
+        g.fillStyle = '#241f33';
+        g.fillRect(26, plateY + 8, cs, cs);
+        g.drawImage(chipCvs, 26, plateY + 8, cs, cs);
+        g.restore();
+        g.strokeStyle = 'rgba(255,210,74,0.6)'; g.lineWidth = 2;
+        g.beginPath(); g.arc(26 + cs / 2, plateY + 8 + cs / 2, cs / 2, 0, 7); g.stroke();
+        tx0 = 26 + cs + 16;
+      }
       g.textAlign = 'left';
       const nm = bubble.who === 'narrator' ? '' : bubble.who.toUpperCase();
       if (nm) {
         g.font = '800 12px Verdana, sans-serif';
         g.fillStyle = '#ffd24a';
-        g.fillText(nm, 26, plateY + 24);
+        g.fillText(nm, tx0, plateY + 24);
       }
       g.font = '700 17px Verdana, sans-serif';
       g.fillStyle = '#f2ede0';
-      // wrap to the plate width
-      const maxW = SW - 52;
+      const maxW = SW - tx0 - 26;
       let line = '', y = plateY + 50;
       const words = txt.split(' ');
       for (let i = 0; i < words.length; i++) {
         const probe = line ? line + ' ' + words[i] : words[i];
-        if (g.measureText(probe).width > maxW && line) { g.fillText(line, 26, y); y += 21; line = words[i]; }
+        if (g.measureText(probe).width > maxW && line) { g.fillText(line, tx0, y); y += 21; line = words[i]; }
         else line = probe;
       }
-      if (line) g.fillText(line, 26, y);
+      if (line) g.fillText(line, tx0, y);
       if (bubble.shown >= bubble.text.length) {
         g.fillStyle = '#ffd24a';
         const bob = Math.sin(bubble.hold * 7) * 1.6;
@@ -686,6 +772,47 @@ const Cut = (() => {
         g.moveTo(SW - 34, plateY + plateH - 20 + bob); g.lineTo(SW - 22, plateY + plateH - 20 + bob); g.lineTo(SW - 28, plateY + plateH - 12 + bob);
         g.closePath(); g.fill();
       }
+    }
+    // transitions between shots
+    if (trans) {
+      const u = trans.t / trans.dur;
+      if (trans.kind === 'fade') {
+        g.globalAlpha = Math.sin(u * Math.PI);
+        g.fillStyle = '#08060e';
+        g.fillRect(0, 0, SW, SH);
+        g.globalAlpha = 1;
+      } else if (trans.kind === 'iris') {
+        // circle closing then opening around frame center
+        const r = Math.max(SW, SH) * 0.75 * Math.abs(1 - 2 * u);
+        g.fillStyle = '#08060e';
+        g.beginPath();
+        g.rect(0, 0, SW, SH);
+        g.arc(SW / 2, SH / 2, Math.max(1, r), 0, 7, true);
+        g.fill();
+      } else if (trans.kind === 'whip') {
+        // horizontal streaks + a lurch, like the camera snapped sideways
+        const a = Math.sin(u * Math.PI);
+        g.globalAlpha = a * 0.7;
+        g.fillStyle = '#0b0a12';
+        g.fillRect(0, 0, SW, SH);
+        g.globalAlpha = a * 0.5;
+        g.strokeStyle = '#d8d4c8'; g.lineWidth = 2;
+        for (let i = 0; i < 9; i++) {
+          const sy = (SH / 9) * (i + 0.5) + (i % 3 - 1) * 8;
+          g.beginPath();
+          g.moveTo(0, sy); g.lineTo(SW, sy + trans.dir * 14);
+          g.stroke();
+        }
+        g.globalAlpha = 1;
+      }
+    }
+    // impact frames: the whole frame inverts for a beat
+    if (impactT > 0) {
+      const even = Math.floor(impactT * 30) % 2 === 0;
+      g.globalCompositeOperation = 'difference';
+      g.fillStyle = even ? '#ffffff' : '#c9c9c9';
+      g.fillRect(0, 0, SW, SH);
+      g.globalCompositeOperation = 'source-over';
     }
     // skip affordance
     g.globalAlpha = 0.75 * letterbox;
@@ -711,6 +838,12 @@ const Cut = (() => {
     get camX() { return cam.x; },
     get zoom() { return cam.zoom; },
     get shake() { return shake; },
+    // the handheld layer: slow drift + fine tremor, scaled by the shot's sway
+    get camDx() { return shot.sway ? (Math.sin(swayPhase * 0.7) * 3 + Math.sin(swayPhase * 3.1) * 1.1) * shot.sway : 0; },
+    get camDy() { return shot.sway ? (Math.cos(swayPhase * 0.53) * 2.2 + Math.sin(swayPhase * 2.7) * 0.8) * shot.sway : 0; },
+    get camRot() { return shot.dutch + (shot.sway ? Math.sin(swayPhase * 0.41) * 0.004 * shot.sway : 0); },
+    get focus() { return shot.focus; },
+    lights() { return sc ? sc.lights || null : null; },
     actors() { return actors; },
   };
 })();

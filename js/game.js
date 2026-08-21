@@ -10,6 +10,7 @@ const Game = (() => {
   // far layers render even smaller and upscale WITH smoothing = tilt-shift blur
   const bgCvs = document.createElement('canvas');
   const bctx = bgCvs.getContext('2d');
+  const focusCvs = document.createElement('canvas'); // rack-focus bounce buffer
   let rctx = ctx; // active render target for world-pass drawing
   let lowW = 1, lowH = 1, bgW = 1, bgH = 1;
 
@@ -176,7 +177,9 @@ const Game = (() => {
       const e = {
         type: list[i], def: t,
         x, y: GROUND_Y, vx: 0, vy: 0, facing: -dir,
-        w: 34 * t.size, h: 92 * t.size, size: t.size,
+        // hitW lets vehicle-scale bodies (the RV) widen their hurtbox past
+        // humanoid proportions so the drawn sprite and the hitbox agree
+        w: (t.hitW || 34) * t.size, h: 92 * t.size, size: t.size,
         hp: t.hp * plan.hpMult, maxHp: t.hp * plan.hpMult,
         dmg: t.dmg * plan.dmgMult, speed: t.speed * plan.speedMult,
         state: 'approach', stateT: 0, cd: rand(0.3, 1.2), pref: t.reach * rand(0.78, 0.92),
@@ -961,7 +964,12 @@ const Game = (() => {
       case 'windup': {
         e.stateT -= dt;
         if (e.stateT <= 0) {
-          if (e.def.signature === 'lunge') {
+          if (e.shockNext) {
+            // a boss special outranks its signature move — otherwise a boss
+            // with a signature (Collette) latches shockNext forever and its
+            // special machinery never fires
+            doStrike(e);
+          } else if (e.def.signature === 'lunge') {
             // murder wasp: dive-bombs at the player
             e.state = 'strike'; e.stateT = 0.6;
             e.vx = (Math.sign(player.x - e.x) || 1) * 520;
@@ -1050,6 +1058,19 @@ const Game = (() => {
           projectiles.push({ type: 'bolt', hostile: true, x: e.x + dir * 30, y: e.y - 90, vx: dir * (300 + i * 60), vy: 40 + i * 26, dmg: e.dmg * 0.6, r: 9, life: 2.2, color: '#c24ae8' });
         }
         Sfx.special();
+      } else if (kind === 'collette') {
+        // she hurls hoard at you: lobbed garage junk raining in from above,
+        // her ranged answer so kiting isn't free
+        const dir = Math.sign(player.x - e.x) || 1;
+        for (let i = 0; i < 3; i++) {
+          projectiles.push({
+            type: 'bolt', hostile: true, x: e.x + dir * 20, y: e.y - 80,
+            vx: dir * (200 + i * 90) + rand(-30, 30), vy: -420 - i * 40, arcGrav: true,
+            dmg: e.dmg * 0.65, r: 11, life: 2.4, color: i % 2 ? '#8a7a5a' : '#6a5a48',
+          });
+        }
+        addFloat(e.x, e.y - e.h - 26, 'TAKE IT ALL!', '#9a9aa8', true);
+        Sfx.screech();
       } else {
         for (const dir of [-1, 1]) {
           projectiles.push({ type: 'wave', hostile: true, x: e.x + dir * 40, y: GROUND_Y, vx: dir * 300, vy: 0, dmg: e.dmg * 0.8, r: 16, life: 2.0, color: theme.glow });
@@ -1132,7 +1153,16 @@ const Game = (() => {
     for (const pr of [...projectiles]) {
       if (pr.bounce) pr.vy += 1500 * dt;
       if (pr.grenade) pr.vy += 1300 * dt;
-      if (pr.arcGrav) pr.vy += 1300 * dt;
+      if (pr.arcGrav) {
+        pr.vy += 1300 * dt;
+        // lobbed hostile shots splash out on the floor instead of sailing
+        // through it and living on in the below-stage band
+        if (pr.hostile && pr.vy > 0 && pr.y >= GROUND_Y - 4) {
+          burst(pr.x, GROUND_Y - 6, pr.color, 5, 140, false);
+          projectiles.splice(projectiles.indexOf(pr), 1);
+          continue;
+        }
+      }
       if (pr.flap) {
         pr.vy += 1100 * dt;
         pr.flapT = (pr.flapT || 0) - dt;
@@ -1398,7 +1428,7 @@ const Game = (() => {
           mode = 'idle';
           if (wasCampaign) {
             // bank the beat so the retry starts at the fight that beat you
-            Save.data.campaignAt = { ch: campaign.ch.id, beat: campaign.beat };
+            (Save.data.campaignAt = (Save.data.campaignAt && Save.data.campaignAt.beats) ? Save.data.campaignAt : { beats: {} }).beats[campaign.ch.id] = campaign.beat;
             Save.write();
             const ch = campaign.ch;
             campaign = null;
@@ -3932,12 +3962,20 @@ const Game = (() => {
   function drawCutActors() {
     const g = rctx;
     const as = Cut.actors();
+    const lights = Cut.lights();
     for (const k in as) {
       const a = as[k];
       if (a.hide) continue;
-      // tumbles rotate about the body's middle; a held victim squirms
       const held = !!a.attach;
       const ang = (a.rot || 0) + (held ? Math.sin(a.t * 16) * 0.07 : 0);
+      const wcyc = held ? a.t * 13 : a.gaitCyc;
+      const stepping = held || a.gaitOn;
+      if (lights && lights.length) {
+        // scene-lit path: render the actor offscreen, then composite a cast
+        // shadow beneath and a light-side rim over the top
+        drawLitCutActor(g, a, ang, wcyc, stepping, held, lights);
+        continue;
+      }
       const spun = !!ang;
       if (spun) {
         g.save();
@@ -3945,8 +3983,14 @@ const Game = (() => {
         g.rotate(ang * a.facing);
         g.translate(-a.x, -(a.y - 45 * a.scale));
       }
-      const wcyc = held ? a.t * 13 : a.gaitCyc;
-      const stepping = held || a.gaitOn;
+      drawCutActorBody(g, a, wcyc, stepping, held);
+      if (spun) g.restore();
+    }
+  }
+
+  // one actor's body, drawn at its world position on whatever context
+  function drawCutActorBody(g, a, wcyc, stepping, held) {
+    {
       const cdef = CHARACTERS.find(c => c.id === a.char);
       if (cdef) {
         const u = Save.upg(cdef.id) || { weapon: 0, armor: 0, ascended: false };
@@ -3963,13 +4007,12 @@ const Game = (() => {
           ascended: !!u.ascended,
           look: u.ascended ? cdef.finalForm.look : cdef.baseLook,
         });
-        if (spun) g.restore();
-        continue;
+        return;
       }
       // campaign-only cast: boss or enemy bodies from the skin registries
       const reg = a.boss ? window.BOSS_BODIES : window.ENEMY_BODIES;
       const body = reg && reg[a.char];
-      if (!body) continue;
+      if (!body) return;
       g.save();
       g.translate(a.x, a.y);
       g.fillStyle = 'rgba(0,0,0,0.4)';
@@ -3988,8 +4031,75 @@ const Game = (() => {
         body(g, cutBoss, a.t);
       } else body(g, cutSkin);
       g.restore();
-      if (spun) g.restore();
     }
+  }
+
+  // -- the scene lighting rig --
+  // Actors render into an offscreen at full RES, then composite three ways:
+  // a squash-skewed silhouette lies on the floor as a cast shadow, the body
+  // blits normally, and a shifted-silhouette-minus-body crescent adds a true
+  // rim light on the side facing the nearest scene light.
+  const actorCvs = document.createElement('canvas');
+  const silhCvs = document.createElement('canvas');
+  const ACT_W = 360, ACT_H = 310, ACT_FX = 180, ACT_FY = 258; // feet anchor
+  let actorCvsRes = 0;
+  function drawLitCutActor(g, a, ang, wcyc, stepping, held, lights) {
+    if (actorCvsRes !== RES) {
+      actorCvsRes = RES;
+      actorCvs.width = silhCvs.width = Math.ceil(ACT_W * RES);
+      actorCvs.height = silhCvs.height = Math.ceil(ACT_H * RES);
+    }
+    const aq = actorCvs.getContext('2d');
+    aq.setTransform(1, 0, 0, 1, 0, 0);
+    aq.clearRect(0, 0, actorCvs.width, actorCvs.height);
+    aq.setTransform(RES, 0, 0, RES, 0, 0);
+    aq.translate(ACT_FX - a.x, ACT_FY - a.y);
+    if (ang) {
+      aq.translate(a.x, a.y - 45 * a.scale);
+      aq.rotate(ang * a.facing);
+      aq.translate(-a.x, -(a.y - 45 * a.scale));
+    }
+    drawCutActorBody(aq, a, wcyc, stepping, held);
+    // nearest light owns this actor
+    let L = lights[0];
+    for (const li of lights) if (Math.abs(li.x - a.x) < Math.abs(L.x - a.x)) L = li;
+    const sq = silhCvs.getContext('2d');
+    // 1: cast shadow — silhouette, tinted, flattened onto the floor, leaning
+    // away from the light
+    sq.setTransform(1, 0, 0, 1, 0, 0);
+    sq.clearRect(0, 0, silhCvs.width, silhCvs.height);
+    sq.drawImage(actorCvs, 0, 0);
+    sq.globalCompositeOperation = 'source-in';
+    sq.fillStyle = L.shadow || 'rgba(10,8,18,0.42)';
+    sq.fillRect(0, 0, silhCvs.width, silhCvs.height);
+    sq.globalCompositeOperation = 'source-over';
+    const skew = clamp((a.x - L.x) / 220, -1.1, 1.1);
+    g.save();
+    g.translate(a.x, a.y);
+    g.transform(1, 0, -skew, -(L.flat == null ? 0.3 : L.flat), 0, 0);
+    g.drawImage(silhCvs, 0, 0, silhCvs.width, silhCvs.height, -ACT_FX, -ACT_FY, ACT_W, ACT_H);
+    g.restore();
+    // 2: the actor
+    g.drawImage(actorCvs, 0, 0, actorCvs.width, actorCvs.height, a.x - ACT_FX, a.y - ACT_FY, ACT_W, ACT_H);
+    // 3: rim — shifted silhouette with the body knocked back out of it
+    const rdx = (a.x < L.x ? 3.2 : -3.2) * RES;
+    const rdy = (L.y != null && L.y < a.y - 60 ? -2.2 : 0) * RES;
+    sq.clearRect(0, 0, silhCvs.width, silhCvs.height);
+    sq.drawImage(actorCvs, rdx, rdy);
+    sq.globalCompositeOperation = 'source-in';
+    sq.fillStyle = L.color || '#fff2c8';
+    sq.fillRect(0, 0, silhCvs.width, silhCvs.height);
+    sq.globalCompositeOperation = 'destination-out';
+    sq.drawImage(actorCvs, 0, 0);
+    // second knockout, nudged away from the light: erases the anti-aliased
+    // ring on the dark side so the rim stays a directional crescent
+    sq.drawImage(actorCvs, -rdx * 0.55, -rdy * 0.55);
+    sq.globalCompositeOperation = 'source-over';
+    g.globalAlpha = L.rim == null ? 0.5 : L.rim;
+    g.globalCompositeOperation = 'lighter';
+    g.drawImage(silhCvs, 0, 0, silhCvs.width, silhCvs.height, a.x - ACT_FX, a.y - ACT_FY, ACT_W, ACT_H);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
   }
 
   // ---------- Campaign ----------
@@ -3998,8 +4108,10 @@ const Game = (() => {
     const ch = CAMPAIGN.find(c => c.id === chapterId);
     if (!ch) return;
     // resume where a defeat left off rather than replaying the whole chapter
+    // per-chapter slots (migrates the old single {ch, beat} shape in place)
     const at = Save.data.campaignAt;
-    const from = (at && at.ch === ch.id && at.beat > 0) ? at.beat : 0;
+    const banked = at && at.beats ? at.beats[ch.id] : (at && at.ch === ch.id ? at.beat : null);
+    const from = banked > 0 ? banked : 0;
     campaign = { ch, beat: from - 1 };
     nextBeat();
   }
@@ -4013,10 +4125,13 @@ const Game = (() => {
       const firstTime = !Save.data.campaignDone[ch.id];
       Save.data.campaignDone[ch.id] = true;
       if (ch.unlocks) Save.data.unlocked[ch.unlocks] = true;
-      Save.data.campaignAt = null;
+      if (Save.data.campaignAt && Save.data.campaignAt.beats) delete Save.data.campaignAt.beats[ch.id];
+      else Save.data.campaignAt = null;
       Save.write();
       campaign = null;
       mode = 'idle';
+      // the map reclaims its theme; scene ambience doesn't follow us out
+      if (window.MUSIC) { MUSIC.play('campaign-map'); MUSIC.ambienceOff(1); }
       UI.toCampaign(firstTime ? ch.unlocks : null);
       return;
     }
@@ -4032,6 +4147,12 @@ const Game = (() => {
       if (!Cut.play(b.name, nextBeat)) nextBeat();
     } else {
       UI.combatControls(true);
+      if (window.MUSIC && b.boss) {
+        // the chapter's last fight gets the heavier loop
+        let lastFight = true;
+        for (let i = campaign.beat + 1; i < ch.beats.length; i++) if (ch.beats[i].type === 'fight') { lastFight = false; break; }
+        MUSIC.play(lastFight ? 'boss-final' : 'boss');
+      }
       startLevel(ch.char, campaignPlan(ch, b));
     }
   }
@@ -4071,7 +4192,20 @@ const Game = (() => {
     const k = (lowW / viewW) * cz;
     lctx.setTransform(1, 0, 0, 1, 0, 0);
     lctx.imageSmoothingEnabled = true;
-    lctx.drawImage(bgCvs, 0, 0, bgW, bgH, 0, 0, lowW, lowH);
+    const rackF = mode === 'cutscene' ? Cut.focus : 0;
+    if (rackF > 0) {
+      // rack focus: bounce the far pass through an even smaller buffer so the
+      // background falls away behind the subject of the shot
+      const fw = Math.max(40, Math.round(bgW * (1 - 0.62 * rackF)));
+      const fh = Math.max(30, Math.round(bgH * (1 - 0.62 * rackF)));
+      focusCvs.width = fw; focusCvs.height = fh;
+      const fq = focusCvs.getContext('2d');
+      fq.imageSmoothingEnabled = true;
+      fq.drawImage(bgCvs, 0, 0, bgW, bgH, 0, 0, fw, fh);
+      lctx.drawImage(focusCvs, 0, 0, fw, fh, 0, 0, lowW, lowH);
+    } else {
+      lctx.drawImage(bgCvs, 0, 0, bgW, bgH, 0, 0, lowW, lowH);
+    }
     lctx.setTransform(k, 0, 0, k, 0, 0);
     lctx.translate(ctxX + ox, ctxY + oy);
     drawBackground();
@@ -4095,7 +4229,20 @@ const Game = (() => {
     // --- composite the world buffer, then crisp UI on top ---
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(lowCvs, 0, 0, lowW, lowH, 0, 0, cvs.width, cvs.height);
+    if (mode === 'cutscene' && (Cut.camRot || Cut.camDx || Cut.camDy)) {
+      // the handheld layer: dutch tilt + sway applied to the whole frame,
+      // scaled slightly up so the edges never expose the buffer
+      ctx.save();
+      ctx.translate(cvs.width / 2, cvs.height / 2);
+      ctx.rotate(Cut.camRot);
+      const over = 1.03;
+      ctx.scale(over, over);
+      ctx.translate(-cvs.width / 2 + Cut.camDx * DPR * scale, -cvs.height / 2 + Cut.camDy * DPR * scale);
+      ctx.drawImage(lowCvs, 0, 0, lowW, lowH, 0, 0, cvs.width, cvs.height);
+      ctx.restore();
+    } else {
+      ctx.drawImage(lowCvs, 0, 0, lowW, lowH, 0, 0, cvs.width, cvs.height);
+    }
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     // vignette
     const w = SW, h = SH;
@@ -4160,7 +4307,7 @@ const Game = (() => {
     // abandoning must also end the chapter run, or the runner stays live and
     // eats the next arena result as a story beat
     if (campaign) {
-      Save.data.campaignAt = { ch: campaign.ch.id, beat: campaign.beat };
+      (Save.data.campaignAt = (Save.data.campaignAt && Save.data.campaignAt.beats) ? Save.data.campaignAt : { beats: {} }).beats[campaign.ch.id] = campaign.beat;
       campaign = null;
     }
     mode = 'idle'; paused = false;

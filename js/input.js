@@ -29,7 +29,7 @@ const Input = {
   const gameCvs = document.getElementById('game');
   gameCvs.addEventListener('pointerdown', (e) => {
     if (!window.Game || !Game.inCutscene) return;
-    Sfx.unlock();
+    Sfx.unlock(); if (window.MUSIC) MUSIC.unlock();
     if (Game.cutTap(e.clientX, e.clientY)) e.preventDefault();
   });
   window.addEventListener('keydown', (e) => {
@@ -40,12 +40,12 @@ const Input = {
 
   for (const [id, prop] of Object.entries(holdMap)) {
     const el = document.getElementById(id);
-    bind(el, () => { Input[prop] = true; Sfx.unlock(); }, () => { Input[prop] = false; });
+    bind(el, () => { Input[prop] = true; Sfx.unlock(); if (window.MUSIC) MUSIC.unlock(); }, () => { Input[prop] = false; });
   }
   for (const [id, code] of Object.entries(pressMap)) {
     const el = document.getElementById(id);
     bind(el, () => {
-      Sfx.unlock();
+      Sfx.unlock(); if (window.MUSIC) MUSIC.unlock();
       if (Input.presses.length < 4) Input.presses.push(code);
       if (code === 'JUMP') Input.jumpHeld = true;
     }, () => { if (code === 'JUMP') Input.jumpHeld = false; });
@@ -61,7 +61,7 @@ const Input = {
     if (e.repeat) return;
     if (keyHold[e.code]) { Input[keyHold[e.code]] = true; e.preventDefault(); }
     if (keyPress[e.code]) {
-      Sfx.unlock();
+      Sfx.unlock(); if (window.MUSIC) MUSIC.unlock();
       if (Input.presses.length < 4) Input.presses.push(keyPress[e.code]);
       if (keyPress[e.code] === 'JUMP') Input.jumpHeld = true;
       e.preventDefault();

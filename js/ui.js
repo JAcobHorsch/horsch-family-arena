@@ -263,7 +263,7 @@ const UI = (() => {
     const dirty = Save.data.money > 0 || Save.data.level > 1 ||
       CHARACTERS.some(c => { const u = Save.upg(c.id); return u.weapon + u.ranged + u.armor + u.ability > 0 || u.ascended; });
     $('titleReset').classList.toggle('hidden', !dirty);
-    $('titleStart').addEventListener('click', () => { Sfx.unlock(); Sfx.buy(); toCampaign(null); });
+    $('titleStart').addEventListener('click', () => { Sfx.unlock(); if (window.MUSIC) { MUSIC.unlock(); MUSIC.play('campaign-map'); } Sfx.buy(); toCampaign(null); });
     $('titleArena').addEventListener('click', () => {
       Sfx.unlock();
       if (!Save.anyUnlocked()) { Sfx.denied(); toCampaign(null); return; }
