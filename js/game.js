@@ -4048,15 +4048,20 @@ const Game = (() => {
   const ACT_W = 360, ACT_H = 310, ACT_FX = 180, ACT_FY = 258; // feet anchor
   let actorCvsRes = 0;
   function drawLitCutActor(g, a, ang, wcyc, stepping, held, lights) {
-    if (actorCvsRes !== RES) {
-      actorCvsRes = RES;
-      actorCvs.width = silhCvs.width = Math.ceil(ACT_W * RES);
-      actorCvs.height = silhCvs.height = Math.ceil(ACT_H * RES);
+    // rasterize at the shot's effective zoom (quantized so pushes don't
+    // reallocate every frame) — otherwise close-ups upscale the buffer and
+    // lit actors go soft next to the vector-crisp stage
+    const AR = Math.min(6, Math.ceil((RES * (mode === 'cutscene' ? Cut.zoom : 1)) * 2) / 2);
+    if (actorCvsRes !== AR) {
+      actorCvsRes = AR;
+      actorCvs.width = silhCvs.width = Math.ceil(ACT_W * AR);
+      actorCvs.height = silhCvs.height = Math.ceil(ACT_H * AR);
     }
+    const RESL = AR;
     const aq = actorCvs.getContext('2d');
     aq.setTransform(1, 0, 0, 1, 0, 0);
     aq.clearRect(0, 0, actorCvs.width, actorCvs.height);
-    aq.setTransform(RES, 0, 0, RES, 0, 0);
+    aq.setTransform(RESL, 0, 0, RESL, 0, 0);
     aq.translate(ACT_FX - a.x, ACT_FY - a.y);
     if (ang) {
       aq.translate(a.x, a.y - 45 * a.scale);
@@ -4086,8 +4091,8 @@ const Game = (() => {
     // 2: the actor
     g.drawImage(actorCvs, 0, 0, actorCvs.width, actorCvs.height, a.x - ACT_FX, a.y - ACT_FY, ACT_W, ACT_H);
     // 3: rim — shifted silhouette with the body knocked back out of it
-    const rdx = (a.x < L.x ? 3.2 : -3.2) * RES;
-    const rdy = (L.y != null && L.y < a.y - 60 ? -2.2 : 0) * RES;
+    const rdx = (a.x < L.x ? 3.2 : -3.2) * RESL;
+    const rdy = (L.y != null && L.y < a.y - 60 ? -2.2 : 0) * RESL;
     sq.clearRect(0, 0, silhCvs.width, silhCvs.height);
     sq.drawImage(actorCvs, rdx, rdy);
     sq.globalCompositeOperation = 'source-in';

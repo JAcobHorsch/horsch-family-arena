@@ -103,34 +103,51 @@ window.CUTSCENES['ch1-open'] = {
     todd: { char: 'todd', x: 300, y: GY, facing: 1 },
     pet: { char: 'petmonster', enemy: true, x: 620, y: GY, facing: -1, hide: true },
   },
+  // MOVIE GRAMMAR: one tracked walk down the hallway, nostalgia typing over
+  // the steps, fingertips on the photo frames — and the toy rises BEHIND him
+  // mid-line where only the audience can see it.
   steps: [
     { shot: { size: 'wide', on: 'todd', warm: '#c9a86a' } },
     { title: 'CHAPTER ONE', sub: 'SUPER TODD  ·  THE CHILDHOOD HOME', dur: 2.6 },
     { wait: 0.7 },
-    { shot: { face: true, on: 'todd', expr: 'neutral', size: 'mcu', push: 0.07 } },
-    { say: 'todd', text: "Forty years and this place still smells the same." },
-    { shot: { size: 'med', on: 'todd', push: 0.05, focus: 0.35, warm: '#c9a86a' } },
-    { say: 'todd', text: "Same carpet. Same stairs. Same everything." },
-
-    // something moves behind him — the audience reads it in the wide before he does
-    { shot: { size: 'wide', on: 'todd', x: 60, sway: 0.2, dutch: -0.02, warm: '#c9a86a' } },
-    { set: { who: 'pet', hide: false, pose: 'windup' } },
-    { sfx: 'creak' },
+    // the camera creeps with him past the framed photos (x330, x664)
+    { cam: { follow: 'todd', lead: 70, lag: 2.4, zoom: 1.3 } },
+    { par: [
+      [{ move: { who: 'todd', x: 368, dur: 1.6, gait: 'walk', sfxStep: true } },
+       { anim: { who: 'todd', frames: [{ pose: 'windup', ext: 0.45, dur: 0.4 }, { pose: null, ext: 0, dur: 0.45 }] } },
+       { move: { who: 'todd', x: 700, dur: 2.6, gait: 'walk', sfxStep: true } },
+       { anim: { who: 'todd', frames: [{ pose: 'windup', ext: 0.4, dur: 0.4 }, { pose: null, ext: 0, dur: 0.5 }] } }],
+      [{ say: 'todd', text: "Forty years and this place still smells the same.", dur: 3.3 },
+       { wait: 0.4 },
+       { say: 'todd', text: "Same carpet. Same stairs. Same everything.", dur: 3.0 }],
+      // it stands up behind his back, mid-sentence
+      [{ wait: 4.4 },
+       { set: { who: 'pet', hide: false, pose: 'windup', facing: 1 } },
+       { sfx: 'creak' },
+       { shake: 0.35 }],
+    ] },
+    // hold the wide: Todd at the frames, the thing upright behind him
+    { shot: { size: 'wide', on: 'todd', x: 180, sway: 0.2, dutch: -0.02, warm: '#c9a86a' } },
     { sting: 'drama' },
-    { shake: 0.35 },
     { wait: 1.0 },
     { shot: { face: true, on: 'todd', expr: 'surprised', size: 'cu', cut: 'whip' } },
-    { set: { who: 'todd', facing: 1, pose: 'hurt' } },
+    { set: { who: 'todd', facing: -1, pose: 'hurt' } },
     { say: 'todd', text: "...Why is my Pet Monster standing up." },
-    { shot: { size: 'full', on: 'pet', x: 380, sway: 0.4, dutch: 0.03 } },
+    { shot: { size: 'full', on: 'pet', x: 320, sway: 0.4, dutch: 0.03 } },
     { pose: { who: 'pet', pose: 'strike', ext: 1 } },
+    { move: { who: 'pet', x: 648, dur: 0.3, gait: null } },
     { sfx: 'heavy' },
     { shake: 0.6 },
     { wait: 0.4 },
     { shot: { face: true, on: 'todd', expr: 'determined', size: 'mcu', push: 0.08 } },
+    { wait: 0.5 },
+    // the line lands over the windup — rolling straight into the fight
+    { shot: { size: 'med', on: 'todd', sway: 0.25 } },
     { music: 'boss' },
-    { say: 'todd', text: "Alright. Fine. Let's do this." },
-    { set: { who: 'todd', pose: null } },
+    { par: [
+      [{ say: 'todd', text: "Alright. Fine. Let's do this.", dur: 2.4 }],
+      [{ wait: 0.4 }, { pose: { who: 'todd', pose: 'windup', ext: 1 } }, { shake: 0.3 }],
+    ] },
   ],
 };
 
@@ -143,26 +160,49 @@ window.CUTSCENES['ch1-josh-in'] = {
     todd: { char: 'todd', x: 330, y: GY, facing: 1 },
     josh: { char: 'josh', boss: true, x: 900, y: GY, facing: -1 },
   },
+  // MOVIE GRAMMAR: Josh never stops moving — a tracked entrance, then he
+  // circles Todd like a shark under the threat line, Todd pivoting to keep
+  // him in front.
   steps: [
     { shot: { size: 'med', on: 'todd', focus: 0.3, warm: '#c9a86a' } },
-    { say: 'todd', text: "That's the last of them.", expr: 'neutral' },
-    // he arrives from off frame; hold wide so the walk has distance
-    { shot: { size: 'wide', on: 'todd', x: 280 } },
-    { move: { who: 'josh', x: 620, dur: 1.6 } },
+    { par: [
+      [{ say: 'todd', text: "That's the last of them.", expr: 'neutral', dur: 2.2 }],
+      [{ wait: 0.3 },
+       { anim: { who: 'todd', frames: [{ pose: 'punch', ext: 0.35, dur: 0.35 }, { pose: null, ext: 0, dur: 0.4 }, { pose: 'punch', ext: 0.3, dur: 0.35 }, { pose: null, ext: 0, dur: 0.4 }] } }],
+    ] },
+    // he arrives from off frame; the camera walks him in, Todd gives ground
+    { cam: { follow: 'josh', lead: 90, lag: 2.8, zoom: 1.2 } },
+    { par: [
+      [{ move: { who: 'josh', x: 620, dur: 1.8, gait: 'walk', sfxStep: true } }],
+      [{ wait: 0.9 }, { move: { who: 'todd', x: 300, dur: 0.5 } }],
+    ] },
     { sfx: 'hit' },
     // period-comedy flourish: iris into the smug big-brother close-up
     { shot: { face: true, on: 'josh', expr: 'smug', size: 'mcu', push: 0.07, cut: 'iris' } },
     { say: 'josh', text: "Still playing with stuffed animals, Toddy?" },
     { shot: { face: true, on: 'todd', expr: 'angry', size: 'cu' } },
     { say: 'todd', text: "Josh." },
-    { shot: { face: true, on: 'josh', expr: 'angry', size: 'cu', push: 0.1, sway: 0.15, dutch: 0.02 } },
+    // the circle: Josh prowls across the room while the threat types,
+    // Todd pivoting and backing up as he crosses
+    { shot: { size: 'full', on: 'todd', x: 150, sway: 0.25, dutch: 0.02 } },
     { sting: 'drama' },
-    { say: 'josh', text: "Mom's not home. Nobody's coming to save you." },
+    { par: [
+      [{ move: { who: 'josh', x: 470, dur: 1.1, gait: 'walk', sfxStep: true } },
+       { move: { who: 'josh', x: 250, dur: 1.4, gait: 'walk', sfxStep: true } },
+       { set: { who: 'josh', facing: 1 } }],
+      [{ wait: 1.7 }, { set: { who: 'todd', facing: -1 } }, { move: { who: 'todd', x: 350, dur: 0.6 } }],
+      [{ say: 'josh', text: "Mom's not home. Nobody's coming to save you.", dur: 3.1, expr: 'angry' }],
+    ] },
     // reaction before the windup — let Todd answer with his face
     { shot: { face: true, on: 'todd', expr: 'determined', size: 'cu' } },
     { wait: 0.5 },
-    { shot: { size: 'full', on: 'josh', x: 400, sway: 0.3 } },
+    // he stomps back across to finish the loop, and the fight is on
+    { shot: { size: 'full', on: 'josh', x: 150, sway: 0.3 } },
     { music: 'boss' },
+    { par: [
+      [{ move: { who: 'josh', x: 520, dur: 1.2, gait: 'stomp' } }, { set: { who: 'josh', facing: -1 } }],
+      [{ wait: 0.6 }, { set: { who: 'todd', facing: 1 } }],
+    ] },
     { pose: { who: 'josh', pose: 'windup', ext: 1 } },
     { shake: 0.4 },
   ],
@@ -177,14 +217,22 @@ window.CUTSCENES['ch1-josh-stairs'] = {
     todd: { char: 'todd', x: 380, y: GY, facing: 1 },
     josh: { char: 'josh', boss: true, x: 640, y: GY, facing: -1, pose: 'hurt' },
   },
+  // MOVIE GRAMMAR: the taunt types over the throw itself, the kick lunges,
+  // and a chase cam rides Josh all the way down the stairs.
   steps: [
     { shot: { size: 'full', on: 'josh', x: 420, warm: '#c9a86a', cut: 'fade', sway: 0.2 } },
     { wait: 0.6 },
     { shot: { face: true, on: 'josh', expr: 'hurt', size: 'mcu' } },
     { say: 'josh', text: "Lucky shot." },
     { set: { who: 'josh', pose: null } },
-    { shot: { face: true, on: 'josh', expr: 'smug', size: 'cu', push: 0.08 } },
-    { say: 'josh', text: "You always did fight dirty." },
+    // he drags himself upright and paces it off while the line types
+    { shot: { size: 'med', on: 'josh', x: 440, push: 0.05, sway: 0.2, warm: '#c9a86a' } },
+    { par: [
+      [{ anim: { who: 'josh', frames: [{ pose: 'hurt', ext: 0.6, dur: 0.35 }, { pose: null, ext: 0, dur: 0.4 }] } },
+       { move: { who: 'josh', x: 730, dur: 1.0, gait: 'walk', facing: 1 } },
+       { move: { who: 'josh', x: 660, dur: 0.8, gait: 'walk', facing: -1 } }],
+      [{ say: 'josh', text: "You always did fight dirty.", dur: 2.3, expr: 'smug' }],
+    ] },
 
     // the knife comes out — the comedy curdles for a beat
     { shot: { size: 'med', on: 'josh', x: 480, sway: 0.25, dutch: 0.025 } },
@@ -193,23 +241,30 @@ window.CUTSCENES['ch1-josh-stairs'] = {
     { sting: 'drama' },
     { wait: 0.5 },
     { shot: { face: true, on: 'josh', expr: 'angry', size: 'cu', push: 0.08 } },
-    { say: 'josh', text: "Let's see you dodge THIS." },
+    { wait: 0.55 },
 
-    // wide for the throw so you can read the whole room
+    // wide for the throw — and the taunt types DURING the blade's flight,
+    // Todd ducking under it mid-word
     { shot: { size: 'wide', on: 'todd', x: 300 } },
-    { sfx: 'special' },
-    { fx: 'knife', from: 'josh', to: 'todd', dur: 0.5, hold: 0.55 },
-    { set: { who: 'todd', pose: 'crouch' } },
-    { shake: 0.5 },
+    { par: [
+      [{ wait: 0.55 },
+       { pose: { who: 'josh', pose: 'strike', ext: 1 } },
+       { sfx: 'special' },
+       { fx: 'knife', from: 'josh', to: 'todd', dur: 0.5, hold: 0.26 },
+       { set: { who: 'todd', pose: 'crouch' } },
+       { shake: 0.5 }],
+      [{ say: 'josh', text: "Let's see you dodge THIS.", dur: 2.2, expr: 'angry' }],
+    ] },
     { wait: 0.4 },
     { sting: 'comedy' },
     { shot: { face: true, on: 'todd', expr: 'surprised', size: 'cu' } },
     { say: 'todd', text: "...Seriously? A KNIFE?" },
 
-    // the kick: hold, then a whip cut ON the hit and the frame flinches
+    // the kick: he LUNGES the gap, then a whip cut ON the hit and the frame flinches
     { shot: { size: 'med', on: 'todd', x: 380 } },
     { set: { who: 'todd', pose: null } },
     { wait: 0.4 },
+    { move: { who: 'todd', x: 540, dur: 0.3, gait: null } },
     { pose: { who: 'todd', pose: 'kick', ext: 0.2 } },
     { wait: 0.25 },
     { shot: { size: 'full', on: 'todd', x: 420, cut: 'whip' } },
@@ -218,8 +273,8 @@ window.CUTSCENES['ch1-josh-stairs'] = {
     { impact: 0.14 },
     { shake: 0.9 },
 
-    // DOWN THE STAIRS: the whole tumble reads in one held, breathing wide
-    { shot: { size: 'wide', on: 'josh', x: 780, sway: 0.2 } },
+    // DOWN THE STAIRS: the camera chases him into the tumble, beat for beat
+    { cam: { follow: 'josh', lead: -120, lag: 5, zoom: 1.25 } },
     { move: { who: 'josh', x: 1290, y: GY - 150, dur: 0.5, arc: 70, spin: 3.6, pose: 'hurt', facing: -1, gait: null } },
     { sfx: 'hit' },
     { shake: 0.35 },
@@ -235,9 +290,14 @@ window.CUTSCENES['ch1-josh-stairs'] = {
     { set: { who: 'josh', rot: 1.55, y: GY - 10 } },
     { wait: 0.9 },
 
-    { shot: { face: true, on: 'todd', expr: 'neutral', size: 'mcu', push: 0.08 } },
+    // the kiss-off lands over the walk to the body, camera drifting with him
     { set: { who: 'todd', pose: null } },
-    { say: 'todd', text: "Tell Mom I said hi." },
+    { cam: { follow: 'todd', lead: 80, lag: 2.6, zoom: 1.35 } },
+    { par: [
+      [{ move: { who: 'todd', x: 1030, dur: 3.4, gait: 'walk', sfxStep: true } }],
+      [{ wait: 0.8 }, { say: 'todd', text: "Tell Mom I said hi.", dur: 2.0 }],
+    ] },
+    { wait: 0.5 },
   ],
 };
 
@@ -325,11 +385,21 @@ window.CUTSCENES['ch1-end'] = {
   // the house has gone quiet again; the only light left is the moon in the glass
   lights: [{ x: 470, y: 152, color: '#c8d8ff', rim: 0.45, shadow: 'rgba(6,5,14,0.5)' }],
   actors: { todd: { char: 'todd', x: 380, y: GY, facing: 1 } },
+  // MOVIE GRAMMAR: the reflection plays over a slow walk through the wreck,
+  // the camera drifting with him until he stops at the broken doorway.
   steps: [
     { shot: { size: 'med', on: 'todd', warm: '#2c3a6a', cut: 'fade', sway: 0.15, focus: 0.3 } },
     { wait: 1.0 },
-    { shot: { face: true, on: 'todd', expr: 'sad', size: 'cu', push: 0.07 } },
-    { say: 'todd', text: "Nobody in this family ever just... asks for a glass of water." },
+    { cam: { follow: 'todd', lead: 70, lag: 2, zoom: 1.32 } },
+    { par: [
+      [{ move: { who: 'todd', x: 560, dur: 3.4, gait: 'walk', sfxStep: true } },
+       { wait: 0.6 },
+       { move: { who: 'todd', x: 668, dur: 2.2, gait: 'walk', sfxStep: true } }],
+      [{ wait: 0.7 },
+       { say: 'todd', text: "Nobody in this family ever just... asks for a glass of water.", dur: 3.9, expr: 'sad' }],
+    ] },
+    // he stops in front of the bedroom door and just looks at it
+    { wait: 0.5 },
     // pull all the way out and leave him small in the room
     { shot: { size: 'wide', on: 'todd', push: 0.04, cut: 'fade' } },
     { wait: 1.2 },
