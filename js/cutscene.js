@@ -77,6 +77,7 @@ const Cut = (() => {
     shot.zoom = 1; shot.zoomTo = 1; shot.dim = 0; shot.warm = null; shot.cutT = 0;
     shot.sway = 0; shot.dutch = 0; shot.focus = 0;
     trans = null; impactT = 0; impactDur = 0; swayPhase = 0;
+    parRun = null; camFollow = null;
   }
 
   // Shot sizes, as a multiplier on the scene's base framing. Restrained and
@@ -131,9 +132,16 @@ const Cut = (() => {
   // start the step at idx; returns true when the scene is over
   function begin() {
     if (!sc || idx >= sc.steps.length) { finish(); return true; }
-    const s = sc.steps[idx];
     stepT = 0;
-    if (s.set) {
+    startStep(sc.steps[idx]);
+    return false;
+  }
+
+  // fire one step's side effects; shared by the main cursor and par tracks
+  function startStep(s) {
+    if (s.par) {
+      parRun = s.par.map(track => ({ steps: track, idx: -1, t: 0, done: false }));
+    } else if (s.set) {
       const a = actors[s.set.who];
       if (a) {
         if (s.set.x != null) a.x = s.set.x;
@@ -198,6 +206,7 @@ const Cut = (() => {
       shot.dim = sh.dim == null ? (shot.kind === 'face' ? 0.55 : 0) : sh.dim;
       shot.warm = sh.warm || null;
       shot.cutT = 0;
+      camFollow = null;
       // the cinematography of the take: handheld nerves, a tilted horizon,
       // a defocused background — all held for the shot's duration
       shot.sway = sh.sway || 0;
@@ -217,9 +226,17 @@ const Cut = (() => {
       if (!cam.dur) { cam.x = cam.toX; cam.zoom = wz; }
       if (sh.sfx && Sfx[sh.sfx]) Sfx[sh.sfx]();
     } else if (s.cam) {
-      cam.fromX = cam.x; cam.toX = s.cam.x == null ? cam.x : s.cam.x;
-      cam.fromZ = cam.zoom; cam.toZ = s.cam.zoom == null ? cam.zoom : s.cam.zoom;
-      cam.dur = s.cam.dur || 0.6; cam.t = 0;
+      if (s.cam.follow) {
+        // a tracking shot: the camera glues to an actor with lead and lag
+        // until the next shot or explicit cam move takes over
+        camFollow = { who: s.cam.follow, lead: s.cam.lead == null ? 40 : s.cam.lead, lag: s.cam.lag || 3.5, zoom: s.cam.zoom || cam.zoom };
+        cam.dur = 0; cam.t = 0;
+      } else {
+        camFollow = null;
+        cam.fromX = cam.x; cam.toX = s.cam.x == null ? cam.x : s.cam.x;
+        cam.fromZ = cam.zoom; cam.toZ = s.cam.zoom == null ? cam.zoom : s.cam.zoom;
+        cam.dur = s.cam.dur || 0.6; cam.t = 0;
+      }
     } else if (s.say) {
       const txt = s.text || '';
       bubble = { who: s.say, text: txt, shown: 0, t: 0, dur: s.dur || (1.1 + txt.length * 0.045), hold: 0, expr: s.expr || null };
@@ -245,7 +262,6 @@ const Cut = (() => {
     } else if (s.title) {
       card = { text: s.title, sub: s.sub || '', t: 0, dur: s.dur || 2 };
     }
-    return false;
   }
 
   function spawnFx(s) {
@@ -280,8 +296,9 @@ const Cut = (() => {
   }
 
   // true once the current step has run its course
-  function stepDone(s, dt) {
-    if (s.wait != null) return stepT >= s.wait;
+  function stepDone(s, tLocal) {
+    if (s.wait != null) return tLocal >= s.wait;
+    if (s.par) return !parRun || parRun.every(tr => tr.done);
     if (s.say) {
       // typewriter first, then hold; a tap skips ahead (see tap())
       return bubble ? (bubble.shown >= bubble.text.length && bubble.hold >= bubble.dur) : true;
@@ -298,10 +315,37 @@ const Cut = (() => {
       const v = actors[s.grab.victim];
       return !v || !v.attach || v.attach.t >= v.attach.dur;
     }
-    if (s.cam) return cam.t >= cam.dur;
+    if (s.cam) return s.cam.follow ? true : cam.t >= cam.dur;
     if (s.title) return card ? card.t >= card.dur : true;
-    if (s.fx) return stepT >= (s.hold == null ? 0 : s.hold);
+    if (s.fx) return tLocal >= (s.hold == null ? 0 : s.hold);
     return true; // set/pose/shake/flash/sfx are instantaneous
+  }
+
+  let camFollow = null; // {who, lead, lag, zoom} — live tracking shot
+
+  // parallel tracks: {par: [[...steps], [...steps]]} runs each track's cursor
+  // concurrently — action on one track, camera on another, dialogue on a third.
+  // This is what makes a scene play like choreography instead of turns.
+  let parRun = null;
+  function drivePar(dt) {
+    if (!parRun) return;
+    for (const tr of parRun) {
+      if (tr.done) continue;
+      tr.t += dt;
+      let hops = 0;
+      while (hops++ < 20) {
+        if (tr.idx >= 0 && !stepDone(tr.steps[tr.idx], tr.t)) break;
+        if (tr.idx >= 0) {
+          const fin = tr.steps[tr.idx];
+          if (fin.say) { bubble = null; if (window.MUSIC) MUSIC.duck(false); }
+          if (fin.title) card = null;
+        }
+        tr.idx++;
+        tr.t = 0;
+        if (tr.idx >= tr.steps.length) { tr.done = true; break; }
+        startStep(tr.steps[tr.idx]);
+      }
+    }
   }
 
   let viewW = 960; // set by the renderer so shots can centre their subject
@@ -428,10 +472,23 @@ const Cut = (() => {
     if (impactT > 0) impactT -= dt;
     swayPhase += dt;
 
+    // tracking shot: chase the followed actor every frame
+    if (camFollow) {
+      const fa = actors[camFollow.who];
+      if (fa) {
+        cam.zoom += (camFollow.zoom - cam.zoom) * Math.min(1, 4 * dt);
+        const target = fa.x + fa.facing * camFollow.lead - viewW / (2 * cam.zoom);
+        cam.x += (target - cam.x) * Math.min(1, camFollow.lag * dt);
+      }
+    }
+
+    drivePar(dt);
+
     const s = sc.steps[idx];
-    if (stepDone(s, dt)) {
+    if (stepDone(s, stepT)) {
       if (s.say) { bubble = null; if (window.MUSIC) MUSIC.duck(false); }
       if (s.title) card = null;
+      if (s.par) parRun = null;
       idx++;
       if (begin()) return;
     }
@@ -728,13 +785,17 @@ const Cut = (() => {
       g.fillRect(0, plateY, SW, 2);
       if (chipId) {
         const cs = plateH - 16;
-        chipCvs.width = 150; chipCvs.height = 150;
+        if (chipCvs.width !== 150) { chipCvs.width = 150; chipCvs.height = 150; }
         const q = chipCvs.getContext('2d');
+        q.setTransform(1, 0, 0, 1, 0, 0);
+        q.clearRect(0, 0, 150, 150);
         chipSpec.id = chipId;
         chipSpec.expr = bubble.expr || 'neutral';
         chipSpec.t = bubble.hold + bubble.shown * 0.03;
+        // FACES draws about the HEAD CENTER at (0,0): park that point in the
+        // upper-middle of the chip so the face fills the circle, not a corner
         q.save();
-        q.translate(75, 96); q.scale(0.52, 0.52); q.translate(-75, -96);
+        q.translate(75, 62); q.scale(0.52, 0.52);
         FACES.draw(q, chipSpec);
         q.restore();
         g.save();

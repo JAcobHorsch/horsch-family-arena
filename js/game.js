@@ -967,7 +967,10 @@ const Game = (() => {
           if (e.shockNext) {
             // a boss special outranks its signature move — otherwise a boss
             // with a signature (Collette) latches shockNext forever and its
-            // special machinery never fires
+            // special machinery never fires. The special IS the whole attack:
+            // without the strike transition the windup re-fires next frame
+            // and every boss gets a free follow-up.
+            e.state = 'strike'; e.stateT = 0.16;
             doStrike(e);
           } else if (e.def.signature === 'lunge') {
             // murder wasp: dive-bombs at the player
@@ -1427,6 +1430,7 @@ const Game = (() => {
           Save.write();
           mode = 'idle';
           if (wasCampaign) {
+            if (window.MUSIC) { MUSIC.stop(1.4); MUSIC.ambienceOff(1.4); }
             // bank the beat so the retry starts at the fight that beat you
             (Save.data.campaignAt = (Save.data.campaignAt && Save.data.campaignAt.beats) ? Save.data.campaignAt : { beats: {} }).beats[campaign.ch.id] = campaign.beat;
             Save.write();
@@ -4175,9 +4179,13 @@ const Game = (() => {
     // window (the shot framing math depends on that), while the vertical zoom
     // centres on the action
     const cz = mode === 'cutscene' ? Cut.zoom : 1;
-    const cty0 = -worldOffY + viewH / 2;
+    // vertical framing anchors to the ACTION LINE, not the room's middle:
+    // the ground sits at two-thirds height so zooms keep actors clear of the
+    // letterbox and dialogue bar. At cz=1 this clamps to exactly the normal
+    // gameplay framing, so fights are untouched.
+    const visH = viewH / cz;
     const ctxX = -camX;
-    const ctxY = -(cty0 - viewH / (2 * cz));
+    const ctxY = -clamp(GROUND_Y - 0.66 * visH, -worldOffY, (viewH - worldOffY) - visH);
 
     rctx = bctx;
     const k2 = (bgW / viewW) * cz;
@@ -4304,6 +4312,8 @@ const Game = (() => {
 
   function setPaused(v) { paused = v; if (!v) last = performance.now(); }
   function quit() {
+    // whatever was scoring the fight or the scene must not follow us out
+    if (window.MUSIC) { MUSIC.stop(1); MUSIC.ambienceOff(1); }
     // abandoning must also end the chapter run, or the runner stays live and
     // eats the next arena result as a story beat
     if (campaign) {

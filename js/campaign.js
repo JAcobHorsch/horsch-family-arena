@@ -245,100 +245,80 @@ window.CUTSCENES['ch1-josh-stairs'] = {
 window.CUTSCENES['ch1-night'] = {
   stage: 'home-night', camX: 160, zoom: 1,
   music: 'dread-night', amb: 'night-room',
-  // one hard warm source: the light under the bedroom door (slab 762-898).
-  // Everything in the hallway leans its shadow away from that gap.
+  // one hard warm source: the light under the bedroom door (slab 762-898)
   lights: [{ x: 830, y: 330, color: '#ffca6a', rim: 0.8, shadow: 'rgba(6,5,14,0.55)' }],
   actors: {
-    todd: { char: 'todd', x: 260, y: GY, facing: 1, scale: 0.82 },
+    todd: { char: 'todd', x: 200, y: GY, facing: 1, scale: 0.82 },
     damon: { char: 'damon', boss: true, x: 780, y: GY, facing: -1, hide: true },
   },
+  // MOVIE GRAMMAR: this scene is choreography — tracking shots, action and
+  // dialogue on parallel tracks, and nothing waits for a tap.
   steps: [
-    // establishing: fade up on the empty hallway and let it be quiet
-    { shot: { size: 'wide', on: 'todd', warm: '#2c3a6a', cut: 'fade', sway: 0.15 } },
+    { shot: { size: 'wide', on: 'todd', x: 60, warm: '#2c3a6a', cut: 'fade', sway: 0.15 } },
     { title: 'LATER THAT NIGHT', sub: '2:14 AM', dur: 2.4 },
-    { wait: 0.8 },
-
-    // close on the kid, talking himself into it
-    { shot: { face: true, on: 'todd', expr: 'scared', size: 'cu', push: 0.06, sway: 0.25 } },
-    { say: 'todd', text: "Just water. In and out." },
-    { say: 'todd', text: "Don't wake him up. Do not wake him up." },
-
-    // back to the hallway; he actually tiptoes, step by step, camera breathing
-    { shot: { size: 'med', on: 'todd', push: 0.05, sway: 0.3, focus: 0.25, warm: '#2c3a6a' } },
-    { move: { who: 'todd', x: 360, dur: 2.4, gait: 'sneak', sfxStep: true } },
-    { move: { who: 'todd', x: 430, dur: 2, gait: 'sneak', sfxStep: true } },
-
-    // the floorboard — the world stops
+    // one unbroken tracking shot: the camera creeps with him while he
+    // whispers himself through it
+    { cam: { follow: 'todd', lead: 90, lag: 2.2, zoom: 1.35 } },
+    { par: [
+      [{ move: { who: 'todd', x: 350, dur: 4.2, gait: 'sneak', sfxStep: true } },
+       { move: { who: 'todd', x: 438, dur: 2.6, gait: 'sneak', sfxStep: true } }],
+      [{ say: 'todd', text: "Just water. In and out.", dur: 2.4 },
+       { wait: 0.5 },
+       { say: 'todd', text: "Don't wake him up. Do not wake him up.", dur: 2.9 }],
+    ] },
+    // the creak stops the world
     { sfx: 'creak' },
-    { fx: 'creak', x: 438, y: GY, dur: 1.2, hold: 0.6 },
+    { fx: 'creak', x: 438, y: GY, dur: 1.1, hold: 0.3 },
     { set: { who: 'todd', pose: 'hurt' } },
-    { shake: 0.25 },
-    { shot: { face: true, on: 'todd', expr: 'scared', size: 'cu', sway: 0.35 } },
-    { say: 'todd', text: "...no. no no no." },
-    { wait: 1.1 },
-
-    // hard cut to the door, and a long swaying hold on nothing happening
-    { shot: { size: 'med', on: 'damon', x: 600, sway: 0.4, dutch: 0.03, warm: '#2c3a6a' } },
-    { wait: 1.6 },
-
-    // the door TEARS OFF ITS HINGES and Damon fills the empty frame
+    { shake: 0.3 },
+    { shot: { face: true, on: 'todd', expr: 'scared', size: 'cu', sway: 0.4 } },
+    { say: 'todd', text: "...no. no no no.", expr: 'scared' },
+    // hold on the door. then it comes off its hinges.
+    { shot: { size: 'med', on: 'damon', x: 560, warm: '#2c3a6a', sway: 0.4, dutch: 0.03 } },
+    { wait: 1.2 },
     { sting: 'shock' },
     { sfx: 'door' },
     { flash: '#ff4a3a' },
     { shake: 1 },
-    { fx: 'doorburst', x: 762, x1: 898, y: 182, gy: GY },
+    { fx: 'doorburst', x: 762, x1: 898, y: 182 },
     { set: { who: 'damon', hide: false, x: 830, pose: 'windup', ext: 1 } },
-    { fx: 'dust', x: 830, y: GY, n: 14, dur: 0.9 },
-    { shot: { face: true, on: 'damon', expr: 'rage', size: 'cu', push: 0.1, sway: 0.5, dutch: 0.04, warm: '#ff3b1e', cut: 'whip', sfx: 'heavy' } },
-    { say: 'damon', text: "WHAT DID I SAY ABOUT BEING UP." },
-
-    // he stomps across the room — each footfall lands, the frame is WRONG now
-    { shot: { size: 'full', on: 'todd', x: 320, sway: 0.55, dutch: 0.035, warm: '#5a2a3a' } },
-    { move: { who: 'damon', x: 505, dur: 1.1, gait: 'stomp', pose: null } },
-
-    // THE GRAB: hand closes on Todd's neck and hauls him off the floor
-    { anim: { who: 'damon', frames: [{ pose: 'windup', ext: 1, dur: 0.22 }, { pose: 'strike', ext: 1, dur: 0.14 }] } },
+    { fx: 'dust', x: 830, y: GY, n: 12, dur: 0.8 },
+    // he comes for Todd in one continuous move, camera tracking, his line
+    // typing OVER the stomps
+    { cam: { follow: 'damon', lead: 70, lag: 3, zoom: 1.5 } },
+    { par: [
+      [{ move: { who: 'damon', x: 520, dur: 1.9, gait: 'stomp' } }],
+      [{ say: 'damon', text: "WHAT DID I SAY ABOUT BEING UP.", expr: 'rage', dur: 2.2 }],
+    ] },
+    // the grab, the lift, the sentence
+    { shot: { size: 'mcu', on: 'todd', x: 350, cut: 'whip', sway: 0.55, dutch: 0.04, warm: '#40182c' } },
+    { impact: 0.1 },
     { sfx: 'heavy' },
-    { impact: 0.12 },
-    { shake: 0.5 },
-    // the victim's NECK lands in the fist, so his feet hang just off the floor
-    { grab: { who: 'damon', victim: 'todd', dx: 52, dy: -4, lift: 14, dur: 0.9 } },
-    { shot: { size: 'med', on: 'damon', x: 400, push: 0.06, sway: 0.45 } },
-    { say: 'damon', text: "I SAID GO TO BED.", expr: 'rage' },
-    { wait: 0.35 },
-
-    // THE THROW, in fast cuts: wind back with the boy in hand, snap to his
-    // face for a breath, then the launch inverts the frame
-    { anim: { who: 'damon', frames: [{ pose: 'windup', ext: 1, dur: 0.28 }] } },
-    { shot: { face: true, on: 'todd', expr: 'scared', size: 'cu', cut: 'whip' } },
-    { wait: 0.25 },
+    { grab: { who: 'damon', victim: 'todd', dx: 44, dy: -26, lift: 30, dur: 1.1 } },
+    { say: 'damon', text: "I SAID GO TO BED.", expr: 'rage', dur: 2 },
+    // the throw: the camera chases Todd across the room
+    { pose: { who: 'damon', pose: 'strike', ext: 1 } },
     { impact: 0.14 },
     { sfx: 'die' },
     { shake: 1 },
-    { pose: { who: 'damon', pose: 'strike', ext: 1 } },
-    { shot: { size: 'wide', on: 'todd', x: 120, sway: 0.3 } },
-    { move: { who: 'todd', x: 175, y: GY, dur: 0.55, arc: 100, spin: -6.8, facing: -1, pose: 'hurt', gait: null } },
-    { sfx: 'hit' },
-    { fx: 'dust', x: 180, y: GY, n: 12, dur: 0.8 },
-    { fx: 'stars', x: 180, y: GY - 40, dur: 1 },
+    { cam: { follow: 'todd', lead: -60, lag: 6, zoom: 1.3 } },
+    { move: { who: 'todd', x: 150, y: GY, dur: 0.55, arc: 95, spin: -5.6, facing: -1, gait: null } },
+    { fx: 'dust', x: 160, y: GY, n: 12, dur: 0.8 },
+    { fx: 'stars', x: 150, y: GY - 45, dur: 1 },
     { shake: 0.6 },
-    { set: { who: 'todd', rot: 0 } },
-    { wait: 1.2 },
-
-    // he gets up. this is where Super Todd starts — and where the score turns.
-    { shot: { face: true, on: 'todd', expr: 'hurt', size: 'cu' } },
-    { say: 'todd', text: "...Okay." },
-    { music: 'boss' },
-    { shot: { face: true, on: 'todd', expr: 'determined', size: 'mcu', push: 0.12 } },
-    { set: { who: 'todd', pose: null, scale: 1, facing: 1 } },
-    { say: 'todd', text: "I'm up now." },
-    { shot: { size: 'med', on: 'todd' } },
-    { pose: { who: 'todd', pose: 'windup', ext: 1 } },
-    { sfx: 'ascend' },
+    { wait: 0.7 },
+    // he gets up. the fight is already here.
+    { shot: { size: 'med', on: 'todd', x: 60, sway: 0.3, warm: '#2c3a6a' } },
+    { say: 'todd', text: "...Okay.", expr: 'determined' },
+    { set: { who: 'todd', pose: null, scale: 1, facing: 1, rot: 0 } },
+    { music: 'boss-final' },
+    { par: [
+      [{ say: 'todd', text: "I'm up now.", expr: 'determined', dur: 1.6 }],
+      [{ pose: { who: 'todd', pose: 'windup', ext: 1 } }, { sfx: 'ascend' }],
+    ] },
   ],
 };
 
-// --- chapter close ---
 window.CUTSCENES['ch1-end'] = {
   stage: 'home-night', camX: 200, zoom: 1.1,
   music: 'dread-night', amb: 'night-room',
