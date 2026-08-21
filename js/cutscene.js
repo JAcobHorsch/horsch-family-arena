@@ -140,7 +140,9 @@ const Cut = (() => {
   // fire one step's side effects; shared by the main cursor and par tracks
   function startStep(s) {
     if (s.par) {
-      parRun = s.par.map(track => ({ steps: track, idx: -1, t: 0, done: false }));
+      // only the main cursor may open a par; a nested one would clobber the
+      // sibling tracks' shared state, so it degrades to a no-op
+      if (!parRun) parRun = s.par.map(track => ({ steps: track, idx: -1, t: 0, done: false }));
     } else if (s.set) {
       const a = actors[s.set.who];
       if (a) {
@@ -230,6 +232,7 @@ const Cut = (() => {
         // a tracking shot: the camera glues to an actor with lead and lag
         // until the next shot or explicit cam move takes over
         camFollow = { who: s.cam.follow, lead: s.cam.lead == null ? 40 : s.cam.lead, lag: s.cam.lag || 3.5, zoom: s.cam.zoom || cam.zoom };
+        shot.zoomTo = shot.zoom; // cancel any in-flight push; the follow owns zoom
         cam.dur = 0; cam.t = 0;
       } else {
         camFollow = null;
@@ -239,7 +242,7 @@ const Cut = (() => {
       }
     } else if (s.say) {
       const txt = s.text || '';
-      bubble = { who: s.say, text: txt, shown: 0, t: 0, dur: s.dur || (1.1 + txt.length * 0.045), hold: 0, expr: s.expr || null };
+      bubble = { who: s.say, text: txt, shown: 0, t: 0, dur: s.dur || (1.1 + txt.length * 0.045), hold: 0, expr: s.expr || null, owner: s };
       Sfx.unlock();
       if (window.MUSIC) MUSIC.duck(true);
     } else if (s.impact != null) {
@@ -300,7 +303,9 @@ const Cut = (() => {
     if (s.wait != null) return tLocal >= s.wait;
     if (s.par) return !parRun || parRun.every(tr => tr.done);
     if (s.say) {
-      // typewriter first, then hold; a tap skips ahead (see tap())
+      // typewriter first, then hold; a tap skips ahead (see tap()).
+      // Only THIS step's bubble counts — another track may own the current one.
+      if (bubble && bubble.owner !== s) return true;
       return bubble ? (bubble.shown >= bubble.text.length && bubble.hold >= bubble.dur) : true;
     }
     if (s.move) {
@@ -337,7 +342,7 @@ const Cut = (() => {
         if (tr.idx >= 0 && !stepDone(tr.steps[tr.idx], tr.t)) break;
         if (tr.idx >= 0) {
           const fin = tr.steps[tr.idx];
-          if (fin.say) { bubble = null; if (window.MUSIC) MUSIC.duck(false); }
+          if (fin.say && bubble && bubble.owner === fin) { bubble = null; if (window.MUSIC) MUSIC.duck(false); }
           if (fin.title) card = null;
         }
         tr.idx++;
@@ -434,7 +439,9 @@ const Cut = (() => {
     // left-anchored, so the push splits its shrink between both edges to keep
     // the composition centred instead of drifting right.
     shot.cutT += dt;
-    if (shot.zoom !== shot.zoomTo) {
+    // a live tracking shot owns the camera outright — a still-converging push
+    // from the PREVIOUS shot must not keep pinning zoom underneath it
+    if (shot.zoom !== shot.zoomTo && !camFollow) {
       const z0 = shot.zoom;
       const d = shot.zoomTo - shot.zoom;
       shot.zoom += d * Math.min(1, dt * 0.22);
@@ -477,7 +484,8 @@ const Cut = (() => {
       const fa = actors[camFollow.who];
       if (fa) {
         cam.zoom += (camFollow.zoom - cam.zoom) * Math.min(1, 4 * dt);
-        const target = fa.x + fa.facing * camFollow.lead - viewW / (2 * cam.zoom);
+        const vw2 = viewW / cam.zoom;
+        const target = Math.max(0, Math.min(1750 - vw2, fa.x + fa.facing * camFollow.lead - vw2 / 2));
         cam.x += (target - cam.x) * Math.min(1, camFollow.lag * dt);
       }
     }
@@ -486,7 +494,7 @@ const Cut = (() => {
 
     const s = sc.steps[idx];
     if (stepDone(s, stepT)) {
-      if (s.say) { bubble = null; if (window.MUSIC) MUSIC.duck(false); }
+      if (s.say && (!bubble || bubble.owner === s)) { bubble = null; if (window.MUSIC) MUSIC.duck(false); }
       if (s.title) card = null;
       if (s.par) parRun = null;
       idx++;

@@ -58,7 +58,7 @@ const CAMPAIGN = [
     unlocks: 'todd',
     beats: [
       { type: 'cut', name: 'ch1-open' },
-      { type: 'fight', stage: 'home-day', label: 'THE TOY BOX', waves: [['grunt', 'grunt'], ['grunt', 'stinger', 'grunt']] },
+      { type: 'fight', stage: 'home-day', label: 'THE TOY BOX', spawnX: 620, waves: [['grunt', 'grunt'], ['grunt', 'stinger', 'grunt']] },
       { type: 'fight', stage: 'home-day', label: 'THE LIVING ROOM', waves: [['grunt', 'stinger'], ['brute', 'grunt', 'stinger']] },
       { type: 'cut', name: 'ch1-josh-in' },
       { type: 'fight', stage: 'home-day', label: 'BIG BROTHER', boss: true, waves: [['boss']] },
@@ -74,7 +74,7 @@ const CAMPAIGN = [
     unlocks: 'sonya',
     beats: [
       { type: 'cut', name: 'ch2-open' },
-      { type: 'fight', stage: 'collette-yard', label: 'HEATH', boss: true, waves: [['heath']] },
+      { type: 'fight', stage: 'collette-yard', label: 'HEATH', boss: true, spawnX: 400, waves: [['heath']] },
       { type: 'cut', name: 'ch2-jr' },
       { type: 'fight', stage: 'collette-yard', label: "JR'S RV", boss: true, waves: [['jrv']] },
       { type: 'cut', name: 'ch2-yvonne' },
@@ -205,6 +205,7 @@ window.CUTSCENES['ch1-josh-in'] = {
     ] },
     { pose: { who: 'josh', pose: 'windup', ext: 1 } },
     { shake: 0.4 },
+    { wait: 0.9 },
   ],
 };
 

@@ -121,7 +121,7 @@ const Game = (() => {
 
     player = {
       cdef, upg, stats,
-      x: 260, y: GROUND_Y, vx: 0, vy: 0, w: 36, h: 96, facing: 1,
+      x: (camPlan && camPlan.spawnX) || 260, y: GROUND_Y, vx: 0, vy: 0, w: 36, h: 96, facing: 1,
       hp: stats.maxHp, energy: 100, onGround: true, crouch: false,
       buffT: 0, buffDmg: 1, buffSpeed: 1, returnT: 0, diveT: 0,
       combo: 0, comboT: 0, comboPop: 0,
@@ -4051,7 +4051,7 @@ const Game = (() => {
     // rasterize at the shot's effective zoom (quantized so pushes don't
     // reallocate every frame) — otherwise close-ups upscale the buffer and
     // lit actors go soft next to the vector-crisp stage
-    const AR = Math.min(6, Math.ceil((RES * (mode === 'cutscene' ? Cut.zoom : 1)) * 2) / 2);
+    const AR = Math.min(3, Math.ceil((RES * (mode === 'cutscene' ? Cut.zoom : 1)) * 2) / 2);
     if (actorCvsRes !== AR) {
       actorCvsRes = AR;
       actorCvs.width = silhCvs.width = Math.ceil(ACT_W * AR);
@@ -4156,6 +4156,10 @@ const Game = (() => {
       if (!Cut.play(b.name, nextBeat)) nextBeat();
     } else {
       UI.combatControls(true);
+      if (window.MUSIC && !b.boss && CAMPAIGN_STAGES[b.stage] && CAMPAIGN_STAGES[b.stage].music && !MUSIC.now) {
+        MUSIC.play(CAMPAIGN_STAGES[b.stage].music);
+        if (CAMPAIGN_STAGES[b.stage].amb) MUSIC.ambience(CAMPAIGN_STAGES[b.stage].amb);
+      }
       if (window.MUSIC && b.boss) {
         // the chapter's last fight gets the heavier loop
         let lastFight = true;
@@ -4171,7 +4175,7 @@ const Game = (() => {
       level: 1, world: st, lw: 1, levelName: b.label || st.name, event: null,
       waves: (b.waves || []).map(w => w.slice()),
       hpMult: 1, dmgMult: 1, speedMult: 1, valueMult: 1,
-      boss: !!b.boss, campaign: true,
+      boss: !!b.boss, campaign: true, spawnX: b.spawnX || 0,
     };
   }
 

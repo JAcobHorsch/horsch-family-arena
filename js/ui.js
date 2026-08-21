@@ -277,7 +277,7 @@ const UI = (() => {
     $('shopContinue').addEventListener('click', () => { Sfx.buy(); toSelect(); });
     $('defeatShop').addEventListener('click', () => toShop(null, Game.lastCharId));
     $('defeatRetry').addEventListener('click', () => {
-      if (defeatChapter) { defeatChapter = null; toCampaign(null); return; }
+      if (defeatChapter) { defeatChapter = null; if (window.MUSIC) MUSIC.play('campaign-map'); toCampaign(null); return; }
       toSelect();
     });
     $('pauseBtn').addEventListener('click', () => { Game.setPaused(true); show('pause'); });
@@ -287,7 +287,7 @@ const UI = (() => {
       // roster a new player has nothing unlocked in
       const wasCampaign = Game.inCampaign();
       Game.quit();
-      if (wasCampaign) toCampaign(null); else toSelect();
+      if (wasCampaign) { if (window.MUSIC) MUSIC.play('campaign-map'); toCampaign(null); } else toSelect();
     });
     show('title');
   }
