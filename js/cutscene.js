@@ -327,6 +327,8 @@ const Cut = (() => {
   }
 
   let camFollow = null; // {who, lead, lag, zoom} — live tracking shot
+  const RIG_GAIT = { walk: 'walk', sneak: 'sneak', stomp: 'stomp', run: 'run' };
+  const TALK_STYLE = { rage: 'talk-angry', angry: 'talk-angry', determined: 'talk-big', smug: 'talk-calm', scared: 'talk-calm' };
 
   // parallel tracks: {par: [[...steps], [...steps]]} runs each track's cursor
   // concurrently — action on one track, camera on another, dialogue on a third.
@@ -365,6 +367,8 @@ const Cut = (() => {
       const a = actors[k];
       a.t += dt;
       a.gaitOn = false;
+      // film actors: lazily attach a rig player when a cinematic body exists
+      if (!a.rp && window.Rig && window.CINE_CAST && CINE_CAST[a.char]) a.rp = Rig.newPlayer();
       if (a.mvt < a.mvd) {
         const px = a.x;
         a.mvt = Math.min(a.mvd, a.mvt + dt);
@@ -402,6 +406,38 @@ const Cut = (() => {
         }
       }
     }
+    // drive the rig performances from what each actor is DOING this frame:
+    // locomotion clips phase-locked to distance, acting clips from poses,
+    // talk overlays while their line types, struggle while held
+    if (window.Rig) {
+      for (const k in actors) {
+        const a = actors[k];
+        if (!a.rp) continue;
+        let phase = null;
+        if (a.attach) Rig.play(a.rp, 'struggle', { blend: 0.12 });
+        else if (a.spin && a.mvt < a.mvd) Rig.play(a.rp, 'thrown', { blend: 0.1 });
+        else if (a.gaitOn) {
+          Rig.play(a.rp, RIG_GAIT[a.gait] || 'walk', { blend: 0.2 });
+          phase = (a.gaitCyc / (Math.PI * 2)) % 1;
+        } else if (a.pose === 'windup') Rig.play(a.rp, 'punch-tell', { blend: 0.12, speed: 0.55 });
+        else if (a.pose === 'strike') Rig.play(a.rp, 'throw', { blend: 0.1 });
+        else if (a.pose === 'hurt') Rig.play(a.rp, a.rot ? 'land-crumple' : 'cower', { blend: 0.15 });
+        else if (a.pose === 'crouch') Rig.play(a.rp, 'cower', { blend: 0.2 });
+        else Rig.play(a.rp, 'idle', { blend: 0.3 });
+        // the speaker gestures with their line
+        if (bubble && bubble.who === k.replace(/ghast$/, '') || (bubble && bubble.who === a.char)) {
+          if (bubble.shown < bubble.text.length) {
+            Rig.play(a.rp, TALK_STYLE[bubble.expr] || 'talk-calm', { channel: 'talk' });
+            a.talking = Math.min(1, (a.talking || 0) + dt * 8);
+          } else a.talking = Math.max(0, (a.talking || 0) - dt * 5);
+        } else if (a.talking) {
+          a.talking = Math.max(0, a.talking - dt * 5);
+          if (!a.talking) Rig.stopTalk(a.rp);
+        }
+        Rig.tick(a.rp, dt, phase);
+      }
+    }
+
     // grabs resolve after everyone has moved, so the victim rides this frame's
     // hand position, rising over the lift
     for (const k in actors) {

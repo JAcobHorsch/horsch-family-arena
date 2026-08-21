@@ -3992,8 +3992,30 @@ const Game = (() => {
     }
   }
 
+  // film actors: reused FK/context objects for the cinematic cast
+  const rigJ = {};
+  const rigC = { facing: 1, scale: 1, expr: 'neutral', talk: 0, blink: 0, hurt: false, t: 0 };
+
   // one actor's body, drawn at its world position on whatever context
   function drawCutActorBody(g, a, wcyc, stepping, held) {
+    // the cinematic cast renders on the skeleton — a different production
+    // class from the gameplay sprites, which is the entire point
+    if (a.rp && window.CINE_CAST && CINE_CAST[a.char]) {
+      const pose = Rig.sample(a.rp);
+      Rig.fk(pose, a.x + a.rp.rootDx * a.scale * a.facing, a.y - 43 * a.scale + a.rp.rootDy * a.scale, a.facing, a.scale, rigJ);
+      rigC.facing = a.facing; rigC.scale = a.scale;
+      rigC.expr = a.pose === 'hurt' ? 'hurt' : (a.expr || 'neutral');
+      rigC.talk = a.talking || 0;
+      rigC.blink = Math.sin(a.t * 1.3 + a.x) > 0.985 ? 1 : 0;
+      rigC.hurt = a.pose === 'hurt' || a.hurt;
+      rigC.t = a.t;
+      g.save();
+      g.fillStyle = 'rgba(0,0,0,0.35)';
+      g.beginPath(); g.ellipse(a.x, a.y + 2, 20 * a.scale, 4.5, 0, 0, 7); g.fill();
+      CINE_CAST[a.char](g, rigJ, rigC);
+      g.restore();
+      return;
+    }
     {
       const cdef = CHARACTERS.find(c => c.id === a.char);
       if (cdef) {

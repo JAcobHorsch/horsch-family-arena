@@ -355,7 +355,7 @@ window.CUTSCENES['ch1-night'] = {
     { shot: { size: 'mcu', on: 'todd', x: 350, cut: 'whip', sway: 0.55, dutch: 0.04, warm: '#40182c' } },
     { impact: 0.1 },
     { sfx: 'heavy' },
-    { grab: { who: 'damon', victim: 'todd', dx: 44, dy: -26, lift: 30, dur: 1.1 } },
+    { grab: { who: 'damon', victim: 'todd', dx: 40, dy: -4, lift: 18, dur: 1.1 } },
     { say: 'damon', text: "I SAID GO TO BED.", expr: 'rage', dur: 2 },
     // the throw: the camera chases Todd across the room
     { pose: { who: 'damon', pose: 'strike', ext: 1 } },
